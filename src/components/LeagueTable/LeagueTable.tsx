@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { getStandings, lastPlayedRound, leagueById, type LeagueId } from '../../data/league';
+import { currentSeason, getStandings, lastPlayedRound, leagueById, type LeagueId } from '../../data/league';
 import LeagueSelect from '../common/LeagueSelect';
+import { TeamLink } from '../common/Links';
 import SegmentedControl from '../common/SegmentedControl';
 import TeamBadge from '../common/TeamBadge';
 
@@ -50,7 +51,7 @@ const LeagueTable = () => {
                 <td className="w-full max-w-0 py-2">
                   <span className="flex items-center gap-2 font-medium text-slate-900" title={row.team.name}>
                     <TeamBadge team={row.team} size="sm" />
-                    <span className="truncate">{row.team.name}</span>
+                    <TeamLink team={row.team} className="truncate" />
                   </span>
                 </td>
                 <td className="px-1 py-2 text-right tabular-nums text-slate-600">{row.played}</td>
@@ -66,7 +67,7 @@ const LeagueTable = () => {
         </tbody>
       </table>
       <p className="mt-3 text-[11px] text-slate-500">
-        {league.name} {league.season}
+        {league.name} {currentSeason.name}
         {group && ` · Grupa ${group}`} · po {lastPlayedRound(leagueId)}. kolejce · 2 pkt za zwycięstwo, 1 za porażkę
       </p>
     </section>

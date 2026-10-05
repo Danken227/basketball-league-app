@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { getTopPlayers, type LeagueId, type StatCategory } from '../../data/league';
 import LeagueSelect from '../common/LeagueSelect';
+import { PlayerLink, TeamLink } from '../common/Links';
 import SegmentedControl from '../common/SegmentedControl';
 
 const categoryOptions: { value: StatCategory; label: string }[] = [
@@ -29,11 +30,9 @@ const StatsTable = () => {
           <li key={row.player.id} className="flex items-center gap-3 border-b border-slate-100 py-2 last:border-0">
             <span className={`w-5 text-sm tabular-nums ${index < 3 ? 'font-bold text-orange-600' : 'text-slate-500'}`}>{index + 1}</span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">
-                {row.player.firstName} {row.player.lastName}
-              </span>
+              <PlayerLink player={row.player} className="block truncate text-sm font-medium text-slate-900" />
               <span className="block text-[11px] text-slate-500">
-                {row.team.name} · #{row.player.number} · {row.player.position} · {row.games} M
+                <TeamLink team={row.team} /> · {row.player.position} · {row.games} M
               </span>
             </span>
             <span className="text-right">

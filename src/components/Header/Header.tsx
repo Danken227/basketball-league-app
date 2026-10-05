@@ -50,7 +50,7 @@ function Header() {
             <NavLink
               key={item.path}
               to={item.path}
-              end
+              end={item.path === '/'}
               onClick={() => setOpen(false)}
               className={({ isActive }) =>
                 `rounded-full px-3 py-2 text-sm transition ${isActive ? 'bg-white/10 text-white' : 'text-slate-300 hover:bg-white/10 hover:text-white'}`

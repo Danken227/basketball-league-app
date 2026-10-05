@@ -1,0 +1,161 @@
+import { useEffect, useId, useRef, type MouseEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { GENIUS_EMBED_URL, isGeniusDomain, mapGeniusPath } from './geniusConfig';
+import './genius.css';
+
+interface GeniusEmbedProps {
+  // Ścieżka strony Genius, np. "/competition/49970/standings".
+  page: string;
+  // Pokaż tylko jeden blok strony (np. jedną kategorię liderów).
+  blockDisplay?: string;
+  showSubMenus?: boolean;
+  showMatchFilter?: boolean;
+  // Nagłówek strony Genius (np. nazwa i logo drużyny).
+  showTitle?: boolean;
+  // Wariant do wąskich kolumn (strona główna).
+  compact?: boolean;
+  // Ukrywa elementy (np. ".playerblock"), których tekst nie zawiera frazy — wyszukiwarka zawodników.
+  textFilter?: { selector: string; query: string };
+}
+
+// Genius buduje linki na dwa sposoby: na zarejestrowanej domenie jako "<adres>?&WHurl=/competition/..",
+// a w pozostałych przypadkach wprost do swoich stron (https://hosted.dcd.shared.geniussports.com/DALK/en/competition/..).
+const hostedPrefix = /^https:\/\/hosted\.dcd\.shared\.geniussports\.com\/DALK\/[a-z]{2}(\/.*)$/;
+
+function geniusLinkPath(href: string): string | undefined {
+  if (href.includes('WHurl=')) return decodeURIComponent(href.split('WHurl=')[1] ?? '');
+  return href.match(hostedPrefix)?.[1];
+}
+
+const loadingHtml = '<p class="genius-status">Wczytywanie danych Genius Sports…</p>';
+
+function GeniusEmbed({ page, blockDisplay, showSubMenus = true, showMatchFilter = true, showTitle = false, compact, textFilter }: GeniusEmbedProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
+  const allowed = isGeniusDomain();
+  // Każde osadzenie ma własną zmienną konfiguracji i element, więc kilka może działać na jednej stronie.
+  const instance = useId().replace(/[^a-zA-Z0-9]/g, '');
+  const placeholderId = `spil_w_h_${instance}`;
+  const configName = `spilWHH_${instance}` as const;
+  const filterSelector = textFilter?.selector;
+  const filterQuery = textFilter?.query ?? '';
+
+  useEffect(() => {
+    const placeholder = ref.current;
+    if (!allowed || !placeholder) return;
+    placeholder.innerHTML = loadingHtml;
+
+    window[configName] = {
+      placeHolder: placeholderId,
+      page,
+      raw: true,
+      // Linki Genius kierujemy na /genius, a potem przepisujemy je na nasze adresy (poniżej).
+      internalURL: `${window.location.origin}/genius`,
+      showNavBar: false,
+      showLinks: true,
+      showTitle,
+      showSubMenus,
+      showLanguageChooser: false,
+      // Rozgrywki wybieramy naszymi filtrami.
+      showCompetitionChooser: false,
+      showMatchFilter,
+      // Wygląd nadajemy własnym CSS (genius.css), zostawiamy skrypty Genius (sortowanie, zakładki).
+      rawEnableCSS: false,
+      rawEnableJS: true,
+      blockDisplay: blockDisplay ?? '',
+      language: 'en',
+    };
+
+    // Skrypt czyta konfigurację w chwili wykonania, więc przy każdej zmianie wstawiamy go ponownie
+    // (przeglądarka bierze go z pamięci podręcznej). Nazwa zmiennej idzie po "|", jak na dalk.pl.
+    const script = document.createElement('script');
+    script.async = true;
+    script.src = `${GENIUS_EMBED_URL}|${configName}`;
+    // Wstawiamy z opóźnieniem: React w trybie deweloperskim uruchamia efekt dwa razy, a pierwsze uruchomienie
+    // jest od razu sprzątane — wtedy jego skrypt nie trafia na stronę i treść nie wstawia się podwójnie.
+    const insert = window.setTimeout(() => document.body.appendChild(script), 0);
+
+    // Gdy Genius nie zarejestrował domeny, serwer zwraca stronę "invalidreferrer" (404) i nic się nie wstawia.
+    const timeout = window.setTimeout(() => {
+      if (placeholder.children.length > 1 || !placeholder.querySelector('.genius-status')) return;
+      placeholder.innerHTML = `<p class="genius-status"><strong>Genius Sports nie zwrócił danych.</strong><br>
+        Domena ${window.location.host} nie jest zarejestrowana dla organizacji DALK w Genius Sports
+        albo serwis jest chwilowo niedostępny.</p>`;
+    }, 12000);
+
+    return () => {
+      window.clearTimeout(insert);
+      window.clearTimeout(timeout);
+      script.remove();
+      delete window[configName];
+      placeholder.innerHTML = '';
+    };
+  }, [allowed, page, blockDisplay, showSubMenus, showMatchFilter, showTitle, placeholderId, configName]);
+
+  // Przepisuje linki Genius (".../genius?&WHurl=/competition/..") na nasze adresy i stosuje filtr tekstowy.
+  // Treść dochodzi asynchronicznie, więc obserwujemy zmiany w elemencie.
+  useEffect(() => {
+    const placeholder = ref.current;
+    if (!allowed || !placeholder) return;
+
+    const apply = () => {
+      // Genius dokleja treść obok komunikatu o wczytywaniu, więc po jej nadejściu usuwamy komunikat.
+      const status = placeholder.querySelector('.genius-status');
+      if (status && placeholder.children.length > 1) status.remove();
+      // Razem z HTML Genius wstawia blok kolorów swojego motywu; zastępują go nasze style (genius.css).
+      placeholder.querySelectorAll('style').forEach((style) => style.remove());
+      // Nagłówek drużyny przychodzi z pustą nazwą, ale logo ma ją w opisie (alt) — uzupełniamy.
+      const teamTitle = placeholder.querySelector('.team-header .team-title');
+      const teamLogo = placeholder.querySelector<HTMLImageElement>('.team-header img');
+      if (teamTitle && !teamTitle.textContent?.trim() && teamLogo?.alt) teamTitle.textContent = teamLogo.alt;
+      placeholder.querySelectorAll<HTMLAnchorElement>('a[href]').forEach((link) => {
+        const target = geniusLinkPath(link.getAttribute('href')!);
+        if (target !== undefined) link.setAttribute('href', mapGeniusPath(target));
+      });
+      if (filterSelector) {
+        const query = filterQuery.trim().toLowerCase();
+        placeholder.querySelectorAll<HTMLElement>(filterSelector).forEach((item) => {
+          item.classList.toggle('genius-hidden', Boolean(query) && !item.textContent?.toLowerCase().includes(query));
+        });
+      }
+    };
+
+    apply();
+    const observer = new MutationObserver(apply);
+    observer.observe(placeholder, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [allowed, filterSelector, filterQuery]);
+
+  // Kliknięcia w przepisane linki obsługuje router, bez przeładowania strony.
+  const onClick = (e: MouseEvent<HTMLDivElement>) => {
+    const link = (e.target as HTMLElement).closest('a');
+    const href = link?.getAttribute('href');
+    if (!href || !href.startsWith('/') || link!.target || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+    e.preventDefault();
+    navigate(href);
+  };
+
+  if (!allowed) {
+    return (
+      <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-600">
+        <p className="font-semibold text-slate-900">Dane Genius Sports są dostępne tylko na domenie ligi.</p>
+        <p className="mt-2">
+          Genius Sports wyświetla statystyki DALK wyłącznie na domenach zarejestrowanych dla ligi (np.{' '}
+          <code className="rounded bg-slate-100 px-1">dalk.pl</code>). Na tej domenie (
+          <code className="rounded bg-slate-100 px-1">{window.location.hostname}</code>) osadzenie zwróciłoby tylko komunikat o niedozwolonej domenie.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      id={placeholderId}
+      ref={ref}
+      onClick={onClick}
+      className={`genius-embed ${compact ? 'genius-compact' : ''} min-h-24 overflow-x-auto rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200`}
+    />
+  );
+}
+
+export default GeniusEmbed;

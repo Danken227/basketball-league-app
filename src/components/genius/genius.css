@@ -1,0 +1,463 @@
+/*
+  Wygląd treści Genius Sports w oprawie strony ligi. Osadzamy HTML Genius bez ich CSS (rawEnableCSS: false),
+  więc tu nadajemy mu nasz styl. Klasy pochodzą z HTML stron Genius używanych na dalk.pl.
+*/
+
+.genius-embed {
+  color: #334155;
+  font-size: 0.875rem;
+}
+
+.genius-embed .genius-status {
+  color: #64748b;
+}
+
+.genius-embed .genius-status strong {
+  color: #0f172a;
+}
+
+/* Genius ukrywa treść do czasu wczytania własnego CSS, którego nie używamy — odsłaniamy ją od razu. */
+.genius-embed .hs-embed {
+  visibility: visible !important;
+}
+
+/* Elementy, które zastępujemy własnymi (wybór rozgrywek, druk) albo które są puste. */
+.genius-embed .comp-selector,
+.genius-embed .print-link,
+.genius-embed .hs-loader,
+.genius-embed .liveStandingsIndicator:empty {
+  display: none;
+}
+
+.genius-embed h1,
+.genius-embed h2,
+.genius-embed h3,
+.genius-embed h4 {
+  margin: 0.75rem 0 0.5rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.genius-embed a {
+  font-weight: 600;
+  color: #0f172a;
+  text-underline-offset: 2px;
+}
+
+.genius-embed a:hover {
+  color: #ea580c;
+  text-decoration: underline;
+}
+
+.genius-embed .dblock {
+  margin-bottom: 1.25rem;
+}
+
+/* Podmenu Genius (grupy, sekcje drużyny i zawodnika) jako "pigułki", jak nasze zakładki. */
+.genius-embed .generic-list-menu,
+.genius-embed .selection-scroll {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.genius-embed .generic-list-menu a,
+.genius-embed .menuoption {
+  border-radius: 9999px;
+  background: #ffffff;
+  padding: 0.375rem 1rem;
+  font-size: 0.8125rem;
+  color: #475569;
+  box-shadow: inset 0 0 0 1px #e2e8f0;
+  text-decoration: none;
+}
+
+.genius-embed .generic-list-menu a.currentoption,
+.genius-embed .menuoption.currentoption {
+  background: #f97316;
+  color: #020617;
+  box-shadow: none;
+}
+
+/* Tabele (tabela ligowa, statystyki, składy). */
+.genius-embed table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.genius-embed th {
+  background: #020617;
+  padding: 0.625rem 0.75rem;
+  text-align: left;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #ffffff;
+  white-space: nowrap;
+}
+
+.genius-embed th:first-child {
+  border-top-left-radius: 0.5rem;
+}
+
+.genius-embed th:last-child {
+  border-top-right-radius: 0.5rem;
+}
+
+.genius-embed td {
+  color: #334155;
+  border-top: 1px solid #f1f5f9;
+  padding: 0.5rem 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.genius-embed tbody tr:hover td {
+  background: #f8fafc;
+}
+
+.genius-embed td.team-logo,
+.genius-embed th.team-logo {
+  width: 2.5rem;
+  padding-right: 0;
+}
+
+.genius-embed .team-logo img,
+.genius-embed img.logo {
+  height: 1.75rem;
+  width: 1.75rem;
+  max-width: none;
+  object-fit: contain;
+}
+
+.genius-embed .team-name-code {
+  display: none;
+}
+
+.genius-embed td.STANDINGS_standingPoints {
+  font-weight: 800;
+  color: #0f172a;
+}
+
+/* Liderzy statystyk (Top 10 na stronie głównej i strona Liderzy). */
+.genius-embed .leader-block {
+  overflow: hidden;
+  border-radius: 0.75rem;
+  box-shadow: inset 0 0 0 1px #e2e8f0;
+}
+
+.genius-embed .leader-header {
+  background: #020617;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #fb923c;
+}
+
+.genius-embed .leader-first {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  background: #fff7ed;
+  padding: 0.75rem;
+}
+
+.genius-embed .leader-first .ld-name a {
+  font-size: 1rem;
+}
+
+.genius-embed .leader-first .ld-team a {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: #64748b;
+}
+
+.genius-embed .leader-first-value {
+  text-align: right;
+  font-size: 1.5rem;
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.genius-embed .ld-statname {
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.genius-embed .leader-block th {
+  border-radius: 0;
+}
+
+.genius-embed .leader-block td.team a {
+  font-weight: 400;
+  color: #64748b;
+}
+
+/* Terminarz: każdy mecz jako wiersz — data i hala | gospodarz, wynik, gość | link do relacji. */
+.genius-embed .match-wrap {
+  display: grid;
+  grid-template-columns: 10rem 1fr auto;
+  align-items: center;
+  gap: 0.5rem 1.5rem;
+  border-top: 1px solid #f1f5f9;
+  padding: 0.75rem 0.25rem;
+}
+
+.genius-embed .match-wrap:first-child {
+  border-top: 0;
+}
+
+.genius-embed .match-details-wrap {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.genius-embed .match-details h6 {
+  display: none;
+}
+
+.genius-embed .match-time span {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.genius-embed .match-venue a {
+  font-weight: 400;
+  color: #64748b;
+}
+
+.genius-embed .sched-teams {
+  display: grid;
+  grid-template-columns: 1fr 5.5rem 1fr;
+  align-items: center;
+  gap: 1rem;
+}
+
+.genius-embed .home-team,
+.genius-embed .away-team {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.genius-embed .home-team {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+/* U gościa wynik stoi przy środku, czyli przed logo i nazwą. */
+.genius-embed .away-team .team-score {
+  order: -1;
+}
+
+.genius-embed .sched-teams .team-logo img {
+  height: 2rem;
+  width: 2rem;
+}
+
+.genius-embed .team-score {
+  min-width: 2rem;
+  font-size: 1.125rem;
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.genius-embed .match-result {
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+/* Elementy relacji na żywo pokazujemy tylko przy meczach w trakcie (CSS Genius robi to samo). */
+.genius-embed .match-wrap .livenow {
+  display: none;
+}
+
+.genius-embed .match-wrap:not(.STATUS_SCHEDULED):not(.STATUS_COMPLETE) .livenow {
+  display: inline;
+}
+
+.genius-embed .match-wrap:not(.STATUS_SCHEDULED):not(.STATUS_COMPLETE) .notlive {
+  display: none;
+}
+
+.genius-embed .match-wrap:not(.STATUS_SCHEDULED):not(.STATUS_COMPLETE) .match-result {
+  color: #dc2626;
+}
+
+.genius-embed .sched-link a {
+  border-radius: 9999px;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.75rem;
+  color: #ea580c;
+  box-shadow: inset 0 0 0 1px #e2e8f0;
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .genius-embed .match-wrap {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Lista drużyn: kafelki z logo i nazwą, jak na dalk.pl. */
+.genius-embed .teams-list-page {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  gap: 1rem;
+}
+
+.genius-embed .team-link {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  text-align: center;
+}
+
+.genius-embed .team-link img.logo {
+  height: 6rem;
+  width: 100%;
+  border-radius: 0.5rem;
+  background: #ffffff;
+  padding: 0.75rem;
+  box-shadow: inset 0 0 0 1px #e2e8f0;
+}
+
+.genius-embed .team-link a {
+  color: #ea580c;
+}
+
+/* Lista zawodników: siatka nazwisk z podziałem na litery. */
+.genius-embed :has(> .playerblock) {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: 0.5rem 1.5rem;
+}
+
+.genius-embed .playerblock {
+  border-radius: 0.5rem;
+  padding: 0.375rem 0.5rem;
+}
+
+.genius-embed .playerblock:hover {
+  background: #f8fafc;
+}
+
+/* Genius pokazuje zawodników po jednej literze; my od razu wszystkich (jak plk.pl), a zawężamy wyszukiwarką. */
+.genius-embed .playerblock {
+  display: block !important;
+}
+
+.genius-embed .playerblock.genius-hidden {
+  display: none !important;
+}
+
+.genius-embed .alphabet {
+  display: none;
+}
+
+/* Nagłówek strony drużyny i zawodnika: logo/zdjęcie i nazwa na ciemnym tle, jak nasze profile. */
+.genius-embed .team-header,
+.genius-embed .person-header {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  margin-bottom: 1.25rem;
+  border-radius: 0.75rem;
+  background: #020617;
+  padding: 1.5rem;
+  color: #ffffff;
+}
+
+.genius-embed .team-header .logo img {
+  height: 7rem;
+  width: 7rem;
+  max-width: none;
+  border-radius: 0.75rem;
+  background: #ffffff;
+  padding: 0.5rem;
+  object-fit: contain;
+}
+
+.genius-embed .team-header h1,
+.genius-embed .person-header h1,
+.genius-embed .person-name {
+  margin: 0;
+  font-size: 1.875rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  color: #ffffff;
+}
+
+.genius-embed .person-header img {
+  height: 8rem;
+  max-width: none;
+  border-radius: 0.5rem;
+}
+
+.genius-embed .roster-table th.ROSTER_shirtNumber {
+  width: 6rem;
+}
+
+.genius-embed .roster-table td a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.genius-embed .roster-table img {
+  display: inline-block;
+  height: 2.5rem;
+  width: 2.5rem;
+  max-width: none;
+  border-radius: 9999px;
+  object-fit: cover;
+}
+
+/* Wariant do wąskich kolumn strony głównej. */
+.genius-compact {
+  padding: 0;
+  font-size: 0.8125rem;
+}
+
+.genius-compact th,
+.genius-compact td {
+  padding: 0.4rem 0.3rem;
+  font-size: 0.75rem;
+}
+
+/* W wąskiej kolumnie: "#" zamiast "Position", bez kolumny logo, liczby wyrównane do prawej. */
+.genius-compact .standings th:first-child {
+  font-size: 0;
+}
+
+.genius-compact .standings th:first-child::after {
+  content: '#';
+  font-size: 0.6875rem;
+}
+
+.genius-compact .team-logo {
+  display: none;
+}
+
+.genius-compact td[class^='STANDINGS_'],
+.genius-compact th[class^='STANDINGS_'] {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.genius-compact .leader-first .ld-name a {
+  font-size: 0.875rem;
+}
+
+.genius-compact .leader-first-value {
+  font-size: 1.25rem;
+}
