@@ -1,4 +1,4 @@
-import { leagues, type LeagueId } from '../../data/league';
+import { currentSeason, leagues, type LeagueId } from '../../data/league';
 
 interface SelectProps<T extends LeagueId | 'all'> {
   value: T;
@@ -20,7 +20,7 @@ function LeagueSelect<T extends LeagueId | 'all'>({ value, onChange, dark, allow
       {allowAll && <option value="all">Wszystkie ligi</option>}
       {leagues.map((league) => (
         <option key={league.id} value={league.id}>
-          {league.name} {league.season}
+          {league.name} {currentSeason.name}
         </option>
       ))}
     </select>

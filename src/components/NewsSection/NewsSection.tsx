@@ -1,4 +1,4 @@
-import { getStandings, getTopPlayers, lastPlayedRound, leagues, season, teams } from '../../data/league';
+import { currentSeason, getPlacement, getStandings, getTopPlayers, lastPlayedRound, leagues } from '../../data/league';
 
 interface NewsItem {
   id: string;
@@ -77,8 +77,8 @@ function buildNews(): NewsItem[] {
       id: 'season-start',
       category: 'Liga',
       date: '05.09.2026',
-      title: `Wystartował sezon ${season}`,
-      excerpt: `${teams.length} zespołów gra w Ekstralidze i ${leagues.length - 1} ligach podzielonych łącznie na ${groupCount} grup.`,
+      title: `Wystartował sezon ${currentSeason.name}`,
+      excerpt: `${getPlacement(currentSeason.id).length} zespołów gra w Ekstralidze i ${leagues.length - 1} ligach podzielonych łącznie na ${groupCount} grup.`,
       gradient: 'from-cyan-600 to-sky-700',
     },
   ];

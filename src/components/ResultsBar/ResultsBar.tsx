@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type PointerEvent } from 'react';
+import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 'react';
 import { getWeekendMatches, leagueById, teamById, type LeagueId, type Match } from '../../data/league';
 import LeagueSelect from '../common/LeagueSelect';
+import { TeamLink } from '../common/Links';
 import TeamBadge from '../common/TeamBadge';
 
 type Filter = LeagueId | 'all';
@@ -32,7 +33,9 @@ function MatchCard({ match }: { match: Match }) {
         {rows.map(({ team, score }) => (
           <li key={team.id} className="flex items-center gap-2">
             <TeamBadge team={team} size="sm" />
-            <span title={team.name} className={`min-w-0 flex-1 truncate text-sm ${score === winnerScore ? 'font-bold text-white' : 'text-slate-300'}`}>{team.name}</span>
+            <span title={team.name} className={`min-w-0 flex-1 truncate text-sm ${score === winnerScore ? 'font-bold text-white' : 'text-slate-300'}`}>
+              <TeamLink team={team} className="hover:text-orange-300" />
+            </span>
             {match.played && (
               <span className={`text-sm tabular-nums ${score === winnerScore ? 'font-bold text-white' : 'text-slate-400'}`}>{score}</span>
             )}
@@ -59,7 +62,8 @@ function GroupLabel({ children }: { children: string }) {
 function ResultsBar() {
   const [filter, setFilter] = useState<Filter>('all');
   const scrollerRef = useRef<HTMLDivElement>(null);
-  const drag = useRef<{ x: number; scrollLeft: number } | null>(null);
+  const drag = useRef<{ x: number; scrollLeft: number; moved: boolean } | null>(null);
+  const suppressClick = useRef(false);
   const [edges, setEdges] = useState({ start: true, end: false });
 
   const { last, next } = getWeekendMatches();
@@ -90,17 +94,30 @@ function ResultsBar() {
   };
 
   // Przeciąganie myszą; dotyk obsługuje natywne przewijanie przeglądarki.
+  // Wskaźnik przejmujemy dopiero po kilku pikselach ruchu, żeby zwykłe kliknięcie w drużynę działało,
+  // a kliknięcie kończące przeciąganie blokujemy, żeby nie otwierało linku.
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
     if (e.pointerType !== 'mouse') return;
-    drag.current = { x: e.clientX, scrollLeft: e.currentTarget.scrollLeft };
-    e.currentTarget.setPointerCapture(e.pointerId);
+    drag.current = { x: e.clientX, scrollLeft: e.currentTarget.scrollLeft, moved: false };
   };
   const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
     if (!drag.current) return;
-    e.currentTarget.scrollLeft = drag.current.scrollLeft - (e.clientX - drag.current.x);
+    const dx = e.clientX - drag.current.x;
+    if (!drag.current.moved && Math.abs(dx) > 5) {
+      drag.current.moved = true;
+      e.currentTarget.setPointerCapture(e.pointerId);
+    }
+    if (drag.current.moved) e.currentTarget.scrollLeft = drag.current.scrollLeft - dx;
   };
   const onPointerUp = () => {
+    suppressClick.current = drag.current?.moved ?? false;
     drag.current = null;
+  };
+  const onClickCapture = (e: MouseEvent) => {
+    if (!suppressClick.current) return;
+    suppressClick.current = false;
+    e.preventDefault();
+    e.stopPropagation();
   };
 
   const arrowClass =
@@ -125,6 +142,7 @@ function ResultsBar() {
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
+            onClickCapture={onClickCapture}
             className="relative flex flex-1 cursor-grab touch-pan-x select-none gap-3 overflow-x-auto pb-1 active:cursor-grabbing [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
             {lastMatches.length > 0 && <GroupLabel>Wyniki</GroupLabel>}
