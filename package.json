@@ -10,13 +10,15 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@tailwindcss/vite": "^4.3.3",
     "@untitledui/icons": "^0.0.22",
     "react": "^19.2.7",
     "react-aria": "^3.50.0",
     "react-aria-components": "^1.19.0",
     "react-dom": "^19.2.7",
     "react-router-dom": "^7.18.1",
-    "tailwind-merge": "^3.6.0"
+    "tailwind-merge": "^3.6.0",
+    "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
