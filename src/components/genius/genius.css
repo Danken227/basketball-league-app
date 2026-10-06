@@ -422,6 +422,13 @@
   object-fit: cover;
 }
 
+/* Bloki lig na stronie zawodnika: nagłówek i podmenu Genius zastępuje nasz nagłówek strony. */
+.genius-person-block .person-header,
+.genius-person-block .selection-scroll,
+.genius-person-block .generic-list-menu {
+  display: none;
+}
+
 /* Wariant do wąskich kolumn strony głównej. */
 .genius-compact {
   padding: 0;

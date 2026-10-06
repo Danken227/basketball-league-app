@@ -7,7 +7,7 @@ import PageHeader from '../components/common/PageHeader';
 import { icons } from '../components/common/icons';
 import PlayerPhoto from '../components/common/PlayerPhoto';
 import TeamBadge from '../components/common/TeamBadge';
-import { currentSeason, getAllPlayers, getSeasonPlayers, leagueById, players, seasonById, seasons, type LeagueId, type Player } from '../data/league';
+import { currentSeason, getAllPlayers, getSeasonPlayers, leagueById, players, seasonById, seasons, type LeagueId, type Player, type SeasonPlayer } from '../data/league';
 import { playerPath } from '../utils/paths';
 
 const collator = new Intl.Collator('pl');
@@ -52,9 +52,14 @@ function LetterSection({ letter, children }: { letter: string; children: ReactNo
 function SeasonPlayers({ query, setQuery }: { query: string; setQuery: (value: string) => void }) {
   // Ta zakładka zawsze dotyczy bieżącej edycji, więc filtrujemy tylko poziom rozgrywek.
   const { leagueId, setLeagueId } = useSeasonLeagueFilters<LeagueId | 'all'>('all');
-  const list = getSeasonPlayers(currentSeason.id, leagueId)
-    .filter((entry) => matchesQuery(entry.player, query))
-    .sort((a, b) => sortName(a.player, b.player));
+  // Zawodnik zgłoszony w kilku drużynach (różne poziomy) ma jedną kartę z wszystkimi drużynami.
+  const byPlayer = new Map<string, { player: Player; teams: SeasonPlayer[] }>();
+  for (const entry of getSeasonPlayers(currentSeason.id, leagueId)) {
+    const item = byPlayer.get(entry.player.id) ?? { player: entry.player, teams: [] };
+    item.teams.push(entry);
+    byPlayer.set(entry.player.id, item);
+  }
+  const list = [...byPlayer.values()].filter((entry) => matchesQuery(entry.player, query)).sort((a, b) => sortName(a.player, b.player));
 
   return (
     <>
@@ -71,23 +76,26 @@ function SeasonPlayers({ query, setQuery }: { query: string; setQuery: (value: s
       <div className="mt-4 flex flex-col gap-6">
         {byLetter(list, (e) => e.player).map(([letter, entries]) => (
           <LetterSection key={letter} letter={letter}>
-            {entries.map(({ player, team, number, teamSeason }) => (
-              <li key={`${player.id}-${team.id}`} className="flex items-center gap-3 rounded-lg p-1.5 transition hover:bg-white hover:shadow-sm">
+            {entries.map(({ player, teams }) => (
+              <li key={player.id} className="flex items-center gap-3 rounded-lg p-1.5 transition hover:bg-white hover:shadow-sm">
                 <Link to={playerPath(player.id)} aria-label={`${player.firstName} ${player.lastName}`} tabIndex={-1}>
-                  <PlayerPhoto team={team} number={number} />
+                  <PlayerPhoto team={teams[0].team} number={teams[0].number} />
                 </Link>
                 <span className="min-w-0">
                   <PlayerLink player={player} className="block font-bold text-slate-900">
                     {player.lastName} {player.firstName}
                   </PlayerLink>
-                  <span className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500">
-                    <TeamBadge team={team} size="sm" />
-                    <TeamLink team={team} className="truncate" />
-                  </span>
-                  <span className="mt-0.5 block text-[11px] text-slate-400">
-                    {leagueById.get(teamSeason.leagueId)!.name}
-                    {teamSeason.group && ` · Gr. ${teamSeason.group}`} · {player.position}
-                  </span>
+                  {teams.map(({ team, teamSeason }) => (
+                    <span key={team.id} className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500">
+                      <TeamBadge team={team} size="sm" />
+                      <TeamLink team={team} className="truncate" />
+                      <span className="shrink-0 text-[11px] text-slate-400">
+                        · {leagueById.get(teamSeason.leagueId)!.short}
+                        {teamSeason.group && ` ${teamSeason.group}`}
+                      </span>
+                    </span>
+                  ))}
+                  <span className="mt-0.5 block text-[11px] text-slate-400">{player.position}</span>
                 </span>
               </li>
             ))}
@@ -124,7 +132,7 @@ function HistoricPlayers({ query, setQuery }: { query: string; setQuery: (value:
 
   const season = seasonFilter === 'all' ? undefined : seasonById.get(seasonFilter)!;
   const list = getAllPlayers()
-    .filter((entry) => !season || entry.teamBySeason.has(season.id))
+    .filter((entry) => !season || entry.teamsBySeason.has(season.id))
     .filter((entry) => matchesQuery(entry.player, query))
     .sort((a, b) => sortName(a.player, b.player));
 
@@ -147,9 +155,9 @@ function HistoricPlayers({ query, setQuery }: { query: string; setQuery: (value:
       <div className="mt-4 flex flex-col gap-6">
         {byLetter(list, (e) => e.player).map(([letter, entries]) => (
           <LetterSection key={letter} letter={letter}>
-            {entries.map(({ player, firstSeason, lastSeason, lastTeam, seasonsCount, teamBySeason }) => {
-              // Przy wybranej edycji pokazujemy drużynę z tej edycji, inaczej ostatnią.
-              const team = season ? teamBySeason.get(season.id)! : lastTeam;
+            {entries.map(({ player, firstSeason, lastSeason, lastTeams, seasonsCount, teamsBySeason }) => {
+              // Przy wybranej edycji pokazujemy drużyny z tej edycji, inaczej z ostatniej.
+              const teams = season ? teamsBySeason.get(season.id)! : lastTeams;
               return (
                 <li key={player.id} className="rounded-lg px-2 py-1.5 transition hover:bg-white hover:shadow-sm">
                   <PlayerLink player={player} className="block font-bold text-slate-900">
@@ -158,7 +166,12 @@ function HistoricPlayers({ query, setQuery }: { query: string; setQuery: (value:
                   <span className="block text-xs text-slate-500">
                     {firstSeason.id === lastSeason.id ? firstSeason.name : `${firstSeason.name} – ${lastSeason.name}`} · {seasonsCount}{' '}
                     {seasonsCount === 1 ? 'edycja' : 'edycje'} · {season ? 'wtedy' : 'ostatnio'}{' '}
-                    <TeamLink team={team} seasonId={season?.id ?? lastSeason.id} />
+                    {teams.map((team, i) => (
+                      <span key={team.id}>
+                        {i > 0 && ', '}
+                        <TeamLink team={team} seasonId={season?.id ?? lastSeason.id} />
+                      </span>
+                    ))}
                   </span>
                 </li>
               );

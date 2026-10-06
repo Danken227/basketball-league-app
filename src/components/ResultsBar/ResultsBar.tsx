@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 'react';
+import { useState } from 'react';
 import { getWeekendMatches, leagueById, teamById, type LeagueId, type Match } from '../../data/league';
+import { DragScroller, GroupLabel } from '../common/DragScroller';
 import LeagueSelect from '../common/LeagueSelect';
 import { TeamLink } from '../common/Links';
 import TeamBadge from '../common/TeamBadge';
@@ -49,79 +50,13 @@ function MatchCard({ match }: { match: Match }) {
   );
 }
 
-function GroupLabel({ children }: { children: string }) {
-  return (
-    <div className="flex w-8 shrink-0 items-center justify-center">
-      <span className="rotate-180 text-[11px] font-semibold uppercase tracking-widest text-slate-500 [writing-mode:vertical-rl]">
-        {children}
-      </span>
-    </div>
-  );
-}
-
 function ResultsBar() {
   const [filter, setFilter] = useState<Filter>('all');
-  const scrollerRef = useRef<HTMLDivElement>(null);
-  const drag = useRef<{ x: number; scrollLeft: number; moved: boolean } | null>(null);
-  const suppressClick = useRef(false);
-  const [edges, setEdges] = useState({ start: true, end: false });
 
   const { last, next } = getWeekendMatches();
   const byLeague = (m: Match) => filter === 'all' || m.leagueId === filter;
   const lastMatches = last.filter(byLeague);
   const nextMatches = next.filter(byLeague);
-
-  const updateEdges = () => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    setEdges({ start: el.scrollLeft <= 1, end: el.scrollLeft + el.clientWidth >= el.scrollWidth - 1 });
-  };
-
-  useEffect(() => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    // Na start pokaż przejście między ostatnim a następnym weekendem.
-    const divider = el.querySelector<HTMLElement>('[data-divider]');
-    el.scrollLeft = divider ? Math.max(0, divider.offsetLeft - el.clientWidth / 2) : 0;
-    updateEdges();
-    window.addEventListener('resize', updateEdges);
-    return () => window.removeEventListener('resize', updateEdges);
-  }, [filter]);
-
-  const scrollBy = (direction: 1 | -1) => {
-    const el = scrollerRef.current;
-    el?.scrollBy({ left: direction * el.clientWidth * 0.8, behavior: 'smooth' });
-  };
-
-  // Przeciąganie myszą; dotyk obsługuje natywne przewijanie przeglądarki.
-  // Wskaźnik przejmujemy dopiero po kilku pikselach ruchu, żeby zwykłe kliknięcie w drużynę działało,
-  // a kliknięcie kończące przeciąganie blokujemy, żeby nie otwierało linku.
-  const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
-    if (e.pointerType !== 'mouse') return;
-    drag.current = { x: e.clientX, scrollLeft: e.currentTarget.scrollLeft, moved: false };
-  };
-  const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
-    if (!drag.current) return;
-    const dx = e.clientX - drag.current.x;
-    if (!drag.current.moved && Math.abs(dx) > 5) {
-      drag.current.moved = true;
-      e.currentTarget.setPointerCapture(e.pointerId);
-    }
-    if (drag.current.moved) e.currentTarget.scrollLeft = drag.current.scrollLeft - dx;
-  };
-  const onPointerUp = () => {
-    suppressClick.current = drag.current?.moved ?? false;
-    drag.current = null;
-  };
-  const onClickCapture = (e: MouseEvent) => {
-    if (!suppressClick.current) return;
-    suppressClick.current = false;
-    e.preventDefault();
-    e.stopPropagation();
-  };
-
-  const arrowClass =
-    'grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white/10 text-white transition hover:bg-orange-500 hover:text-slate-950 disabled:pointer-events-none disabled:opacity-30';
 
   return (
     <section aria-label="Wyniki i najbliższe mecze" className="bg-slate-900 text-white">
@@ -131,35 +66,18 @@ function ResultsBar() {
           <LeagueSelect value={filter} onChange={setFilter} allowAll dark />
         </div>
 
-        <div className="flex items-center gap-2">
-          <button type="button" className={`${arrowClass} hidden sm:grid`} aria-label="Przewiń w lewo" disabled={edges.start} onClick={() => scrollBy(-1)}>
-            ‹
-          </button>
-          <div
-            ref={scrollerRef}
-            onScroll={updateEdges}
-            onPointerDown={onPointerDown}
-            onPointerMove={onPointerMove}
-            onPointerUp={onPointerUp}
-            onPointerCancel={onPointerUp}
-            onClickCapture={onClickCapture}
-            className="relative flex flex-1 cursor-grab touch-pan-x select-none gap-3 overflow-x-auto pb-1 active:cursor-grabbing [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-          >
-            {lastMatches.length > 0 && <GroupLabel>Wyniki</GroupLabel>}
-            {lastMatches.map((match) => (
-              <MatchCard key={match.id} match={match} />
-            ))}
-            {lastMatches.length > 0 && nextMatches.length > 0 && <div data-divider className="w-px shrink-0 bg-white/15" />}
-            {nextMatches.length > 0 && <GroupLabel>Najbliższe</GroupLabel>}
-            {nextMatches.map((match) => (
-              <MatchCard key={match.id} match={match} />
-            ))}
-            {lastMatches.length + nextMatches.length === 0 && <p className="py-6 text-sm text-slate-400">Brak meczów.</p>}
-          </div>
-          <button type="button" className={`${arrowClass} hidden sm:grid`} aria-label="Przewiń w prawo" disabled={edges.end} onClick={() => scrollBy(1)}>
-            ›
-          </button>
-        </div>
+        <DragScroller resetKey={filter}>
+          {lastMatches.length > 0 && <GroupLabel>Wyniki</GroupLabel>}
+          {lastMatches.map((match) => (
+            <MatchCard key={match.id} match={match} />
+          ))}
+          {lastMatches.length > 0 && nextMatches.length > 0 && <div data-divider className="w-px shrink-0 bg-white/15" />}
+          {nextMatches.length > 0 && <GroupLabel>Najbliższe</GroupLabel>}
+          {nextMatches.map((match) => (
+            <MatchCard key={match.id} match={match} />
+          ))}
+          {lastMatches.length + nextMatches.length === 0 && <p className="py-6 text-sm text-slate-400">Brak meczów.</p>}
+        </DragScroller>
       </div>
     </section>
   );

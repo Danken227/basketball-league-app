@@ -54,8 +54,28 @@ export function findCompetition(id: number) {
   return undefined;
 }
 
-// Widgety skonfigurowane w panelu Genius (pasek meczów). Ten z dalk.pl obejmuje wszystkie ligi;
-// gdy liga założy osobne widgety per poziom, wystarczy dopisać je tutaj, a na pasku pojawi się filtr.
+// Rozgrywki juniorskie (pojawiają się w pasku meczów). Numery z listy rozgrywek DALK w Genius.
+export const geniusJuniorCompetitions: Record<string, Record<string, number>> = {
+  '2026-27': { U13: 49971, U15: 49972, U17: 49975, U19: 49982 },
+};
+
+// Numer rozgrywek z ich nazwy w Genius, np. "2. Liga 2026/27" albo "DALK Junior U15 2026/27".
+export function competitionIdByName(name: string): number | undefined {
+  const senior = name.match(/^(Ekstraliga|[123]\. Liga) (.+)$/i);
+  if (senior) {
+    const leagueId: LeagueId = /^ekstraliga$/i.test(senior[1]) ? 'eks' : (senior[1][0] as LeagueId);
+    return geniusEditions.find((e) => e.name === senior[2])?.competitions[leagueId];
+  }
+  const junior = name.match(/Junior (U\d+) (.+)$/i);
+  if (junior) {
+    const edition = geniusEditions.find((e) => e.name === junior[2]);
+    return edition && geniusJuniorCompetitions[edition.id]?.[junior[1].toUpperCase()];
+  }
+  return undefined;
+}
+
+// Widget paska meczów skonfigurowany w panelu Genius (ten sam co na dalk.pl, obejmuje wszystkie ligi).
+// Filtr ligi robi nasz pasek (GeniusMatchBar) na podstawie nazwy rozgrywek w kartach.
 export const geniusResultsWidgets: Partial<Record<LeagueId | 'all', string>> = {
   all: 'L65TRHI9J4MAGUYV9HYOQO094QLVMS',
 };

@@ -16,6 +16,9 @@ interface GeniusEmbedProps {
   compact?: boolean;
   // Ukrywa elementy (np. ".playerblock"), których tekst nie zawiera frazy — wyszukiwarka zawodników.
   textFilter?: { selector: string; query: string };
+  // Wywoływane po wczytaniu (i każdej zmianie) treści Genius — np. do odczytania nazwy zawodnika.
+  onContent?: (root: HTMLElement) => void;
+  className?: string;
 }
 
 // Genius buduje linki na dwa sposoby: na zarejestrowanej domenie jako "<adres>?&WHurl=/competition/..",
@@ -29,14 +32,34 @@ function geniusLinkPath(href: string): string | undefined {
 
 const loadingHtml = '<p class="genius-status">Wczytywanie danych Genius Sports…</p>';
 
-function GeniusEmbed({ page, blockDisplay, showSubMenus = true, showMatchFilter = true, showTitle = false, compact, textFilter }: GeniusEmbedProps) {
+// Serwer Genius zwraca skrypt osadzenia zależny od domeny strony, a przeglądarka zapamiętuje go po samym adresie.
+// Kopia pobrana kiedyś z innej domeny (np. localhost) blokowałaby wtedy osadzenie. Znacznik zmieniany przy każdym
+// wczytaniu strony trafia do nazwy konfiguracji, a więc i do adresu skryptu — skrypt jest zawsze świeży.
+const pageLoadTag = Date.now().toString(36);
+
+function GeniusEmbed({
+  page,
+  blockDisplay,
+  showSubMenus = true,
+  showMatchFilter = true,
+  showTitle = false,
+  compact,
+  textFilter,
+  onContent,
+  className = '',
+}: GeniusEmbedProps) {
   const ref = useRef<HTMLDivElement>(null);
+  // Najnowszy callback w refie, żeby jego zmiana nie restartowała obserwatora treści.
+  const onContentRef = useRef(onContent);
+  useEffect(() => {
+    onContentRef.current = onContent;
+  });
   const navigate = useNavigate();
   const allowed = isGeniusDomain();
   // Każde osadzenie ma własną zmienną konfiguracji i element, więc kilka może działać na jednej stronie.
   const instance = useId().replace(/[^a-zA-Z0-9]/g, '');
   const placeholderId = `spil_w_h_${instance}`;
-  const configName = `spilWHH_${instance}` as const;
+  const configName = `spilWHH_${instance}${pageLoadTag}` as const;
   const filterSelector = textFilter?.selector;
   const filterQuery = textFilter?.query ?? '';
 
@@ -118,6 +141,7 @@ function GeniusEmbed({ page, blockDisplay, showSubMenus = true, showMatchFilter 
           item.classList.toggle('genius-hidden', Boolean(query) && !item.textContent?.toLowerCase().includes(query));
         });
       }
+      if (placeholder.querySelector('.hs-embed')) onContentRef.current?.(placeholder);
     };
 
     apply();
@@ -153,7 +177,7 @@ function GeniusEmbed({ page, blockDisplay, showSubMenus = true, showMatchFilter 
       id={placeholderId}
       ref={ref}
       onClick={onClick}
-      className={`genius-embed ${compact ? 'genius-compact' : ''} min-h-24 overflow-x-auto rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200`}
+      className={`genius-embed ${compact ? 'genius-compact' : ''} ${className} min-h-24 overflow-x-auto rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200`}
     />
   );
 }
