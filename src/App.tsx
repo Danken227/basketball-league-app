@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { icons } from './components/common/icons';
+import DemoBanner from './components/DemoBanner/DemoBanner';
 import Footer from './components/Footer/Footer';
 import BySource from './components/genius/BySource';
 import Header from './components/Header/Header';
@@ -37,6 +38,7 @@ function App() {
       <ScrollToTop />
       <div className="flex min-h-screen flex-col bg-slate-50">
         <Header />
+        <DemoBanner />
         <main className="flex-1">
           {/* Na domenie ligi podstrony pokazują dane Genius Sports, poza nią nasze dane testowe. */}
           <Routes>
