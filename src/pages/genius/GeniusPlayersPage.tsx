@@ -8,6 +8,15 @@ import GeniusFilterBar from '../../components/genius/GeniusFilterBar';
 import { competitionId, currentGeniusEdition, geniusEditionById, geniusEditions } from '../../components/genius/geniusConfig';
 import { leagues, type LeagueId } from '../../data/league';
 import { useGeniusFilters } from '../../hooks/useGeniusFilters';
+import { DEFAULT_LETTER, letterOptions } from '../../utils/letters';
+
+// Filtry list zawodników wspólne dla obu zakładek: fraza z wyszukiwarki i pierwsza litera nazwiska.
+interface ListFilters {
+  query: string;
+  setQuery: (value: string) => void;
+  letter: string;
+  setLetter: (value: string) => void;
+}
 
 function SearchField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   return (
@@ -24,9 +33,13 @@ function SearchField({ value, onChange }: { value: string; onChange: (value: str
   );
 }
 
+function LetterField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return <FilterSelect label="Litera nazwiska" value={value} onChange={onChange} options={letterOptions} />;
+}
+
 // Listy zawodników rozgrywek jednej edycji; przy "wszystkich ligach" kolejno każda liga,
 // bo Genius ma listę zawodników tylko dla pojedynczych rozgrywek.
-function CompetitionPlayers({ editionId, leagueIds, query }: { editionId: string; leagueIds: LeagueId[]; query: string }) {
+function CompetitionPlayers({ editionId, leagueIds, query, letter }: { editionId: string; leagueIds: LeagueId[]; query: string; letter: string }) {
   const lists = leagueIds.flatMap((leagueId) => {
     const cid = competitionId(editionId, leagueId);
     return cid ? [{ leagueId, cid }] : [];
@@ -37,22 +50,28 @@ function CompetitionPlayers({ editionId, leagueIds, query }: { editionId: string
       {lists.map(({ leagueId, cid }) => (
         <section key={cid}>
           {leagueIds.length > 1 && <h2 className="mb-2 text-lg font-black text-slate-900">{leagues.find((l) => l.id === leagueId)!.name}</h2>}
-          <GeniusEmbed page={`/competition/${cid}/players`} showSubMenus={false} textFilter={{ selector: '.playerblock', query }} />
+          <GeniusEmbed page={`/competition/${cid}/players`} showSubMenus={false} textFilter={{ selector: '.playerblock', query, letter }} />
         </section>
       ))}
     </div>
   );
 }
 
-function CurrentPlayers({ query, setQuery }: { query: string; setQuery: (value: string) => void }) {
+function CurrentPlayers({ query, setQuery, letter, setLetter }: ListFilters) {
   const { leagueId, setLeagueId } = useGeniusFilters<LeagueId | 'all'>('all');
   return (
     <>
       <GeniusFilterBar leagueId={leagueId} onLeagueChange={setLeagueId} allowAllLeagues>
+        <LetterField value={letter} onChange={setLetter} />
         <SearchField value={query} onChange={setQuery} />
       </GeniusFilterBar>
       <h2 className="mt-6 text-xl font-black text-slate-900">Zawodnicy w sezonie {currentGeniusEdition.name}</h2>
-      <CompetitionPlayers editionId={currentGeniusEdition.id} leagueIds={leagueId === 'all' ? leagues.map((l) => l.id) : [leagueId]} query={query} />
+      <CompetitionPlayers
+        editionId={currentGeniusEdition.id}
+        leagueIds={leagueId === 'all' ? leagues.map((l) => l.id) : [leagueId]}
+        query={query}
+        letter={letter}
+      />
     </>
   );
 }
@@ -63,7 +82,7 @@ const historicOptions = [
   ...geniusEditions.filter((e) => e.id !== currentGeniusEdition.id).map((e) => ({ value: e.id, label: `Edycja ${e.name}` })),
 ];
 
-function HistoricPlayers({ query, setQuery }: { query: string; setQuery: (value: string) => void }) {
+function HistoricPlayers({ query, setQuery, letter, setLetter }: ListFilters) {
   const [params, setParams] = useSearchParams();
   const requested = params.get('edycja');
   const editionFilter = historicOptions.some((o) => o.value === requested) ? requested! : 'all';
@@ -81,6 +100,7 @@ function HistoricPlayers({ query, setQuery }: { query: string; setQuery: (value:
     <>
       <FilterRow>
         <FilterSelect label="Edycja" value={editionFilter} onChange={setEditionFilter} options={historicOptions} />
+        <LetterField value={letter} onChange={setLetter} />
         <SearchField value={query} onChange={setQuery} />
       </FilterRow>
       <h2 className="mt-6 text-xl font-black text-slate-900">
@@ -92,10 +112,10 @@ function HistoricPlayers({ query, setQuery }: { query: string; setQuery: (value:
       {editionFilter === 'all' ? (
         <div className="mt-6">
           {/* Pełna baza zawodników ligi z Genius (kilka tysięcy nazwisk, ładuje się dłużej). */}
-          <GeniusEmbed page="/players?all=1" showSubMenus={false} textFilter={{ selector: '.playerblock', query }} />
+          <GeniusEmbed page="/players?all=1" showSubMenus={false} textFilter={{ selector: '.playerblock', query, letter }} />
         </div>
       ) : (
-        <CompetitionPlayers editionId={editionFilter} leagueIds={leagues.map((l) => l.id)} query={query} />
+        <CompetitionPlayers editionId={editionFilter} leagueIds={leagues.map((l) => l.id)} query={query} letter={letter} />
       )}
     </>
   );
@@ -109,7 +129,9 @@ const tabs = [
 function GeniusPlayersPage() {
   const [params, setParams] = useSearchParams();
   const [query, setQuery] = useState('');
+  const [letter, setLetter] = useState(DEFAULT_LETTER);
   const view = params.get('widok') === 'historia' ? 'historia' : 'sezon';
+  const filters: ListFilters = { query, setQuery, letter, setLetter };
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -134,7 +156,7 @@ function GeniusPlayersPage() {
           </button>
         ))}
       </div>
-      {view === 'sezon' ? <CurrentPlayers query={query} setQuery={setQuery} /> : <HistoricPlayers query={query} setQuery={setQuery} />}
+      {view === 'sezon' ? <CurrentPlayers {...filters} /> : <HistoricPlayers {...filters} />}
     </div>
   );
 }

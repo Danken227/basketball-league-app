@@ -127,7 +127,14 @@ export function mapGeniusPath(rawPath: string): string {
     return phase ? `${base}${base.includes('?') ? '&' : '?'}faza=${encodeURIComponent(phase)}` : base;
   }
 
-  // Pozostałe strony (np. relacja meczu, hala) pokazujemy w ogólnej stronie osadzenia.
+  // Mecz (podsumowanie, box score, play by play, shot chart…) → nasza strona meczu.
+  const match = path.match(/^\/competition\/(\d+)\/match\/(\d+)(?:\/([a-z]+))?/);
+  if (match) {
+    const [, cid, matchId, section] = match;
+    return `/mecze/${matchId}?rozgrywki=${cid}${section ? `&sekcja=${section}` : ''}`;
+  }
+
+  // Pozostałe strony (np. hala) pokazujemy w ogólnej stronie osadzenia.
   return `/genius?WHurl=${encodeURIComponent(path)}`;
 }
 

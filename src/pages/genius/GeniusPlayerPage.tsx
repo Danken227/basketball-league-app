@@ -1,9 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { FilterRow, FilterSelect } from '../../components/common/Filters';
-import GeniusEmbed from '../../components/genius/GeniusEmbed';
+import GeniusEmbed, { type StatsMode } from '../../components/genius/GeniusEmbed';
+import GeniusIndexLoader from '../../components/genius/GeniusIndexLoader';
 import { currentGeniusEdition, findCompetition, geniusEditionById, geniusEditions } from '../../components/genius/geniusConfig';
+import { competitionsWith, pendingCompetitions, personTeams, playedIn, savePersonTeams, savePlayed, type PersonTeam } from '../../components/genius/geniusIndex';
 import { leagues, type League } from '../../data/league';
+import { useGeniusIndex } from '../../hooks/useGeniusIndex';
+import StatsModeToggle from '../../components/genius/StatsModeToggle';
 
 // Strona zawodnika z danych Genius. Genius pokazuje statystyki zawodnika zawsze w kontekście jednych
 // rozgrywek, a w DALK zawodnik może grać w kilku drużynach na różnych poziomach (np. w 1. i 2. Lidze).
@@ -11,15 +15,10 @@ import { leagues, type League } from '../../data/league';
 
 type Section = 'statistics' | 'gamelog';
 
-interface TeamRef {
-  name: string;
-  href?: string;
-}
-
 interface BlockInfo {
   empty: boolean;
   name?: string;
-  teams: TeamRef[];
+  teams: PersonTeam[];
 }
 
 const editionOptions = geniusEditions.map((e) => ({
@@ -37,7 +36,7 @@ function readBlock(root: HTMLElement, section: Section): BlockInfo {
   const name = root.querySelector('.person-name, .person-header h1')?.textContent?.trim() || undefined;
   const rows = [...root.querySelectorAll('table tbody tr')];
   const empty = rows.length === 0 || (rows.length === 1 && /no results/i.test(rows[0].textContent ?? ''));
-  const teams: TeamRef[] = [];
+  const teams: PersonTeam[] = [];
   if (!empty && section === 'statistics') {
     for (const row of rows) {
       const cell = row.querySelectorAll('td')[1];
@@ -58,8 +57,14 @@ function PlayerBlocks({ personId, editionId, section }: { personId: string; edit
   });
   const [info, setInfo] = useState<Record<number, BlockInfo>>({});
 
-  const report = (cid: number, next: BlockInfo) =>
+  useGeniusIndex();
+  const report = (cid: number, next: BlockInfo) => {
+    // Przy okazji zapisujemy w indeksie, czy zawodnik grał w tych rozgrywkach (lista edycji w filtrze)
+    // i w jakich drużynach (zakładka "Mecze" nie ma kolumny drużyny, więc stamtąd ją bierze).
+    savePlayed(personId, cid, !next.empty);
+    if (next.teams.length > 0) savePersonTeams(personId, cid, next.teams);
     setInfo((prev) => (JSON.stringify(prev[cid]) === JSON.stringify(next) ? prev : { ...prev, [cid]: next }));
+  };
 
   const loaded = blocks.filter((b) => info[b.cid]).length;
   const played = blocks.filter((b) => info[b.cid] && !info[b.cid].empty);
@@ -75,7 +80,7 @@ function PlayerBlocks({ personId, editionId, section }: { personId: string; edit
             {played.map(({ league, cid }) => (
               <li key={cid} className="rounded-full bg-white/10 px-3 py-1 text-sm">
                 <span className="font-semibold text-orange-300">{league.name}</span>
-                {info[cid].teams.map((team) => (
+                {teamsOf(personId, cid, info[cid]).map((team) => (
                   <span key={team.name}>
                     {' · '}
                     {team.href ? (
@@ -118,32 +123,130 @@ interface LeagueBlockProps {
   onInfo: (info: BlockInfo) => void;
 }
 
+// Drużyny zawodnika w rozgrywkach: z wczytanych statystyk, a w zakładce "Mecze" z indeksu.
+const teamsOf = (personId: string, cid: number, info?: BlockInfo) =>
+  info && info.teams.length > 0 ? info.teams : (personTeams(personId, cid) ?? []);
+
 // Blok jednej ligi; dopóki nie wiadomo, czy zawodnik w niej grał (albo nie grał), jest ukryty.
 function LeagueBlock({ league, cid, personId, section, info, onInfo }: LeagueBlockProps) {
+  const [mode, setMode] = useState<StatsMode>('avg');
+  const teams = teamsOf(personId, cid, info);
+  const visible = Boolean(info) && !info!.empty;
   return (
-    <section className={!info || info.empty ? 'hidden' : ''}>
-      <h2 className="mb-2 text-lg font-black text-slate-900">
-        {league.name}
-        {info && info.teams.length > 0 && <span className="font-semibold text-slate-500"> · {info.teams.map((t) => t.name).join(', ')}</span>}
-      </h2>
+    <section className={visible ? '' : 'hidden'}>
+      <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
+        <h2 className="text-lg font-black text-slate-900">
+          {league.name}
+          {teams.length > 0 && (
+            <span className="font-semibold text-slate-500">
+              {' · '}
+              {teams.map((team, i) => (
+                <span key={team.name}>
+                  {i > 0 && ', '}
+                  {team.href ? (
+                    <Link to={team.href} className="hover:text-orange-600 hover:underline">
+                      {team.name}
+                    </Link>
+                  ) : (
+                    team.name
+                  )}
+                </span>
+              ))}
+            </span>
+          )}
+        </h2>
+        {section === 'statistics' && <StatsModeToggle value={mode} onChange={setMode} />}
+      </div>
       <GeniusEmbed
         page={`/competition/${cid}/person/${personId}/${section}`}
         showTitle
         showSubMenus={false}
+        statsMode={section === 'statistics' ? mode : undefined}
         className="genius-person-block"
         onContent={(root) => onInfo(readBlock(root, section))}
       />
+      {/* "Mecze" bez zapamiętanej drużyny: doczytujemy ją w tle ze statystyk tych rozgrywek. */}
+      {section === 'gamelog' && visible && teams.length === 0 && <TeamsFetcher personId={personId} cid={cid} />}
     </section>
+  );
+}
+
+function TeamsFetcher({ personId, cid }: { personId: string; cid: number }) {
+  return (
+    <div aria-hidden="true" className="pointer-events-none fixed -left-[10000px] top-0 h-0 w-[1200px] overflow-hidden">
+      <GeniusEmbed
+        page={`/competition/${cid}/person/${personId}/statistics`}
+        showSubMenus={false}
+        onContent={(root) => {
+          const { teams } = readBlock(root, 'statistics');
+          if (teams.length > 0) savePersonTeams(personId, cid, teams);
+        }}
+      />
+    </div>
+  );
+}
+
+// Sprawdza w tle (po jednym zapytaniu) występy zawodnika w rozgrywkach, na których listach figuruje,
+// a jeszcze niesprawdzonych. Wynik trafia do indeksu i zawęża listę edycji w filtrze.
+function PlayedChecker({ personId }: { personId: string }) {
+  useGeniusIndex();
+  const next = competitionsWith('players', personId).find((cid) => playedIn(personId, cid) === undefined);
+
+  // Gdy sprawdzenie się nie uda, zostawiamy edycję na liście (lepiej pokazać za dużo niż ukryć występy).
+  useEffect(() => {
+    if (next === undefined) return;
+    const timer = window.setTimeout(() => savePlayed(personId, next, true), 20000);
+    return () => window.clearTimeout(timer);
+  }, [personId, next]);
+
+  if (next === undefined) return null;
+  return (
+    <div aria-hidden="true" className="pointer-events-none fixed -left-[10000px] top-0 h-0 w-[1200px] overflow-hidden">
+      <GeniusEmbed
+        key={next}
+        page={`/competition/${next}/person/${personId}/statistics`}
+        showSubMenus={false}
+        onContent={(root) => {
+          const block = readBlock(root, 'statistics');
+          savePlayed(personId, next, !block.empty);
+          if (block.teams.length > 0) savePersonTeams(personId, next, block.teams);
+        }}
+      />
+    </div>
   );
 }
 
 function GeniusPlayerPage() {
   const { id } = useParams();
   const [params, setParams] = useSearchParams();
+  useGeniusIndex();
   const fromCompetition = findCompetition(Number(params.get('rozgrywki')));
   const requested = params.get('edycja');
   const editionId = requested && geniusEditionById.has(requested) ? requested : (fromCompetition?.editionId ?? currentGeniusEdition.id);
   const section: Section = params.get('sekcja') === 'gamelog' ? 'gamelog' : 'statistics';
+
+  // Edycje, w których zawodnik zagrał choć jeden mecz (wybrana zostaje na liście zawsze).
+  const playedEditions = geniusEditions.filter((e) => Object.values(e.competitions).some((cid) => playedIn(id!, cid)));
+  const options = editionOptions.filter((o) => o.value === editionId || playedEditions.some((e) => e.id === o.value));
+  const listsLeft = pendingCompetitions('players').length;
+  const checksLeft = competitionsWith('players', id!).filter((cid) => playedIn(id!, cid) === undefined).length;
+  const checking = listsLeft > 0 || checksLeft > 0;
+
+  // Wejście bez wskazanej edycji (np. z listy historycznej): gdy w bieżącej zawodnik nie zagrał,
+  // przechodzimy na jego najnowszą edycję z występami.
+  const currentAllChecked = Object.values(geniusEditionById.get(editionId)!.competitions).every((cid) => playedIn(id!, cid) === false);
+  const autoEdition = !requested && !fromCompetition && currentAllChecked ? playedEditions[0]?.id : undefined;
+  useEffect(() => {
+    if (!autoEdition) return;
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('edycja', autoEdition);
+        return next;
+      },
+      { replace: true },
+    );
+  }, [autoEdition, setParams]);
 
   const update = (changes: Record<string, string>) =>
     setParams(
@@ -165,7 +268,7 @@ function GeniusPlayerPage() {
       </Link>
       <div className="mt-4">
         <FilterRow>
-          <FilterSelect label="Edycja" value={editionId} onChange={(value) => update({ edycja: value })} options={editionOptions} />
+          <FilterSelect label="Edycja" value={editionId} onChange={(value) => update({ edycja: value })} options={options} />
           <div role="tablist" className="flex gap-2">
             {sections.map((s) => (
               <button
@@ -182,8 +285,17 @@ function GeniusPlayerPage() {
               </button>
             ))}
           </div>
+          {checking && (
+            <p className="ml-auto text-xs text-slate-500">
+              Sprawdzam, w których edycjach zawodnik grał…
+              {listsLeft > 0 && ` (listy rozgrywek: zostało ${listsLeft})`}
+            </p>
+          )}
         </FilterRow>
       </div>
+      {/* Indeks list zawodników i sprawdzanie występów działają w tle, po jednym zapytaniu naraz. */}
+      <GeniusIndexLoader kind="players" />
+      <PlayedChecker personId={id!} />
       {/* Klucz resetuje zebrane informacje o blokach przy zmianie edycji lub sekcji. */}
       <PlayerBlocks key={`${id}-${editionId}-${section}`} personId={id!} editionId={editionId} section={section} />
     </div>

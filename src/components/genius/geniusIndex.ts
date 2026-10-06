@@ -1,0 +1,105 @@
+// Indeks rozgrywek: w których rozgrywkach (edycja × liga) występuje dana drużyna albo zawodnik.
+// Genius nie ma zestawienia "w jakich edycjach grała drużyna / zawodnik", więc budujemy je z list drużyn
+// i zawodników poszczególnych rozgrywek (GeniusIndexLoader, po jednym zapytaniu naraz) i trzymamy
+// w localStorage przez dobę, żeby nie obciążać serwera Genius przy każdym wejściu.
+// Osobno zapisujemy, czy zawodnik faktycznie zagrał w rozgrywkach (być w składzie to nie to samo co zagrać mecz).
+
+import type { LeagueId } from '../../data/league';
+import { geniusEditions } from './geniusConfig';
+
+export type IndexKind = 'teams' | 'players';
+
+interface StoredIndex {
+  savedAt: number;
+  // Klucz "<rodzaj>:<numer rozgrywek>" → numery drużyn albo zawodników z listy tych rozgrywek.
+  lists: Record<string, string[]>;
+  // Klucz "<zawodnik>:<numer rozgrywek>" → czy zawodnik ma w tych rozgrywkach jakiekolwiek występy.
+  played: Record<string, boolean>;
+  // Klucz "<zawodnik>:<numer rozgrywek>" → drużyny zawodnika w tych rozgrywkach (z jego statystyk).
+  teams?: Record<string, PersonTeam[]>;
+}
+
+export interface PersonTeam {
+  name: string;
+  href?: string;
+}
+
+const STORAGE_KEY = 'genius-index-v1';
+const MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+function load(): StoredIndex {
+  try {
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null') as StoredIndex | null;
+    if (stored && Date.now() - stored.savedAt < MAX_AGE_MS) return stored;
+  } catch {
+    // Uszkodzony albo niedostępny localStorage — zaczynamy od pustego indeksu.
+  }
+  return { savedAt: Date.now(), lists: {}, played: {} };
+}
+
+const index = load();
+let version = 0;
+const listeners = new Set<() => void>();
+// Rozgrywki, których listy nie udało się wczytać w tej wizycie (pomijamy je, żeby indeks nie stanął).
+const failed = new Set<string>();
+
+function changed() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(index));
+  } catch {
+    // Brak miejsca — indeks zostaje w pamięci strony.
+  }
+  version++;
+  listeners.forEach((listener) => listener());
+}
+
+export const subscribeIndex = (listener: () => void) => {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+};
+export const indexVersion = () => version;
+
+// Wszystkie rozgrywki lig seniorskich ze wszystkich edycji, od najnowszej.
+export const indexedCompetitions = geniusEditions.flatMap((edition) =>
+  (Object.entries(edition.competitions) as [LeagueId, number][]).map(([leagueId, cid]) => ({ cid, editionId: edition.id, leagueId })),
+);
+
+export const competitionInfo = (cid: number) => indexedCompetitions.find((c) => c.cid === cid);
+
+export function saveList(kind: IndexKind, cid: number, ids: string[]) {
+  index.lists[`${kind}:${cid}`] = ids;
+  changed();
+}
+
+export function markFailed(kind: IndexKind, cid: number) {
+  failed.add(`${kind}:${cid}`);
+  version++;
+  listeners.forEach((listener) => listener());
+}
+
+// Rozgrywki, których lista jeszcze nie jest w indeksie (w kolejności od najnowszej edycji).
+export const pendingCompetitions = (kind: IndexKind) =>
+  indexedCompetitions.filter(({ cid }) => !(`${kind}:${cid}` in index.lists) && !failed.has(`${kind}:${cid}`)).map(({ cid }) => cid);
+
+// Rozgrywki, na których listach jest dana drużyna albo zawodnik.
+export const competitionsWith = (kind: IndexKind, id: string) =>
+  indexedCompetitions.filter(({ cid }) => index.lists[`${kind}:${cid}`]?.includes(id)).map(({ cid }) => cid);
+
+export function savePlayed(personId: string, cid: number, played: boolean) {
+  const key = `${personId}:${cid}`;
+  if (index.played[key] === played) return;
+  index.played[key] = played;
+  changed();
+}
+
+export const playedIn = (personId: string, cid: number): boolean | undefined => index.played[`${personId}:${cid}`];
+
+export function savePersonTeams(personId: string, cid: number, teams: PersonTeam[]) {
+  const key = `${personId}:${cid}`;
+  index.teams ??= {};
+  if (JSON.stringify(index.teams[key]) === JSON.stringify(teams)) return;
+  index.teams[key] = teams;
+  changed();
+}
+
+export const personTeams = (personId: string, cid: number): PersonTeam[] | undefined => index.teams?.[`${personId}:${cid}`];

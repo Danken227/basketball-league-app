@@ -8,12 +8,26 @@ import { icons } from '../components/common/icons';
 import PlayerPhoto from '../components/common/PlayerPhoto';
 import TeamBadge from '../components/common/TeamBadge';
 import { currentSeason, getAllPlayers, getSeasonPlayers, leagueById, players, seasonById, seasons, type LeagueId, type Player, type SeasonPlayer } from '../data/league';
+import { DEFAULT_LETTER, letterOptions } from '../utils/letters';
 import { playerPath } from '../utils/paths';
 
 const collator = new Intl.Collator('pl');
 const sortName = (a: Player, b: Player) => collator.compare(a.lastName, b.lastName) || collator.compare(a.firstName, b.firstName);
 const matchesQuery = (player: Player, query: string) =>
   !query || `${player.lastName} ${player.firstName}`.toLowerCase().includes(query.trim().toLowerCase());
+const matchesLetter = (player: Player, letter: string) => !letter || player.lastName[0].toUpperCase() === letter;
+
+// Filtry list zawodników wspólne dla obu zakładek: fraza z wyszukiwarki i pierwsza litera nazwiska.
+interface ListFilters {
+  query: string;
+  setQuery: (value: string) => void;
+  letter: string;
+  setLetter: (value: string) => void;
+}
+
+function LetterField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return <FilterSelect label="Litera nazwiska" value={value} onChange={onChange} options={letterOptions} />;
+}
 
 // Grupuje listę po pierwszej literze nazwiska, jak spis zawodników na plk.pl.
 function byLetter<T>(items: T[], getPlayer: (item: T) => Player) {
@@ -49,7 +63,7 @@ function LetterSection({ letter, children }: { letter: string; children: ReactNo
   );
 }
 
-function SeasonPlayers({ query, setQuery }: { query: string; setQuery: (value: string) => void }) {
+function SeasonPlayers({ query, setQuery, letter, setLetter }: ListFilters) {
   // Ta zakładka zawsze dotyczy bieżącej edycji, więc filtrujemy tylko poziom rozgrywek.
   const { leagueId, setLeagueId } = useSeasonLeagueFilters<LeagueId | 'all'>('all');
   // Zawodnik zgłoszony w kilku drużynach (różne poziomy) ma jedną kartę z wszystkimi drużynami.
@@ -59,12 +73,15 @@ function SeasonPlayers({ query, setQuery }: { query: string; setQuery: (value: s
     item.teams.push(entry);
     byPlayer.set(entry.player.id, item);
   }
-  const list = [...byPlayer.values()].filter((entry) => matchesQuery(entry.player, query)).sort((a, b) => sortName(a.player, b.player));
+  const list = [...byPlayer.values()]
+    .filter((entry) => matchesQuery(entry.player, query) && matchesLetter(entry.player, letter))
+    .sort((a, b) => sortName(a.player, b.player));
 
   return (
     <>
       <FilterRow>
         <LeagueFilter value={leagueId} onChange={setLeagueId} allowAll />
+        <LetterField value={letter} onChange={setLetter} />
         <SearchField value={query} onChange={setQuery} />
       </FilterRow>
       <h2 className="mt-6 text-xl font-black text-slate-900">
@@ -116,7 +133,7 @@ const historicSeasonOptions = [
     .map((season) => ({ value: season.id, label: `Edycja ${season.name}` })),
 ];
 
-function HistoricPlayers({ query, setQuery }: { query: string; setQuery: (value: string) => void }) {
+function HistoricPlayers({ query, setQuery, letter, setLetter }: ListFilters) {
   const [params, setParams] = useSearchParams();
   const requested = params.get('edycja');
   const seasonFilter = historicSeasonOptions.some((o) => o.value === requested) ? requested! : 'all';
@@ -133,13 +150,14 @@ function HistoricPlayers({ query, setQuery }: { query: string; setQuery: (value:
   const season = seasonFilter === 'all' ? undefined : seasonById.get(seasonFilter)!;
   const list = getAllPlayers()
     .filter((entry) => !season || entry.teamsBySeason.has(season.id))
-    .filter((entry) => matchesQuery(entry.player, query))
+    .filter((entry) => matchesQuery(entry.player, query) && matchesLetter(entry.player, letter))
     .sort((a, b) => sortName(a.player, b.player));
 
   return (
     <>
       <FilterRow>
         <FilterSelect label="Edycja" value={seasonFilter} onChange={setSeasonFilter} options={historicSeasonOptions} />
+        <LetterField value={letter} onChange={setLetter} />
         <SearchField value={query} onChange={setQuery} />
         <p className="ml-auto text-xs font-semibold uppercase tracking-wide text-slate-500">Baza zawodników · {players.length}</p>
       </FilterRow>
@@ -192,6 +210,8 @@ const tabs = [
 function PlayersPage() {
   const [params, setParams] = useSearchParams();
   const [query, setQuery] = useState('');
+  const [letter, setLetter] = useState(DEFAULT_LETTER);
+  const filters: ListFilters = { query, setQuery, letter, setLetter };
   const view = params.get('widok') === 'historia' ? 'historia' : 'sezon';
 
   return (
@@ -213,7 +233,7 @@ function PlayersPage() {
           </button>
         ))}
       </div>
-      {view === 'sezon' ? <SeasonPlayers query={query} setQuery={setQuery} /> : <HistoricPlayers query={query} setQuery={setQuery} />}
+      {view === 'sezon' ? <SeasonPlayers {...filters} /> : <HistoricPlayers {...filters} />}
     </div>
   );
 }
