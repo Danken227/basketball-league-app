@@ -2,7 +2,7 @@ import { Link, useParams } from 'react-router-dom';
 import { TeamLink } from '../components/common/Links';
 import PlayerPhoto from '../components/common/PlayerPhoto';
 import TeamBadge from '../components/common/TeamBadge';
-import { currentSeason, getPlayerCareer, playerById, positionNames } from '../data/league';
+import { currentSeason, getPlayerCareer, playerById, positionNames, seasons } from '../data/league';
 import Placeholder from './Placeholder';
 
 const avg = (total: number, games: number) => (games ? (total / games).toFixed(1) : '–');
@@ -14,6 +14,9 @@ function PlayerPage() {
 
   const career = getPlayerCareer(player.id);
   const latest = career[career.length - 1];
+  // W jednej edycji zawodnik może grać w kilku drużynach (na różnych poziomach rozgrywek).
+  const latestRows = career.filter((row) => row.season.id === latest.season.id);
+  const seasonsCount = new Set(career.map((row) => row.season.id)).size;
   const active = latest.season.id === currentSeason.id;
   const totals = career.reduce(
     (sum, row) => ({ games: sum.games + row.games, points: sum.points + row.points, rebounds: sum.rebounds + row.rebounds, assists: sum.assists + row.assists }),
@@ -24,7 +27,7 @@ function PlayerPage() {
     ['Pozycja', `${positionNames[player.position]} (${player.position})`],
     ['Wzrost', `${player.height} cm`],
     ['Rocznik', String(player.birthYear)],
-    ['Edycje w lidze', String(career.length)],
+    ['Edycje w lidze', String(seasonsCount)],
   ];
 
   return (
@@ -41,9 +44,15 @@ function PlayerPage() {
         )}
         <div className="flex-1">
           <p className="text-sm font-semibold uppercase tracking-wide text-orange-400">
-            {active ? `#${latest.number} · ` : 'Ostatnio: '}
-            <TeamLink team={latest.team} seasonId={latest.season.id} className="hover:text-orange-300" />
-            {!active && ` (${latest.season.name})`}
+            {!active && `Ostatnio (${latest.season.name}): `}
+            {latestRows.map((row, i) => (
+              <span key={row.team.id}>
+                {i > 0 && <span className="text-slate-500"> / </span>}
+                {active && `#${row.number} · `}
+                <TeamLink team={row.team} seasonId={row.season.id} className="hover:text-orange-300" />
+                {latestRows.length > 1 && <span className="text-slate-400"> ({row.league.name})</span>}
+              </span>
+            ))}
           </p>
           <h1 className="mt-1 text-3xl font-black uppercase sm:text-4xl">
             {player.firstName} <span className="text-orange-400">{player.lastName}</span>
@@ -75,8 +84,11 @@ function PlayerPage() {
             </tr>
           </thead>
           <tbody>
-            {[...career].reverse().map((row) => (
-              <tr key={row.season.id} className="border-b border-slate-100">
+            {/* Od najnowszej edycji; w obrębie edycji kolejność lig od najwyższej (jak w getPlayerCareer). */}
+            {[...career]
+              .sort((a, b) => seasons.indexOf(b.season) - seasons.indexOf(a.season))
+              .map((row) => (
+              <tr key={`${row.season.id}-${row.team.id}`} className="border-b border-slate-100">
                 <td className="px-4 py-2.5 font-semibold text-slate-900">{row.season.name}</td>
                 <td className="py-2.5">
                   <span className="flex items-center gap-2 text-slate-900">

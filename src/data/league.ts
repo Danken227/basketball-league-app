@@ -377,6 +377,34 @@ for (let s = seasons.length - 2; s >= 0; s--) {
   }
 }
 
+// W DALK zawodnik może grać w kilku drużynach w jednej edycji, o ile są na różnych poziomach
+// (np. w 1. i 2. Lidze). Część zawodników dostaje więc drugie zgłoszenie w sąsiedniej lidze.
+const levelOrder: LeagueId[] = ['eks', '1', '2', '3'];
+for (const season of seasons) {
+  const placement = getPlacement(season.id);
+  const leaguesOfPlayer = new Map<string, Set<LeagueId>>();
+  for (const entry of placement) {
+    for (const r of rosters.get(rosterKey(season.id, entry.teamId)) ?? []) {
+      leaguesOfPlayer.set(r.playerId, new Set([...(leaguesOfPlayer.get(r.playerId) ?? []), entry.leagueId]));
+    }
+  }
+
+  for (const entry of placement) {
+    for (const r of [...(rosters.get(rosterKey(season.id, entry.teamId)) ?? [])]) {
+      if (rand() > 0.04) continue;
+      const level = levelOrder.indexOf(entry.leagueId);
+      const goDown = level === 0 || (level < levelOrder.length - 1 && rand() < 0.5);
+      const targetLeague = levelOrder[level + (goDown ? 1 : -1)];
+      const playerLeagues = leaguesOfPlayer.get(r.playerId)!;
+      if (playerLeagues.has(targetLeague)) continue;
+      const target = pick(placement.filter((e) => e.leagueId === targetLeague));
+      if ((rosters.get(rosterKey(season.id, target.teamId))?.length ?? 0) >= 13) continue;
+      addToRoster(season.id, target.teamId, r.playerId, r.number);
+      playerLeagues.add(targetLeague);
+    }
+  }
+}
+
 export const playerById = new Map(players.map((player) => [player.id, player]));
 
 export function getRoster(seasonId: string, teamId: string) {
@@ -581,10 +609,12 @@ for (const roster of rosters.values()) {
   for (const r of roster) rosterEntriesByPlayer.set(r.playerId, [...(rosterEntriesByPlayer.get(r.playerId) ?? []), r]);
 }
 const seasonOrder = (id: string) => seasons.findIndex((s) => s.id === id);
+const levelOf = (r: RosterEntry) => levelOrder.indexOf(getTeamSeason(r.seasonId, r.teamId)!.leagueId);
 
+// Kariera: jeden wiersz na drużynę w edycji (zawodnik może mieć kilka drużyn w jednej edycji).
 export function getPlayerCareer(playerId: string): CareerRow[] {
-  return (rosterEntriesByPlayer.get(playerId) ?? [])
-    .sort((a, b) => seasonOrder(a.seasonId) - seasonOrder(b.seasonId))
+  return [...(rosterEntriesByPlayer.get(playerId) ?? [])]
+    .sort((a, b) => seasonOrder(a.seasonId) - seasonOrder(b.seasonId) || levelOf(a) - levelOf(b))
     .map((r) => {
       const teamSeason = getTeamSeason(r.seasonId, r.teamId)!;
       const row: CareerRow = {
@@ -614,16 +644,18 @@ export function getPlayerCareer(playerId: string): CareerRow[] {
 // Wszyscy zawodnicy z bazy z edycjami, w których grali.
 export function getAllPlayers() {
   return players.map((player) => {
-    const entries = (rosterEntriesByPlayer.get(player.id) ?? []).sort((a, b) => seasonOrder(a.seasonId) - seasonOrder(b.seasonId));
-    const last = entries[entries.length - 1];
+    const entries = [...(rosterEntriesByPlayer.get(player.id) ?? [])].sort((a, b) => seasonOrder(a.seasonId) - seasonOrder(b.seasonId) || levelOf(a) - levelOf(b));
+    // Drużyny zawodnika w każdej edycji, w której grał (może ich być kilka, na różnych poziomach).
+    const teamsBySeason = new Map<string, Team[]>();
+    for (const e of entries) teamsBySeason.set(e.seasonId, [...(teamsBySeason.get(e.seasonId) ?? []), teamById.get(e.teamId)!]);
+    const lastSeasonId = entries[entries.length - 1].seasonId;
     return {
       player,
       firstSeason: seasonById.get(entries[0].seasonId)!,
-      lastSeason: seasonById.get(last.seasonId)!,
-      lastTeam: teamById.get(last.teamId)!,
-      seasonsCount: entries.length,
-      // Drużyna zawodnika w każdej edycji, w której grał.
-      teamBySeason: new Map(entries.map((e) => [e.seasonId, teamById.get(e.teamId)!])),
+      lastSeason: seasonById.get(lastSeasonId)!,
+      lastTeams: teamsBySeason.get(lastSeasonId)!,
+      seasonsCount: teamsBySeason.size,
+      teamsBySeason,
     };
   });
 }

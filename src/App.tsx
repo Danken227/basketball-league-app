@@ -7,6 +7,7 @@ import Header from './components/Header/Header';
 import GeniusEntityPage from './pages/genius/GeniusEntityPage';
 import GeniusLinkPage from './pages/genius/GeniusLinkPage';
 import GeniusListPage from './pages/genius/GeniusListPage';
+import GeniusPlayerPage from './pages/genius/GeniusPlayerPage';
 import GeniusPlayersPage from './pages/genius/GeniusPlayersPage';
 import Home from './pages/Home';
 import Placeholder from './pages/Placeholder';
@@ -48,7 +49,7 @@ function App() {
             <Route path="/druzyny" element={<BySource genius={<GeniusListPage title="Drużyny" icon={icons.teams} path="teams" />} mock={<TeamsPage />} />} />
             <Route path="/druzyny/:id" element={<BySource genius={<GeniusEntityPage kind="team" />} mock={<TeamPage />} />} />
             <Route path="/zawodnicy" element={<BySource genius={<GeniusPlayersPage />} mock={<PlayersPage />} />} />
-            <Route path="/zawodnicy/:id" element={<BySource genius={<GeniusEntityPage kind="person" />} mock={<PlayerPage />} />} />
+            <Route path="/zawodnicy/:id" element={<BySource genius={<GeniusPlayerPage />} mock={<PlayerPage />} />} />
             <Route path="/statystyki" element={<StatisticsPage />} />
             <Route path="/statystyki/:section" element={<StatisticsPage />} />
             <Route path="/genius" element={<GeniusLinkPage />} />
