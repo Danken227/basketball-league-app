@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type MouseEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { geniusCacheKey, readGeniusCache, writeGeniusCache } from './geniusCache';
 import { GENIUS_EMBED_URL, isGeniusDomain, mapGeniusPath } from './geniusConfig';
+import { applyPagination, handlePagerEvent } from './geniusTablePager';
 import './genius.css';
 
 interface GeniusEmbedProps {
@@ -30,6 +31,8 @@ interface GeniusEmbedProps {
   // Tabele statystyk: tylko średnie na mecz ("avg") albo tylko wartości sumaryczne ("tot"). Genius pokazuje
   // jedne i drugie naraz, więc ukrywamy kolumny drugiego rodzaju (patrz statColumnKind).
   statsMode?: StatsMode;
+  // Długie tabele dzielone na strony po tyle wierszy (z paskiem zmiany strony i liczby pozycji pod tabelą).
+  pageSize?: number;
 }
 
 export type StatsMode = 'avg' | 'tot';
@@ -110,6 +113,7 @@ function GeniusEmbed({
   className = '',
   nativeStyle = false,
   statsMode,
+  pageSize,
 }: GeniusEmbedProps) {
   const ref = useRef<HTMLDivElement>(null);
   // Najnowszy callback w refie, żeby jego zmiana nie restartowała obserwatora treści.
@@ -251,6 +255,7 @@ function GeniusEmbed({
         });
       }
       if (statsMode || placeholder.querySelector('.genius-col-hidden')) applyStatsMode(placeholder, statsMode);
+      if (pageSize) applyPagination(placeholder, pageSize);
       if (placeholder.querySelector('.hs-embed')) onContentRef.current?.(placeholder);
       // Poprawną świeżą treść (już po naszych poprawkach) zapamiętujemy, gdy przestanie się zmieniać.
       if (valid) {
@@ -262,11 +267,19 @@ function GeniusEmbed({
     apply();
     const observer = new MutationObserver(apply);
     observer.observe(placeholder, { childList: true, subtree: true });
+    // Pasek stronicowania to zwykły HTML w treści Genius, więc jego zdarzenia łapiemy na elemencie osadzenia.
+    const onPager = (event: Event) => {
+      if (pageSize) handlePagerEvent(event, placeholder, pageSize);
+    };
+    placeholder.addEventListener('click', onPager);
+    placeholder.addEventListener('change', onPager);
     return () => {
       observer.disconnect();
       window.clearTimeout(saveTimer);
+      placeholder.removeEventListener('click', onPager);
+      placeholder.removeEventListener('change', onPager);
     };
-  }, [allowed, filterSelector, filterQuery, filterLetter, nativeStyle, statsMode, cacheKey, expectedCompetition]);
+  }, [allowed, filterSelector, filterQuery, filterLetter, nativeStyle, statsMode, pageSize, cacheKey, expectedCompetition]);
 
   // Kliknięcia w przepisane linki obsługuje router, bez przeładowania strony.
   const onClick = (e: MouseEvent<HTMLDivElement>) => {

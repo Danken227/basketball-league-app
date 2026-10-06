@@ -1043,3 +1043,79 @@
 .genius-native .genius-col-hidden {
   display: none !important;
 }
+
+/* Tabela drużyn z samymi średnimi, schowana na stronie Statystyki w widoku "Sumy". */
+.genius-embed .genius-block-hidden {
+  display: none !important;
+}
+
+/* Stronicowanie długich tabel (geniusTablePager.ts). */
+.genius-embed .genius-row-hidden {
+  display: none !important;
+}
+
+.genius-embed .genius-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin: 0.75rem 0 1.5rem;
+  font-size: 0.8125rem;
+  color: #475569;
+}
+
+.genius-embed .genius-pager-size {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.genius-embed .genius-pager select {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  background: #ffffff;
+  padding: 0.25rem 0.5rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.genius-embed .genius-pager-info {
+  color: #64748b;
+}
+
+.genius-embed .genius-pager-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.genius-embed .genius-pager-nav [data-pager-page] {
+  padding: 0 0.5rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.genius-embed .genius-pager button {
+  min-width: 2rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  background: #ffffff;
+  padding: 0.25rem 0.5rem;
+  font-weight: 700;
+  color: #334155;
+}
+
+.genius-embed .genius-pager button:hover:not(:disabled) {
+  border-color: #f97316;
+  color: #c2410c;
+}
+
+.genius-embed .genius-pager button:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.genius-embed .genius-pager--single .genius-pager-nav {
+  display: none;
+}

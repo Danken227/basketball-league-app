@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { FilterRow, FilterSelect } from '../../components/common/Filters';
+import PhotoDialog from '../../components/common/PhotoDialog';
 import GeniusEmbed, { type StatsMode } from '../../components/genius/GeniusEmbed';
 import GeniusIndexLoader from '../../components/genius/GeniusIndexLoader';
 import { currentGeniusEdition, findCompetition, geniusEditionById, geniusEditions } from '../../components/genius/geniusConfig';
@@ -18,6 +19,8 @@ type Section = 'statistics' | 'gamelog';
 interface BlockInfo {
   empty: boolean;
   name?: string;
+  // Zdjęcie zawodnika z nagłówka Genius (tylko gdy liga je dodała — bez zdjęcia Genius nie podaje bloku .photo).
+  photo?: string;
   teams: PersonTeam[];
 }
 
@@ -34,6 +37,7 @@ const sections: { id: Section; label: string }[] = [
 // Odczytuje z treści Genius: nazwisko, czy są jakiekolwiek występy i (w statystykach) drużynę z kolumny "Team".
 function readBlock(root: HTMLElement, section: Section): BlockInfo {
   const name = root.querySelector('.person-name, .person-header h1')?.textContent?.trim() || undefined;
+  const photo = root.querySelector<HTMLImageElement>('.person-header .photo img')?.getAttribute('src') || undefined;
   const rows = [...root.querySelectorAll('table tbody tr')];
   const empty = rows.length === 0 || (rows.length === 1 && /no results/i.test(rows[0].textContent ?? ''));
   const teams: PersonTeam[] = [];
@@ -46,8 +50,12 @@ function readBlock(root: HTMLElement, section: Section): BlockInfo {
       }
     }
   }
-  return { empty, name, teams };
+  return { empty, name, photo, teams };
 }
+
+// Genius podaje zdjęcie w kilku rozmiarach, rozróżnionych końcówką nazwy pliku: T1 (75 px), S1 (200 px, miniatura
+// na stronie zawodnika), M1 (400 px), L1 (600 px). Do powiększenia bierzemy największe.
+const largePhoto = (src: string) => src.replace(/[TSM]1(\.\w+)$/, 'L1$1');
 
 function PlayerBlocks({ personId, editionId, section }: { personId: string; editionId: string; section: Section }) {
   const edition = geniusEditionById.get(editionId)!;
@@ -69,33 +77,39 @@ function PlayerBlocks({ personId, editionId, section }: { personId: string; edit
   const loaded = blocks.filter((b) => info[b.cid]).length;
   const played = blocks.filter((b) => info[b.cid] && !info[b.cid].empty);
   const name = Object.values(info).find((i) => i.name)?.name;
+  const photo = Object.values(info).find((i) => i.photo)?.photo;
 
   return (
     <>
-      <section className="mt-4 rounded-xl bg-slate-950 p-6 text-white">
-        <p className="text-sm font-semibold uppercase tracking-wide text-orange-400">Edycja {edition.name}</p>
-        <h1 className="mt-1 text-3xl font-black uppercase sm:text-4xl">{name ?? 'Zawodnik'}</h1>
-        {played.length > 0 && (
-          <ul className="mt-4 flex flex-wrap gap-2">
-            {played.map(({ league, cid }) => (
-              <li key={cid} className="rounded-full bg-white/10 px-3 py-1 text-sm">
-                <span className="font-semibold text-orange-300">{league.name}</span>
-                {teamsOf(personId, cid, info[cid]).map((team) => (
-                  <span key={team.name}>
-                    {' · '}
-                    {team.href ? (
-                      <Link to={team.href} className="hover:text-orange-300 hover:underline">
-                        {team.name}
-                      </Link>
-                    ) : (
-                      team.name
-                    )}
-                  </span>
-                ))}
-              </li>
-            ))}
-          </ul>
+      <section className="mt-4 flex items-center gap-5 rounded-xl bg-slate-950 p-6 text-white">
+        {photo && (
+          <PhotoDialog thumbnail={photo} full={largePhoto(photo)} alt={name ?? 'Zdjęcie zawodnika'} className="h-24 w-24 ring-2 ring-white/10 sm:h-32 sm:w-32" />
         )}
+        <div className="min-w-0">
+          <p className="text-sm font-semibold uppercase tracking-wide text-orange-400">Edycja {edition.name}</p>
+          <h1 className="mt-1 text-3xl font-black uppercase sm:text-4xl">{name ?? 'Zawodnik'}</h1>
+          {played.length > 0 && (
+            <ul className="mt-4 flex flex-wrap gap-2">
+              {played.map(({ league, cid }) => (
+                <li key={cid} className="rounded-full bg-white/10 px-3 py-1 text-sm">
+                  <span className="font-semibold text-orange-300">{league.name}</span>
+                  {teamsOf(personId, cid, info[cid]).map((team) => (
+                    <span key={team.name}>
+                      {' · '}
+                      {team.href ? (
+                        <Link to={team.href} className="hover:text-orange-300 hover:underline">
+                          {team.name}
+                        </Link>
+                      ) : (
+                        team.name
+                      )}
+                    </span>
+                  ))}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </section>
 
       {loaded < blocks.length && <p className="mt-6 text-sm text-slate-500">Wczytywanie danych Genius Sports…</p>}
