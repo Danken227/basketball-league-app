@@ -25,6 +25,7 @@ const navItems: (NavLinkItem | NavGroupItem)[] = [
     children: [
       { label: 'Statystyki drużyn', path: '/statystyki/druzyny' },
       { label: 'Statystyki zawodników', path: '/statystyki/zawodnicy' },
+      { label: 'Liderzy', path: '/statystyki/liderzy' },
     ],
   },
   { label: 'Regulamin', path: '/regulamin' },
