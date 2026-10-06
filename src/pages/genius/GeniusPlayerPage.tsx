@@ -39,7 +39,7 @@ function readBlock(root: HTMLElement, section: Section): BlockInfo {
   const name = root.querySelector('.person-name, .person-header h1')?.textContent?.trim() || undefined;
   const photo = root.querySelector<HTMLImageElement>('.person-header .photo img')?.getAttribute('src') || undefined;
   const rows = [...root.querySelectorAll('table tbody tr')];
-  const empty = rows.length === 0 || (rows.length === 1 && /no results/i.test(rows[0].textContent ?? ''));
+  const empty = rows.length === 0 || (rows.length === 1 && /no results|brak wyników/i.test(rows[0].textContent ?? ''));
   const teams: PersonTeam[] = [];
   if (!empty && section === 'statistics') {
     for (const row of rows) {

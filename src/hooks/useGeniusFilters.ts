@@ -1,8 +1,8 @@
 import { useSearchParams } from 'react-router-dom';
-import { currentGeniusEdition, geniusEditionById } from '../components/genius/geniusConfig';
-import { leagueById, type LeagueId } from '../data/league';
+import { currentGeniusEdition, geniusEditionById, isGeniusLeagueId, type GeniusLeagueId } from '../components/genius/geniusConfig';
 
-type LeagueFilter = LeagueId | 'all';
+// Poziom rozgrywek: liga seniorów albo kategoria juniorów (?liga=U17), na liście zawodników także "wszystkie".
+type LeagueFilter = GeniusLeagueId | 'all';
 
 // Jak useSeasonLeagueFilters, ale edycje pochodzą z Genius (?edycja=2025-26&liga=eks).
 export function useGeniusFilters<T extends LeagueFilter>(defaultLeague: T) {
@@ -11,7 +11,7 @@ export function useGeniusFilters<T extends LeagueFilter>(defaultLeague: T) {
   const leagueParam = params.get('liga');
   const editionId = editionParam && geniusEditionById.has(editionParam) ? editionParam : currentGeniusEdition.id;
   const leagueId = (
-    leagueParam && (leagueById.has(leagueParam as LeagueId) || (leagueParam === 'all' && defaultLeague === 'all')) ? leagueParam : defaultLeague
+    leagueParam && (isGeniusLeagueId(leagueParam) || (leagueParam === 'all' && defaultLeague === 'all')) ? leagueParam : defaultLeague
   ) as T;
 
   const update = (key: string, value: string) =>

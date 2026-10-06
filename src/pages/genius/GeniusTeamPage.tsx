@@ -1,10 +1,11 @@
+import { useEffect, useRef } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { FilterRow, FilterSelect } from '../../components/common/Filters';
 import GeniusEmbed from '../../components/genius/GeniusEmbed';
 import GeniusIndexLoader from '../../components/genius/GeniusIndexLoader';
-import { currentGeniusEdition, geniusEditionById } from '../../components/genius/geniusConfig';
-import { competitionInfo, competitionsWith, pendingCompetitions } from '../../components/genius/geniusIndex';
-import { leagueById } from '../../data/league';
+import { currentGeniusEdition, findCompetition, geniusEditionById, geniusLeagueName } from '../../components/genius/geniusConfig';
+import { competitionInfo, competitionsWith, pendingCompetitions, readTeamLinks, saveTeamNames, teamName } from '../../components/genius/geniusIndex';
+import { placeholderLogo } from '../../components/genius/geniusLogo';
 import { useGeniusIndex } from '../../hooks/useGeniusIndex';
 
 // Strona drużyny z Genius pod naszym adresem (/druzyny/91563?rozgrywki=49970&sekcja=roster).
@@ -20,8 +21,8 @@ function GeniusTeamPage() {
   // Bez wskazanych rozgrywek bierzemy najnowsze, w których drużyna grała (gdy indeks już je zna).
   const cid = requestedCid ?? teamCompetitions[0];
   const info = cid ? competitionInfo(cid) : undefined;
-  // Drużyna domyślnie pokazuje skład; podmenu Genius (Summary, Roster…) przekłada się na parametr "sekcja".
-  const section = params.get('sekcja') ?? 'roster';
+  // Drużyna domyślnie pokazuje podsumowanie (Summary, w Genius sekcja "home"); podmenu Genius (Summary, Roster…) przekłada się na parametr "sekcja".
+  const section = params.get('sekcja') ?? 'home';
   const page = cid ? `/competition/${cid}/team/${id}/${section}` : `/team/${id}`;
 
   // Edycje drużyny od najnowszej (wybrana zawsze na liście, nawet zanim indeks się zbuduje).
@@ -41,19 +42,42 @@ function GeniusTeamPage() {
     });
   };
 
-  // Poziom rozgrywek pod nazwą drużyny w nagłówku Genius (dopisywany do treści osadzenia).
-  const levelText = info ? `${leagueById.get(info.leagueId)!.name} · edycja ${geniusEditionById.get(info.editionId)!.name}` : '';
-  const addLevel = (root: HTMLElement) => {
-    const nameCell = root.querySelector('.team-header .team-name');
-    if (!nameCell || !levelText) return;
-    let level = nameCell.querySelector<HTMLElement>('.team-level');
-    if (!level) {
-      level = document.createElement('p');
-      level.className = 'team-level';
-      nameCell.appendChild(level);
+  // Poprawki nagłówka Genius: poziom rozgrywek pod nazwą (także juniorzy), a dla drużyny bez logo — nazwa
+  // z indeksu (Genius podaje ją wtedy pustą) i zastępcze logo.
+  const level = cid ? findCompetition(cid) : undefined;
+  const levelText = level ? `${geniusLeagueName(level.leagueId)} · edycja ${geniusEditionById.get(level.editionId)!.name}` : '';
+  const name = teamName(id!);
+  const polishHeader = (root: HTMLElement) => {
+    const header = root.querySelector('.team-header');
+    const nameCell = header?.querySelector('.team-name');
+    if (!header || !nameCell) return;
+    const title = nameCell.querySelector('.team-title');
+    if (title && !title.textContent?.trim() && name) title.textContent = name;
+    const shownName = title?.textContent?.trim();
+    if (!header.querySelector('img') && shownName) {
+      const logo = document.createElement('div');
+      logo.className = 'logo team-detail';
+      const img = document.createElement('img');
+      img.src = placeholderLogo(shownName);
+      img.alt = shownName;
+      logo.append(img);
+      header.prepend(logo);
     }
-    if (level.textContent !== levelText) level.textContent = levelText;
+    if (!levelText) return;
+    let levelLine = nameCell.querySelector<HTMLElement>('.team-level');
+    if (!levelLine) {
+      levelLine = document.createElement('p');
+      levelLine.className = 'team-level';
+      nameCell.appendChild(levelLine);
+    }
+    if (levelLine.textContent !== levelText) levelLine.textContent = levelText;
   };
+
+  // Nazwa może dojść z indeksu już po wczytaniu treści — wtedy poprawiamy nagłówek jeszcze raz.
+  const embedRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (embedRef.current && name) polishHeader(embedRef.current);
+  });
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -66,9 +90,15 @@ function GeniusTeamPage() {
           {listsLeft > 0 && <p className="ml-auto text-xs text-slate-500">Sprawdzam, w których edycjach drużyna grała… (listy rozgrywek: zostało {listsLeft})</p>}
         </FilterRow>
       </div>
-      <div className="mt-6">
-        <GeniusEmbed key={page} page={page} showTitle onContent={addLevel} />
+      <div ref={embedRef} className="mt-6">
+        <GeniusEmbed key={page} page={page} showTitle onContent={polishHeader} />
       </div>
+      {/* Nazwy drużyny jeszcze nie znamy (a jest potrzebna, gdy nie ma logo): lista drużyn tych rozgrywek w tle. */}
+      {!name && cid && (
+        <div aria-hidden="true" className="pointer-events-none fixed -left-[10000px] top-0 h-0 w-[1200px] overflow-hidden">
+          <GeniusEmbed page={`/competition/${cid}/teams`} onContent={(root) => saveTeamNames(readTeamLinks(root))} />
+        </div>
+      )}
       {/* Indeks list drużyn buduje się w tle, po jednym zapytaniu naraz (raz na dobę). */}
       <GeniusIndexLoader kind="teams" />
     </div>

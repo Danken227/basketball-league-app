@@ -445,8 +445,10 @@
   display: none;
 }
 
-/* Top 10 na stronie głównej: cała strona liderów, widoczny tylko blok wybranej kategorii. */
-.genius-leaders .dblock {
+/* Top 10 na stronie głównej: cała strona liderów, widoczny tylko blok wybranej kategorii.
+   Separatory <hr> między blokami też chowamy — nad wybraną kategorią układały się w pasek. */
+.genius-leaders .dblock,
+.genius-leaders hr {
   display: none;
 }
 
@@ -456,10 +458,18 @@
   display: block;
 }
 
-/* Wariant do wąskich kolumn strony głównej. */
+/* Wariant do wąskich kolumn strony głównej: bez własnej ramki (kartą jest sekcja strony), a grupy tabeli
+   wybiera nasz przełącznik (GeniusLeagueTable), więc podmenu Genius chowamy. */
 .genius-compact {
   padding: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
   font-size: 0.8125rem;
+}
+
+.genius-compact .selection-scroll {
+  display: none;
 }
 
 .genius-compact th,
@@ -1118,4 +1128,364 @@
 
 .genius-embed .genius-pager--single .genius-pager-nav {
   display: none;
+}
+
+/* Sortowanie tabel (footable Genius): strzałka przy kolumnach do sortowania, wyróżniona kolumna posortowana.
+   Ikony footable wymagają czcionki z arkusza Genius, więc zastępujemy je własnymi znakami — tak samo na stronie meczu. */
+.genius-embed th.footable-sortable,
+.genius-native th.footable-sortable {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.genius-embed th .fooicon,
+.genius-native th .fooicon {
+  display: none !important;
+}
+
+.genius-embed th.footable-sortable::after,
+.genius-native th.footable-sortable::after {
+  content: '↕';
+  margin-left: 0.25rem;
+  font-size: 0.85em;
+  opacity: 0.35;
+}
+
+.genius-embed th.footable-sortable:hover::after,
+.genius-native th.footable-sortable:hover::after {
+  opacity: 0.8;
+}
+
+.genius-embed th.footable-asc,
+.genius-embed th.footable-desc,
+.genius-native th.footable-asc,
+.genius-native th.footable-desc {
+  color: #fb923c !important;
+  box-shadow: inset 0 -3px 0 #f97316;
+}
+
+.genius-embed th.footable-asc::after,
+.genius-native th.footable-asc::after {
+  content: '▲';
+  opacity: 1;
+}
+
+.genius-embed th.footable-desc::after,
+.genius-native th.footable-desc::after {
+  content: '▼';
+  opacity: 1;
+}
+
+.genius-embed td.genius-sorted-col,
+.genius-native td.genius-sorted-col {
+  background-color: rgba(249, 115, 22, 0.07);
+  font-weight: 700;
+  color: #0f172a;
+}
+
+/* ===== Strona drużyny: zakładka Summary (sekcja "home" w Genius). ===== */
+
+/* "Contact Details" (samo miasto) jest zbędne — to jedyny blok strony drużyny z nagłówkiem h2. */
+.genius-embed .page-team > div:has(> h2) {
+  display: none;
+}
+
+/* Układ: ostatnie i najbliższe mecze obok siebie, pod nimi liderzy i lista zawodników na całą szerokość. */
+.genius-embed .page-team .summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.25rem;
+}
+
+@media (min-width: 1024px) {
+  .genius-embed .page-team .summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .genius-embed .page-team .summary > .team-leaders,
+  .genius-embed .page-team .summary > .team-players {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Tytuł "Summary" powtarza wybraną zakładkę. */
+.genius-embed .page-team .summary > h3 {
+  display: none;
+}
+
+/* Bloki jako karty z jasnym nagłówkiem. */
+.genius-embed .page-team .summary .matches-block,
+.genius-embed .page-team .summary .team-leaders-detail,
+.genius-embed .page-team .summary .team-players {
+  overflow: hidden;
+  margin: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  background: #ffffff;
+}
+
+.genius-embed .page-team .summary .matches-block > h4,
+.genius-embed .page-team .summary .team-leaders-detail > h4,
+.genius-embed .page-team .summary .team-players > h4 {
+  margin: 0;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+  padding: 0.625rem 0.875rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #0f172a;
+}
+
+.genius-embed .page-team .summary .matches-block th,
+.genius-embed .page-team .summary .team-players th {
+  border-radius: 0;
+}
+
+/* Mecze: data | logo i rywal w jednej linii | wynik jako znaczek W/L. */
+.genius-embed .page-team .summary td.matchTime {
+  width: 6.5rem;
+  white-space: nowrap;
+  font-size: 0.8125rem;
+  color: #64748b;
+}
+
+.genius-embed .page-team .summary td.matchOpponent {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.genius-embed .page-team .summary td.matchOpponent img {
+  display: inline-block;
+  height: 1.75rem;
+  width: 1.75rem;
+  margin-right: 0.625rem;
+  vertical-align: middle;
+  object-fit: contain;
+}
+
+.genius-embed .page-team .summary td.matchResult {
+  width: 7rem;
+  white-space: nowrap;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.genius-embed .page-team .summary td.matchResult span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.375rem;
+  width: 1.375rem;
+  margin-right: 0.375rem;
+  border-radius: 0.375rem;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.genius-embed .page-team .summary td.matchResult span.W {
+  background: #16a34a;
+}
+
+.genius-embed .page-team .summary td.matchResult span.L {
+  background: #dc2626;
+}
+
+/* Liderzy drużyny: siatka kart po 5 zawodników. */
+.genius-embed .page-team .summary .team-leaders {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 1rem;
+  margin: 0;
+}
+
+.genius-embed .page-team .summary .team-leaders-detail td {
+  padding: 0.4375rem 0.875rem;
+  font-size: 0.875rem;
+}
+
+.genius-embed .page-team .summary .team-leaders-detail td.ld-index {
+  width: 2rem;
+  padding-right: 0;
+  color: #94a3b8;
+}
+
+.genius-embed .page-team .summary .team-leaders-detail td.ld-person {
+  white-space: nowrap;
+}
+
+.genius-embed .page-team .summary .team-leaders-detail td.ld-person a:has(.playerphoto) {
+  display: inline-block;
+  margin-right: 0.5rem;
+  vertical-align: middle;
+}
+
+.genius-embed .page-team .summary .team-leaders-detail .playerphoto img {
+  display: block;
+  height: 1.75rem;
+  width: 1.75rem;
+  border-radius: 9999px;
+  background: #f1f5f9;
+  object-fit: cover;
+  object-position: top;
+}
+
+.genius-embed .page-team .summary .team-leaders-detail td.ld-value {
+  width: 3.5rem;
+  text-align: right;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.genius-embed .page-team .summary .team-leaders-detail tbody tr:first-child td {
+  border-top: 0;
+}
+
+.genius-embed .page-team .summary .team-leaders-detail tbody tr:first-child td.ld-value {
+  color: #ea580c;
+}
+
+/* Legenda box score: polskie skróty bywają dłuższe niż angielskie (np. EVAL) — kolumna skrótu bez ucinania. */
+.genius-native .boxscore-legend .boxscore-legend-abbreviation {
+  width: auto !important;
+  min-width: 2.75rem;
+  overflow: visible !important;
+  text-overflow: clip !important;
+}
+
+/* Nagłówek drużyny i zawodnika na telefonie: mniejsze logo i nazwa, długie nazwy łamią się zamiast wychodzić poza kartę. */
+.genius-embed .team-header .team-name,
+.genius-embed .person-header .person-name {
+  min-width: 0;
+}
+
+.genius-embed .team-header h1,
+.genius-embed .person-header h1 {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 639px) {
+  .genius-embed .team-header,
+  .genius-embed .person-header {
+    gap: 1rem;
+    padding: 1rem;
+  }
+
+  .genius-embed .team-header .logo img {
+    height: 4.5rem;
+    width: 4.5rem;
+  }
+
+  .genius-embed .team-header h1,
+  .genius-embed .person-header h1,
+  .genius-embed .person-name {
+    font-size: 1.375rem;
+  }
+}
+
+/* Nagłówek meczu na telefonie. Przy wąskim osadzeniu Genius dodaje klasę xs-hs-container i swoje reguły
+   (ukryte logo, nazwa ściśnięta do kilkunastu pikseli — litery układały się w pionie). Każda drużyna dostaje
+   kolumnę: logo, nazwa, wynik; status meczu zostaje pośrodku. */
+.genius-native :is(.xs-hs-container, .sm-hs-container) .match-page .match-header {
+  gap: 0.5rem;
+  padding: 1rem 0.75rem 0;
+}
+
+.genius-native :is(.xs-hs-container, .sm-hs-container) .match-page .match-header > div {
+  height: auto;
+}
+
+.genius-native :is(.xs-hs-container, .sm-hs-container) .match-page .match-header .team-box {
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  height: auto;
+  overflow: visible;
+  text-align: center;
+}
+
+.genius-native :is(.xs-hs-container, .sm-hs-container) .match-page .match-header .team-box img {
+  display: block;
+  height: 3.25rem;
+  width: 3.25rem;
+}
+
+.genius-native :is(.xs-hs-container, .sm-hs-container) .match-page .match-header .team-box .name-wrapper {
+  width: 100%;
+  padding: 0;
+  text-align: center;
+}
+
+.genius-native :is(.xs-hs-container, .sm-hs-container) .match-page .match-header .team-box .name-wrapper span {
+  height: auto;
+  overflow: visible;
+}
+
+.genius-native :is(.xs-hs-container, .sm-hs-container) .match-page .match-header a {
+  font-size: 0.8125rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.genius-native :is(.xs-hs-container, .sm-hs-container) .match-page .match-header .score {
+  font-size: 1.875rem;
+  line-height: 1;
+}
+
+.genius-native :is(.xs-hs-container, .sm-hs-container) .match-page .match-header .vs-label {
+  font-size: 0.6875rem;
+  line-height: 1;
+}
+
+/* Wynik pod logo, nad nazwą — przy nazwach różnej długości wyniki obu drużyn stoją na tej samej wysokości. */
+.genius-native :is(.xs-hs-container, .sm-hs-container) .match-page .match-header {
+  align-items: start;
+}
+
+.genius-native :is(.xs-hs-container, .sm-hs-container) .match-page .match-header .vs-label {
+  align-self: center;
+}
+
+.genius-native :is(.xs-hs-container, .sm-hs-container) .match-page .match-header .team-box .score {
+  order: 1;
+}
+
+.genius-native :is(.xs-hs-container, .sm-hs-container) .match-page .match-header .team-box .name-wrapper {
+  order: 2;
+}
+
+/* Zakładki meczu zawijają się do nowego wiersza zamiast uciekać za krawędź ekranu
+   (kontener Genius ma stałą wysokość, która ucinała kolejne wiersze). */
+.genius-native .generic-list-menu {
+  flex-wrap: wrap;
+}
+
+.genius-native .selection-scroll {
+  height: auto;
+  overflow: visible;
+}
+
+/* Tabele na telefonie: ciaśniejsze komórki, a tabela ligowa jak w wąskiej kolumnie strony głównej
+   ("#" zamiast "Position", bez logo) — kolumna punktów mieści się bez przewijania. */
+@media (max-width: 639px) {
+  .genius-embed th,
+  .genius-embed td {
+    padding: 0.4rem 0.35rem;
+    font-size: 0.75rem;
+  }
+
+  .genius-embed .standings th:first-child {
+    font-size: 0;
+  }
+
+  .genius-embed .standings th:first-child::after {
+    content: '#';
+    font-size: 0.6875rem;
+  }
+
+  .genius-embed .standings .team-logo {
+    display: none;
+  }
 }

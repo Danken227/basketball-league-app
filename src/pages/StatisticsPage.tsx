@@ -5,22 +5,14 @@ import GeniusEmbed, { type StatsMode } from '../components/genius/GeniusEmbed';
 import GeniusFilterBar from '../components/genius/GeniusFilterBar';
 import GeniusMissing from '../components/genius/GeniusMissing';
 import StatsModeToggle from '../components/genius/StatsModeToggle';
-import { competitionId, geniusStatsSections } from '../components/genius/geniusConfig';
-import type { LeagueId } from '../data/league';
+import { competitionId, geniusStatsSections, type GeniusLeagueId } from '../components/genius/geniusConfig';
 import { useGeniusFilters } from '../hooks/useGeniusFilters';
 
-// Polskie nazwy tabel Genius. Tabela "Averages" u zawodników ma też sumy (zbiórki, asysty, przechwyty, bloki,
-// straty, EFF), więc jej nazwa myliła przy przełączniku "Średnie / Sumy".
-const tableTitles: Record<string, string> = {
-  'Shooting Statistics': 'Rzuty',
-  Averages: 'Zbiórki, asysty i inne',
-  'Fouls Summary': 'Faule',
-};
-
+// Nazwy tabel tłumaczy GeniusEmbed (geniusI18n: "Averages" → "Średnie"). U zawodników ta tabela ma też sumy
+// (zbiórki, asysty, przechwyty, bloki, straty, EVAL), więc przy przełączniku "Średnie / Sumy" nazywamy ją inaczej.
 function polishStatsTables(root: HTMLElement, mode: StatsMode) {
-  root.querySelectorAll('h4').forEach((heading) => {
-    const title = tableTitles[heading.textContent?.trim() ?? ''];
-    if (title) heading.textContent = title;
+  root.querySelectorAll('.stats-player h4').forEach((heading) => {
+    if (heading.textContent?.trim() === 'Średnie') heading.textContent = 'Zbiórki, asysty i inne';
   });
   // Kopia z pamięci podręcznej mogła mieć tę tabelę zawodników schowaną (wcześniejsza wersja strony).
   root.querySelectorAll('.genius-block-hidden:not(.dblock)').forEach((element) => element.classList.remove('genius-block-hidden'));
@@ -33,7 +25,7 @@ function polishStatsTables(root: HTMLElement, mode: StatsMode) {
 function StatisticsPage() {
   const { section: slug } = useParams();
   const [params, setParams] = useSearchParams();
-  const { editionId, leagueId, setEditionId, setLeagueId } = useGeniusFilters<LeagueId>('eks');
+  const { editionId, leagueId, setEditionId, setLeagueId } = useGeniusFilters<GeniusLeagueId>('eks');
   const section = geniusStatsSections.find((s) => s.slug === slug);
   if (!section) return <Navigate to={`/statystyki/${geniusStatsSections[0].slug}`} replace />;
 

@@ -1,10 +1,9 @@
 import { useState } from 'react';
-import { leagues, type LeagueId, type StatCategory } from '../../data/league';
-import LeagueSelect from '../common/LeagueSelect';
+import { leagues, type StatCategory } from '../../data/league';
 import SegmentedControl from '../common/SegmentedControl';
 import GeniusEmbed from './GeniusEmbed';
 import GeniusPrefetch from './GeniusPrefetch';
-import { competitionId, currentGeniusEdition } from './geniusConfig';
+import { competitionId, currentGeniusEdition, geniusJuniorCompetitions, juniorCategories } from './geniusConfig';
 
 // Tabela i Top 10 strony głównej w trybie Genius: nasza oprawa i filtry, dane z Genius Sports.
 // Pasek meczów jest w GeniusMatchBar. Tabele i liderów pozostałych lig wczytujemy w tle (GeniusPrefetch),
@@ -18,37 +17,93 @@ const currentCompetitions = leagues.flatMap((league) => {
   return cid ? [{ league, cid }] : [];
 });
 
-// Z wyprzedzeniem wczytujemy tylko tabele i liderów pozostałych lig (po jednym zapytaniu na ligę), żeby nie
+// Rozgrywki do wyboru w tabeli i Top 10: ligi seniorów i każda kategoria juniorów osobno (bieżąca edycja).
+const juniorCompetitions = juniorCategories.flatMap((category) => {
+  const cid = geniusJuniorCompetitions[currentGeniusEdition.id]?.[category];
+  return cid ? [{ value: category as string, label: `Junior ${category} ${currentGeniusEdition.name}`, cid }] : [];
+});
+const seniorCompetitions = currentCompetitions.map(({ league, cid }) => ({ value: league.id as string, label: `${league.name} ${currentGeniusEdition.name}`, cid }));
+const homeCompetitions = [...seniorCompetitions, ...juniorCompetitions];
+const homeCompetitionById = new Map(homeCompetitions.map((c) => [c.value, c]));
+
+// Z wyprzedzeniem wczytujemy tylko tabele i liderów lig seniorów (po jednym zapytaniu na ligę), żeby nie
 // obciążać serwera Genius — przy zbyt wielu zapytaniach zaczyna odpowiadać wolno albo pustymi stronami.
-// Tabele grup wczytują się dopiero po wybraniu grupy (potem są w pamięci).
+// Tabele grup i rozgrywki juniorów wczytują się dopiero po wybraniu (potem są w pamięci).
 const standingsPrefetch = currentCompetitions.map(({ cid }) => ({ page: standingsPage(cid) }));
 const leadersPrefetch = currentCompetitions.map(({ cid }) => ({ page: `/competition/${cid}/leaders`, showSubMenus: false }));
 
-export function GeniusLeagueTable() {
-  const [leagueId, setLeagueId] = useState<LeagueId>('eks');
-  // Grupa (faza) wybrana w podmenu Genius — przełączamy ją w miejscu, bez przechodzenia do zakładki Tabele.
-  const [phase, setPhase] = useState('');
-  const cid = competitionId(currentGeniusEdition.id, leagueId);
+function CompetitionSelect({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return (
+    <select
+      aria-label="Rozgrywki"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700"
+    >
+      <optgroup label="Ligi">
+        {seniorCompetitions.map((c) => (
+          <option key={c.value} value={c.value}>
+            {c.label}
+          </option>
+        ))}
+      </optgroup>
+      {juniorCompetitions.length > 0 && (
+        <optgroup label="Juniorzy">
+          {juniorCompetitions.map((c) => (
+            <option key={c.value} value={c.value}>
+              {c.label}
+            </option>
+          ))}
+        </optgroup>
+      )}
+    </select>
+  );
+}
 
-  const changeLeague = (id: LeagueId) => {
-    setLeagueId(id);
+// Grupy (fazy) tabeli odczytane z podmenu Genius, które chowamy (genius.css) na rzecz naszego przełącznika.
+function readGroups(root: HTMLElement) {
+  const links = [...root.querySelectorAll('.selection-scroll a.menuoption')];
+  return {
+    names: links.map((link) => link.textContent?.trim() ?? '').filter(Boolean),
+    current: links.find((link) => link.classList.contains('currentoption'))?.textContent?.trim() ?? '',
+  };
+}
+
+export function GeniusLeagueTable() {
+  const [competition, setCompetition] = useState('eks');
+  // Grupa wybrana naszym przełącznikiem ("" = domyślna z Genius, czyli pierwsza).
+  const [phase, setPhase] = useState('');
+  const [groups, setGroups] = useState<{ names: string[]; current: string }>({ names: [], current: '' });
+  const cid = homeCompetitionById.get(competition)?.cid;
+
+  const changeCompetition = (value: string) => {
+    setCompetition(value);
     setPhase('');
+    setGroups({ names: [], current: '' });
   };
 
-  // Linki do drużyn działają normalnie; link grupy (przełożony na /tabele?...&faza=...) zmienia tylko tę tabelę.
-  const onLinkClick = (href: string) => {
-    if (!href.startsWith('/tabele')) return false;
-    setPhase(new URLSearchParams(href.split('?')[1] ?? '').get('faza') ?? '');
-    return true;
+  const onContent = (root: HTMLElement) => {
+    const next = readGroups(root);
+    setGroups((prev) => (prev.names.join('|') === next.names.join('|') && prev.current === next.current ? prev : next));
   };
 
   return (
     <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-base font-bold text-slate-900">Tabela</h2>
-        <LeagueSelect value={leagueId} onChange={changeLeague} />
+        <CompetitionSelect value={competition} onChange={changeCompetition} />
       </div>
-      {cid && <GeniusEmbed page={standingsPage(cid, phase)} compact onLinkClick={onLinkClick} />}
+      {groups.names.length > 1 && (
+        <div className="mb-3 max-w-full overflow-x-auto">
+          <SegmentedControl
+            label="Grupa"
+            options={groups.names.map((name) => ({ value: name, label: name }))}
+            value={phase || groups.current}
+            onChange={setPhase}
+          />
+        </div>
+      )}
+      {cid && <GeniusEmbed page={standingsPage(cid, phase)} compact onContent={onContent} />}
       <GeniusPrefetch items={standingsPrefetch} />
     </section>
   );
@@ -62,14 +117,14 @@ const categoryOptions: { value: StatCategory; label: string }[] = [
 
 export function GeniusTopPlayers() {
   const [category, setCategory] = useState<StatCategory>('points');
-  const [leagueId, setLeagueId] = useState<LeagueId>('eks');
-  const cid = competitionId(currentGeniusEdition.id, leagueId);
+  const [competition, setCompetition] = useState('eks');
+  const cid = homeCompetitionById.get(competition)?.cid;
 
   return (
     <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
       <div className="mb-3 flex items-center justify-between gap-2">
         <h2 className="text-base font-bold text-slate-900">Top 10</h2>
-        <LeagueSelect value={leagueId} onChange={setLeagueId} />
+        <CompetitionSelect value={competition} onChange={setCompetition} />
       </div>
       <SegmentedControl label="Kategoria" options={categoryOptions} value={category} onChange={setCategory} />
       {cid && (

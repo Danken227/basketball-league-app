@@ -1,14 +1,13 @@
 import type { ReactNode } from 'react';
-import type { LeagueId } from '../../data/league';
-import { FilterRow, FilterSelect, LeagueFilter } from '../common/Filters';
-import { currentGeniusEdition, geniusEditions } from './geniusConfig';
+import { FilterRow, FilterSelect } from '../common/Filters';
+import { currentGeniusEdition, geniusEditions, geniusLeagueOptions, type GeniusLeagueId } from './geniusConfig';
 
 const editionOptions = geniusEditions.map((edition) => ({
   value: edition.id,
   label: `Edycja ${edition.name}${edition.id === currentGeniusEdition.id ? ' (bieżąca)' : ''}`,
 }));
 
-interface GeniusFilterBarProps<T extends LeagueId | 'all'> {
+interface GeniusFilterBarProps<T extends GeniusLeagueId | 'all'> {
   editionId?: string;
   onEditionChange?: (value: string) => void;
   leagueId: T;
@@ -17,13 +16,15 @@ interface GeniusFilterBarProps<T extends LeagueId | 'all'> {
   children?: ReactNode;
 }
 
-// Te same filtry co w wersji z danymi testowymi, tylko edycje są edycjami DALK w Genius Sports.
+// Te same filtry co w wersji z danymi testowymi, tylko edycje są edycjami DALK w Genius Sports,
+// a poziom rozgrywek obejmuje też kategorie juniorów.
 // Bez editionId pasek pokazuje sam poziom rozgrywek (np. zakładka bieżącej edycji zawodników).
-function GeniusFilterBar<T extends LeagueId | 'all'>({ editionId, onEditionChange, leagueId, onLeagueChange, allowAllLeagues, children }: GeniusFilterBarProps<T>) {
+function GeniusFilterBar<T extends GeniusLeagueId | 'all'>({ editionId, onEditionChange, leagueId, onLeagueChange, allowAllLeagues, children }: GeniusFilterBarProps<T>) {
+  const leagueOptions = [...(allowAllLeagues ? [{ value: 'all', label: 'Wszystkie ligi' }] : []), ...geniusLeagueOptions];
   return (
     <FilterRow>
       {editionId && onEditionChange && <FilterSelect label="Edycja" value={editionId} onChange={onEditionChange} options={editionOptions} />}
-      <LeagueFilter value={leagueId} onChange={onLeagueChange} allowAll={allowAllLeagues} />
+      <FilterSelect label="Poziom rozgrywek" value={leagueId} onChange={(value) => onLeagueChange(value as T)} options={leagueOptions} />
       {children}
     </FilterRow>
   );
