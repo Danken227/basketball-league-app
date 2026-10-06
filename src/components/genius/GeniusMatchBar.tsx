@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { leagues, type LeagueId } from '../../data/league';
 import { DragScroller, GroupLabel } from '../common/DragScroller';
 import GeniusEmbed from './GeniusEmbed';
 import GeniusWidget from './GeniusWidget';
+import { geniusCacheKey, readGeniusCache } from './geniusCache';
 import { competitionIdByName } from './geniusConfig';
 
 // Pasek meczów w naszym wyglądzie, z danymi z widgetu Genius (ten sam widget co na dalk.pl).
@@ -133,6 +134,9 @@ function readSchedule(root: HTMLElement): Map<string, ScheduleInfo> {
   return info;
 }
 
+// Ustawienia osadzenia terminarza (te same przy osadzaniu i przy szukaniu w pamięci — wspólny klucz).
+const scheduleOptions = (cid: number) => ({ page: `/competition/${cid}/schedule`, showSubMenus: false, showMatchFilter: false });
+
 const dayFormat = new Intl.DateTimeFormat('pl-PL', { weekday: 'short', day: '2-digit', month: '2-digit' });
 const timeFormat = new Intl.DateTimeFormat('pl-PL', { hour: '2-digit', minute: '2-digit' });
 
@@ -244,8 +248,22 @@ function GeniusMatchBar({ widgetId }: { widgetId: string }) {
     return () => window.clearInterval(timer);
   }, [widgetId]);
 
-  // Terminarze tylko tych rozgrywek, które są na pasku.
-  const scheduleCompetitions = [...new Set((matches ?? []).map((m) => competitionIdByName(m.competition)).filter((cid) => cid !== undefined))];
+  // Terminarze tylko tych rozgrywek, które są na pasku. Te zapamiętane wcześniej w tej wizycie czytamy z pamięci
+  // (bez zapytania do Genius), a osadzamy tylko brakujące. Liczone raz po wczytaniu kart, nie przy każdym kliknięciu.
+  const { cachedSchedule, scheduleToLoad } = useMemo(() => {
+    const competitions = [...new Set((matches ?? []).map((m) => competitionIdByName(m.competition)).filter((cid) => cid !== undefined))];
+    const fromCache = new Map<string, ScheduleInfo>();
+    const toLoad = competitions.filter((cid) => {
+      const html = readGeniusCache(geniusCacheKey(scheduleOptions(cid)));
+      if (!html) return true;
+      const root = document.createElement('div');
+      root.innerHTML = html;
+      readSchedule(root).forEach((info, id) => fromCache.set(id, info));
+      return false;
+    });
+    return { cachedSchedule: fromCache, scheduleToLoad: toLoad };
+  }, [matches]);
+
   const mergeSchedule = (root: HTMLElement) => {
     const found = readSchedule(root);
     if (found.size === 0) return;
@@ -256,7 +274,7 @@ function GeniusMatchBar({ widgetId }: { widgetId: string }) {
   };
 
   const sorted = (matches ?? [])
-    .map((match) => ({ match, info: schedule.get(match.id) }))
+    .map((match) => ({ match, info: schedule.get(match.id) ?? cachedSchedule.get(match.id) }))
     .sort((a, b) => (a.info?.date ?? a.match.date).getTime() - (b.info?.date ?? b.match.date).getTime());
   const visible = sorted.filter(({ match }) => filter === 'all' || match.league === filter);
   const results = visible.filter(({ match }) => match.status === 'final');
@@ -313,9 +331,7 @@ function GeniusMatchBar({ widgetId }: { widgetId: string }) {
       {!failed && (
         <div aria-hidden="true" className="pointer-events-none absolute -left-[10000px] top-0 w-[1200px]">
           <GeniusWidget widgetId={widgetId} />
-          {loadSchedules && scheduleCompetitions.map((cid) => (
-            <GeniusEmbed key={cid} page={`/competition/${cid}/schedule`} showSubMenus={false} showMatchFilter={false} onContent={mergeSchedule} />
-          ))}
+          {loadSchedules && scheduleToLoad.map((cid) => <GeniusEmbed key={cid} {...scheduleOptions(cid)} onContent={mergeSchedule} />)}
         </div>
       )}
     </section>
