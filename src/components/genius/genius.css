@@ -429,6 +429,17 @@
   display: none;
 }
 
+/* Top 10 na stronie głównej: cała strona liderów, widoczny tylko blok wybranej kategorii. */
+.genius-leaders .dblock {
+  display: none;
+}
+
+.genius-leaders--points #BLOCK_LEADER_BASKETBALL_sPointsAverage,
+.genius-leaders--rebounds #BLOCK_LEADER_BASKETBALL_sReboundsTotalAverage,
+.genius-leaders--assists #BLOCK_LEADER_BASKETBALL_sAssistsAverage {
+  display: block;
+}
+
 /* Wariant do wąskich kolumn strony głównej. */
 .genius-compact {
   padding: 0;

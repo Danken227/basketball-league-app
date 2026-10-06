@@ -220,6 +220,13 @@ function GeniusMatchBar({ widgetId }: { widgetId: string }) {
   const [matches, setMatches] = useState<WidgetMatch[]>();
   const [failed, setFailed] = useState(false);
   const [schedule, setSchedule] = useState<Map<string, ScheduleInfo>>(new Map());
+  // Terminarze (godziny i hale) wczytujemy chwilę po kartach, żeby nie spowalniały tabeli i Top 10 obok.
+  const [loadSchedules, setLoadSchedules] = useState(false);
+  useEffect(() => {
+    if (!matches) return;
+    const timer = window.setTimeout(() => setLoadSchedules(true), 1500);
+    return () => window.clearTimeout(timer);
+  }, [matches]);
 
   // Widget wypełnia się asynchronicznie, więc odpytujemy go co pół sekundy (maks. 15 s).
   useEffect(() => {
@@ -306,7 +313,7 @@ function GeniusMatchBar({ widgetId }: { widgetId: string }) {
       {!failed && (
         <div aria-hidden="true" className="pointer-events-none absolute -left-[10000px] top-0 w-[1200px]">
           <GeniusWidget widgetId={widgetId} />
-          {scheduleCompetitions.map((cid) => (
+          {loadSchedules && scheduleCompetitions.map((cid) => (
             <GeniusEmbed key={cid} page={`/competition/${cid}/schedule`} showSubMenus={false} showMatchFilter={false} onContent={mergeSchedule} />
           ))}
         </div>

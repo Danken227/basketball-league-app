@@ -1,17 +1,98 @@
-import { useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { NavLink, useLocation } from 'react-router-dom';
 
-const navItems = [
+interface NavLinkItem {
+  label: string;
+  path: string;
+}
+
+interface NavGroupItem {
+  label: string;
+  // Wspólny początek adresów podstron — po nim podświetlamy pozycję w menu.
+  basePath: string;
+  children: NavLinkItem[];
+}
+
+const navItems: (NavLinkItem | NavGroupItem)[] = [
   { label: 'Home', path: '/' },
   { label: 'Tabele', path: '/tabele' },
   { label: 'Terminarz', path: '/terminarz' },
   { label: 'Drużyny', path: '/druzyny' },
   { label: 'Zawodnicy', path: '/zawodnicy' },
-  { label: 'Statystyki', path: '/statystyki' },
+  {
+    label: 'Statystyki',
+    basePath: '/statystyki',
+    children: [
+      { label: 'Statystyki drużyn', path: '/statystyki/druzyny' },
+      { label: 'Statystyki zawodników', path: '/statystyki/zawodnicy' },
+    ],
+  },
   { label: 'Regulamin', path: '/regulamin' },
 ];
 
 const youtubeUrl = 'https://www.youtube.com/@dalk';
+
+const itemClass = (active: boolean) =>
+  `rounded-full px-3 py-2 text-sm transition ${active ? 'bg-white/10 text-white' : 'text-slate-300 hover:bg-white/10 hover:text-white'}`;
+
+// Pozycja menu z rozwijaną listą podstron. Na komputerze lista wysuwa się pod przyciskiem,
+// w menu mobilnym rozwija się w miejscu. Zamyka się po wyborze, kliknięciu obok i klawiszem Esc.
+function NavDropdown({ item, onNavigate }: { item: NavGroupItem; onNavigate: () => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const { pathname } = useLocation();
+  const active = pathname.startsWith(item.basePath);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-haspopup="true"
+        onClick={() => setOpen((value) => !value)}
+        className={`flex w-full items-center gap-1 ${itemClass(active)}`}
+      >
+        {item.label}
+        <svg className={`h-4 w-4 transition ${open ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+          <path d="M5.2 7.2a.75.75 0 0 1 1.06 0L10 10.94l3.74-3.74a.75.75 0 1 1 1.06 1.06l-4.27 4.27a.75.75 0 0 1-1.06 0L5.2 8.26a.75.75 0 0 1 0-1.06Z" />
+        </svg>
+      </button>
+      {open && (
+        <div className="mt-1 flex flex-col gap-1 pl-3 lg:absolute lg:left-0 lg:top-full lg:z-40 lg:mt-2 lg:min-w-56 lg:rounded-xl lg:bg-slate-900 lg:p-2 lg:shadow-xl lg:ring-1 lg:ring-white/10">
+          {item.children.map((child) => (
+            <NavLink
+              key={child.path}
+              to={child.path}
+              onClick={() => {
+                setOpen(false);
+                onNavigate();
+              }}
+              className={({ isActive }) => `block whitespace-nowrap ${itemClass(isActive)} lg:rounded-lg`}
+            >
+              {child.label}
+            </NavLink>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function Header() {
   const [open, setOpen] = useState(false);
@@ -46,19 +127,21 @@ function Header() {
           aria-label="Główna nawigacja"
           className={`${open ? 'flex' : 'hidden'} absolute inset-x-0 top-full flex-col gap-1 border-t border-white/10 bg-slate-950 px-4 pb-4 pt-2 lg:static lg:ml-auto lg:flex lg:flex-row lg:items-center lg:border-0 lg:p-0`}
         >
-          {navItems.map((item) => (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              end={item.path === '/'}
-              onClick={() => setOpen(false)}
-              className={({ isActive }) =>
-                `rounded-full px-3 py-2 text-sm transition ${isActive ? 'bg-white/10 text-white' : 'text-slate-300 hover:bg-white/10 hover:text-white'}`
-              }
-            >
-              {item.label}
-            </NavLink>
-          ))}
+          {navItems.map((item) =>
+            'children' in item ? (
+              <NavDropdown key={item.basePath} item={item} onNavigate={() => setOpen(false)} />
+            ) : (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                end={item.path === '/'}
+                onClick={() => setOpen(false)}
+                className={({ isActive }) => itemClass(isActive)}
+              >
+                {item.label}
+              </NavLink>
+            ),
+          )}
           <a
             href={youtubeUrl}
             target="_blank"
