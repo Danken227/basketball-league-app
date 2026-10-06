@@ -4,7 +4,9 @@
 import type { LeagueId } from '../../data/league';
 
 export const GENIUS_ORGANIZATION = 'DALK';
-export const GENIUS_EMBED_URL = `https://hosted.wh.geniussports.com/embed/?${GENIUS_ORGANIZATION}`;
+// dalk.pl używa adresu hosted.wh.geniussports.com, który tylko przekierowuje (308) tutaj — od razu
+// pobieramy z adresu docelowego i oszczędzamy jedno zapytanie przy każdym osadzeniu.
+export const GENIUS_EMBED_URL = `https://hosted.dcd.shared.geniussports.com/embed/?${GENIUS_ORGANIZATION}`;
 export const GENIUS_WIDGET_URL = 'https://widget.wh.geniussports.com/widget/';
 
 // Genius wyświetla dane tylko na domenach zarejestrowanych dla organizacji. Serwer sprawdza domenę strony
@@ -80,13 +82,6 @@ export const geniusResultsWidgets: Partial<Record<LeagueId | 'all', string>> = {
   all: 'L65TRHI9J4MAGUYV9HYOQO094QLVMS',
 };
 
-// Bloki strony liderów odpowiadające kategoriom naszego Top 10.
-export const geniusLeaderBlocks = {
-  points: 'BLOCK_LEADER_BASKETBALL_sPointsAverage',
-  rebounds: 'BLOCK_LEADER_BASKETBALL_sReboundsTotalAverage',
-  assists: 'BLOCK_LEADER_BASKETBALL_sAssistsAverage',
-} as const;
-
 // Sekcje strony Statystyki (dane wybranych rozgrywek).
 export const geniusStatsSections = [
   { slug: 'zawodnicy', label: 'Statystyki zawodników', path: 'statistics/player' },
@@ -140,5 +135,8 @@ declare global {
   interface Window {
     [key: `spilWHH${string}`]: Record<string, unknown> | undefined;
     [key: `spw_${string}`]: Record<string, unknown> | undefined;
+    // jQuery, którego wymagają skrypty Genius, i ich znacznik "jQuery już się wczytuje".
+    jQuery?: unknown;
+    _loadingjq?: number;
   }
 }
