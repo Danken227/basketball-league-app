@@ -5,8 +5,15 @@ import PageHeader from '../../components/common/PageHeader';
 import { icons } from '../../components/common/icons';
 import GeniusEmbed from '../../components/genius/GeniusEmbed';
 import GeniusFilterBar from '../../components/genius/GeniusFilterBar';
-import { competitionId, currentGeniusEdition, geniusEditionById, geniusEditions } from '../../components/genius/geniusConfig';
-import { leagues, type LeagueId } from '../../data/league';
+import {
+  competitionId,
+  currentGeniusEdition,
+  geniusEditionById,
+  geniusEditions,
+  geniusLeagueName,
+  type GeniusLeagueId,
+} from '../../components/genius/geniusConfig';
+import { leagues } from '../../data/league';
 import { useGeniusFilters } from '../../hooks/useGeniusFilters';
 import { DEFAULT_LETTER, letterOptions } from '../../utils/letters';
 
@@ -39,7 +46,7 @@ function LetterField({ value, onChange }: { value: string; onChange: (value: str
 
 // Listy zawodników rozgrywek jednej edycji; przy "wszystkich ligach" kolejno każda liga,
 // bo Genius ma listę zawodników tylko dla pojedynczych rozgrywek.
-function CompetitionPlayers({ editionId, leagueIds, query, letter }: { editionId: string; leagueIds: LeagueId[]; query: string; letter: string }) {
+function CompetitionPlayers({ editionId, leagueIds, query, letter }: { editionId: string; leagueIds: GeniusLeagueId[]; query: string; letter: string }) {
   const lists = leagueIds.flatMap((leagueId) => {
     const cid = competitionId(editionId, leagueId);
     return cid ? [{ leagueId, cid }] : [];
@@ -49,7 +56,7 @@ function CompetitionPlayers({ editionId, leagueIds, query, letter }: { editionId
     <div className="mt-6 flex flex-col gap-6">
       {lists.map(({ leagueId, cid }) => (
         <section key={cid}>
-          {leagueIds.length > 1 && <h2 className="mb-2 text-lg font-black text-slate-900">{leagues.find((l) => l.id === leagueId)!.name}</h2>}
+          {leagueIds.length > 1 && <h2 className="mb-2 text-lg font-black text-slate-900">{geniusLeagueName(leagueId)}</h2>}
           <GeniusEmbed page={`/competition/${cid}/players`} showSubMenus={false} textFilter={{ selector: '.playerblock', query, letter }} />
         </section>
       ))}
@@ -58,7 +65,7 @@ function CompetitionPlayers({ editionId, leagueIds, query, letter }: { editionId
 }
 
 function CurrentPlayers({ query, setQuery, letter, setLetter }: ListFilters) {
-  const { leagueId, setLeagueId } = useGeniusFilters<LeagueId | 'all'>('all');
+  const { leagueId, setLeagueId } = useGeniusFilters<GeniusLeagueId | 'all'>('all');
   return (
     <>
       <GeniusFilterBar leagueId={leagueId} onLeagueChange={setLeagueId} allowAllLeagues>

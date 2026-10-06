@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useGeniusIndex } from '../../hooks/useGeniusIndex';
 import GeniusEmbed from './GeniusEmbed';
-import { markFailed, pendingCompetitions, saveList, type IndexKind } from './geniusIndex';
+import { markFailed, pendingCompetitions, readTeamLinks, saveList, saveTeamNames, type IndexKind } from './geniusIndex';
 
 const pageOf = (kind: IndexKind, cid: number) => `/competition/${cid}/${kind === 'teams' ? 'teams' : 'players'}`;
 // Linki na listach Genius są już przepisane na nasze adresy (/druzyny/<id>, /zawodnicy/<id>).
@@ -28,6 +28,7 @@ function GeniusIndexLoader({ kind }: { kind: IndexKind }) {
     if (!content || (compClass && compClass !== `_comp_${next}`)) return;
     const ids = [...root.querySelectorAll('a[href]')].map((a) => a.getAttribute('href')!.match(linkPattern[kind])?.[1]).filter((id) => id !== undefined);
     saveList(kind, next, [...new Set(ids)]);
+    if (kind === 'teams') saveTeamNames(readTeamLinks(root));
   };
 
   return (

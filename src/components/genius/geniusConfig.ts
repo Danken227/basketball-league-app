@@ -1,7 +1,7 @@
 // Osadzanie oficjalnych statystyk z Genius Sports (FIBA LiveStats) — ten sam mechanizm co na dalk.pl.
 // Skrypt pobiera gotowy HTML z serwera Genius dla organizacji DALK i wstawia go we wskazany element.
 
-import type { LeagueId } from '../../data/league';
+import { leagues, type LeagueId } from '../../data/league';
 
 export const GENIUS_ORGANIZATION = 'DALK';
 // dalk.pl używa adresu hosted.wh.geniussports.com, który tylko przekierowuje (308) tutaj — od razu
@@ -22,6 +22,10 @@ export const isGeniusDomain = (hostname = window.location.hostname) =>
 export type DataSource = 'genius' | 'mock';
 const forcedSource = import.meta.env.VITE_DATA_SOURCE;
 export const dataSource: DataSource = forcedSource === 'genius' || forcedSource === 'mock' ? forcedSource : isGeniusDomain() ? 'genius' : 'mock';
+
+// Pełne polskie tłumaczenie treści Genius (geniusI18n): VITE_GENIUS_TRANSLATION=pl (np. w .env.local).
+// Domyślnie treść zostaje po angielsku, z polskimi tylko nazwami tabel statystyk i datami meczów drużyny.
+export const geniusTranslation = import.meta.env.VITE_GENIUS_TRANSLATION === 'pl';
 
 // Edycje DALK w Genius (od najnowszej) i numery rozgrywek poszczególnych lig.
 // Liga ma edycję jesienną (np. 2025/26) i wiosenną (np. 2026), każdą z osobnymi rozgrywkami.
@@ -44,21 +48,48 @@ export const geniusEditions: GeniusEdition[] = [
 export const currentGeniusEdition = geniusEditions[0];
 export const geniusEditionById = new Map(geniusEditions.map((edition) => [edition.id, edition]));
 
-export const competitionId = (editionId: string, leagueId: LeagueId) => geniusEditionById.get(editionId)?.competitions[leagueId];
+// Poziom rozgrywek w filtrach stron Genius: ligi seniorów i każda kategoria juniorów osobno (parametr ?liga=U17).
+export type GeniusLeagueId = LeagueId | JuniorCategory;
+
+const isJunior = (leagueId: string): leagueId is JuniorCategory => (juniorCategories as readonly string[]).includes(leagueId);
+
+export const competitionId = (editionId: string, leagueId: GeniusLeagueId) =>
+  isJunior(leagueId) ? geniusJuniorCompetitions[editionId]?.[leagueId] : geniusEditionById.get(editionId)?.competitions[leagueId];
 
 // Odwrotnie: z numeru rozgrywek do edycji i ligi (potrzebne przy przekładaniu linków Genius na nasze filtry).
-export function findCompetition(id: number) {
+export function findCompetition(id: number): { editionId: string; leagueId: GeniusLeagueId } | undefined {
   for (const edition of geniusEditions) {
-    for (const [leagueId, cid] of Object.entries(edition.competitions)) {
-      if (cid === id) return { editionId: edition.id, leagueId: leagueId as LeagueId };
+    const all = { ...edition.competitions, ...geniusJuniorCompetitions[edition.id] };
+    for (const [leagueId, cid] of Object.entries(all)) {
+      if (cid === id) return { editionId: edition.id, leagueId: leagueId as GeniusLeagueId };
     }
   }
   return undefined;
 }
 
-// Rozgrywki juniorskie (pojawiają się w pasku meczów). Numery z listy rozgrywek DALK w Genius.
-export const geniusJuniorCompetitions: Record<string, Record<string, number>> = {
+// Rozgrywki juniorskie DALK, osobno dla każdej kategorii wiekowej (pasek meczów, tabela i Top 10 strony głównej).
+// Numery z listy rozgrywek DALK w Genius (wybór rozgrywek: parametr _cc=1). W edycji 2023/24 juniorzy grali
+// we wspólnych rozgrywkach bez podziału na kategorie, a U13 jest od 2025.
+// Kolejność na listach wyboru: od najstarszych.
+export const juniorCategories = ['U19', 'U17', 'U15', 'U13'] as const;
+export type JuniorCategory = (typeof juniorCategories)[number];
+
+// Lista poziomów do filtra "Poziom rozgrywek" (najpierw ligi, potem juniorzy od najstarszych).
+export const geniusLeagueOptions: { value: GeniusLeagueId; label: string }[] = [
+  ...leagues.map((league) => ({ value: league.id as GeniusLeagueId, label: league.name })),
+  ...juniorCategories.map((category) => ({ value: category as GeniusLeagueId, label: `Junior ${category}` })),
+];
+
+export const isGeniusLeagueId = (value: string): value is GeniusLeagueId => geniusLeagueOptions.some((option) => option.value === value);
+export const geniusLeagueName = (leagueId: GeniusLeagueId) => geniusLeagueOptions.find((option) => option.value === leagueId)?.label ?? leagueId;
+
+export const geniusJuniorCompetitions: Record<string, Partial<Record<JuniorCategory, number>>> = {
   '2026-27': { U13: 49971, U15: 49972, U17: 49975, U19: 49982 },
+  '2026': { U13: 48295, U15: 48296, U17: 48376, U19: 48375 },
+  '2025-26': { U13: 42329, U15: 42326, U17: 42324, U19: 42323 },
+  '2025': { U13: 40711, U15: 40710, U17: 40713, U19: 40667 },
+  '2024-25': { U15: 39640, U17: 39639, U19: 39638 },
+  '2024': { U15: 38021, U17: 38006, U19: 38005 },
 };
 
 // Numer rozgrywek z ich nazwy w Genius, np. "2. Liga 2026/27" albo "DALK Junior U15 2026/27".
@@ -71,7 +102,7 @@ export function competitionIdByName(name: string): number | undefined {
   const junior = name.match(/Junior (U\d+) (.+)$/i);
   if (junior) {
     const edition = geniusEditions.find((e) => e.name === junior[2]);
-    return edition && geniusJuniorCompetitions[edition.id]?.[junior[1].toUpperCase()];
+    return edition && geniusJuniorCompetitions[edition.id]?.[junior[1].toUpperCase() as JuniorCategory];
   }
   return undefined;
 }

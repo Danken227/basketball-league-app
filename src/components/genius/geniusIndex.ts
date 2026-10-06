@@ -17,6 +17,9 @@ interface StoredIndex {
   played: Record<string, boolean>;
   // Klucz "<zawodnik>:<numer rozgrywek>" → drużyny zawodnika w tych rozgrywkach (z jego statystyk).
   teams?: Record<string, PersonTeam[]>;
+  // Numer drużyny → nazwa (z list drużyn). Strona drużyny bez logo nie ma w nagłówku Genius nazwy
+  // (bierzemy ją zwykle z opisu logo), więc wtedy podpowiada ją indeks.
+  teamNames?: Record<string, string>;
 }
 
 export interface PersonTeam {
@@ -103,3 +106,23 @@ export function savePersonTeams(personId: string, cid: number, teams: PersonTeam
 }
 
 export const personTeams = (personId: string, cid: number): PersonTeam[] | undefined => index.teams?.[`${personId}:${cid}`];
+
+// Drużyny z linków w treści Genius (/druzyny/<numer>) — tylko linki z nazwą (bez samych logo).
+export function readTeamLinks(root: ParentNode): [string, string][] {
+  return [...root.querySelectorAll('a[href]')].flatMap((link) => {
+    const id = link.getAttribute('href')!.match(/^\/druzyny\/(\d+)/)?.[1];
+    const name = link.textContent?.trim();
+    return id && name ? [[id, name] as [string, string]] : [];
+  });
+}
+
+export function saveTeamNames(entries: [string, string][]) {
+  index.teamNames ??= {};
+  const names = index.teamNames;
+  const fresh = entries.filter(([id, name]) => names[id] !== name);
+  if (fresh.length === 0) return;
+  fresh.forEach(([id, name]) => (names[id] = name));
+  changed();
+}
+
+export const teamName = (id: string): string | undefined => index.teamNames?.[id];

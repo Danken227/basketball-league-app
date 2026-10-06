@@ -5,6 +5,7 @@ import GeniusEmbed from './GeniusEmbed';
 import GeniusWidget from './GeniusWidget';
 import { geniusCacheKey, readGeniusCache } from './geniusCache';
 import { competitionIdByName } from './geniusConfig';
+import { placeholderLogo } from './geniusLogo';
 
 // Pasek meczów w naszym wyglądzie, z danymi z widgetu Genius (ten sam widget co na dalk.pl).
 // Widget działa ukryty w tle; jego karty (li.spls_lsmatch w ramce z tej samej domeny) przepisujemy
@@ -81,8 +82,10 @@ function parseWidgetDate(dateText: string, timeText?: string): Date {
 
 const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 
-// Terminarz Genius podaje termin jako "Oct 4, 2026, 3:15 PM".
+// Terminarz Genius podaje termin jako "Oct 4, 2026, 3:15 PM", a po tłumaczeniu (geniusI18n) jako "04.10.2026, 15:15".
 function parseScheduleDate(text: string): Date | undefined {
+  const pl = text.match(/(\d{2})\.(\d{2})\.(\d{4}),? (\d{2}):(\d{2})/);
+  if (pl) return new Date(Number(pl[3]), Number(pl[2]) - 1, Number(pl[1]), Number(pl[4]), Number(pl[5]));
   const m = text.match(/([A-Za-z]{3})\w* (\d+), (\d{4}),? (\d+):(\d+)\s*(AM|PM)/i);
   if (!m) return undefined;
   let hours = Number(m[4]) % 12;
@@ -174,7 +177,14 @@ function MatchCard({ match, schedule }: { match: WidgetMatch; schedule?: Schedul
           return (
             <li key={team.id || team.code} className="flex items-center gap-2">
               <span className="grid h-6 w-6 shrink-0 place-items-center overflow-hidden rounded-full bg-white">
-                {team.logo && <img src={team.logo} alt="" className="h-5 w-5 object-contain" draggable={false} />}
+                {/* Brak logo w Genius (albo nie wczytało się) — zastępcze z inicjałami drużyny (geniusLogo). */}
+                <img
+                  src={team.logo || placeholderLogo(team.code)}
+                  alt=""
+                  onError={(e) => (e.currentTarget.src = placeholderLogo(team.code))}
+                  className="h-5 w-5 object-contain"
+                  draggable={false}
+                />
               </span>
               <span className={`min-w-0 flex-1 truncate text-sm ${won ? 'font-bold text-white' : 'text-slate-300'}`}>{team.code}</span>
               {showScores && <span className={`text-sm tabular-nums ${won ? 'font-bold text-white' : 'text-slate-400'}`}>{team.score}</span>}

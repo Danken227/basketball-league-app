@@ -2,6 +2,9 @@ import { useEffect, useId, useRef, useState, type MouseEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { geniusCacheKey, readGeniusCache, writeGeniusCache } from './geniusCache';
 import { GENIUS_EMBED_URL, isGeniusDomain, mapGeniusPath } from './geniusConfig';
+import { translateGenius } from './geniusI18n';
+import { fillMissingLogos, replaceBrokenLogo } from './geniusLogo';
+import { handleSortClick, markSortedColumns } from './geniusTableSort';
 import { applyPagination, handlePagerEvent } from './geniusTablePager';
 import './genius.css';
 
@@ -71,9 +74,10 @@ function preloadJQuery() {
 
 // Rodzaj kolumny tabeli statystyk Genius po nagłówku: średnia ("Average ..." w opisie albo skrót kończący się na PG,
 // np. PPG, RPG, TOPG), wspólna (procenty, liczba meczów, kolumny tekstowe jak zawodnik czy drużyna) albo suma.
+// Ocena z oryginalnych (angielskich) tekstów — tłumaczenie (geniusI18n) zapamiętuje je w atrybutach data-genius-*.
 function statColumnKind(th: HTMLElement, table: HTMLTableElement, index: number): StatsMode | 'both' {
-  const title = th.getAttribute('title') ?? '';
-  const label = (th.textContent ?? '').replace(/\s+/g, '');
+  const title = th.dataset.geniusTitle ?? th.getAttribute('title') ?? '';
+  const label = (th.dataset.geniusLabel ?? th.textContent ?? '').replace(/\s+/g, '');
   if (/^average/i.test(title) || /PG$/i.test(label)) return 'avg';
   if (/%|percentage/i.test(title + label) || /^(G|GP|GS|Games)$/i.test(label)) return 'both';
   const values = [...table.tBodies].flatMap((body) => [...body.rows]).map((row) => row.cells[index]?.textContent?.trim() ?? '');
@@ -242,6 +246,7 @@ function GeniusEmbed({
       const teamTitle = placeholder.querySelector('.team-header .team-title');
       const teamLogo = placeholder.querySelector<HTMLImageElement>('.team-header img');
       if (teamTitle && !teamTitle.textContent?.trim() && teamLogo?.alt) teamTitle.textContent = teamLogo.alt;
+      fillMissingLogos(placeholder);
       placeholder.querySelectorAll<HTMLAnchorElement>('a[href]').forEach((link) => {
         const target = geniusLinkPath(link.getAttribute('href')!);
         if (target !== undefined) link.setAttribute('href', mapGeniusPath(target));
@@ -254,8 +259,10 @@ function GeniusEmbed({
           item.classList.toggle('genius-hidden', textMismatch || letterMismatch);
         });
       }
+      translateGenius(placeholder);
       if (statsMode || placeholder.querySelector('.genius-col-hidden')) applyStatsMode(placeholder, statsMode);
       if (pageSize) applyPagination(placeholder, pageSize);
+      markSortedColumns(placeholder);
       if (placeholder.querySelector('.hs-embed')) onContentRef.current?.(placeholder);
       // Poprawną świeżą treść (już po naszych poprawkach) zapamiętujemy, gdy przestanie się zmieniać.
       if (valid) {
@@ -273,11 +280,23 @@ function GeniusEmbed({
     };
     placeholder.addEventListener('click', onPager);
     placeholder.addEventListener('change', onPager);
+    // Przed footable (faza przechwytywania): kolumny tekstowe i trzecie kliknięcie (powrót do kolejności z Genius).
+    const onSortClick = (event: Event) => {
+      if (!handleSortClick(event)) return;
+      event.stopPropagation();
+      // Zatrzymane zdarzenie nie dotrze do obsługi paska stron — powrót na pierwszą stronę wywołujemy sami.
+      if (pageSize) handlePagerEvent(event, placeholder, pageSize);
+    };
+    placeholder.addEventListener('click', onSortClick, true);
+    // Błąd wczytania obrazka nie przechodzi w górę drzewa, więc łapiemy go w fazie przechwytywania.
+    placeholder.addEventListener('error', replaceBrokenLogo, true);
     return () => {
       observer.disconnect();
       window.clearTimeout(saveTimer);
       placeholder.removeEventListener('click', onPager);
       placeholder.removeEventListener('change', onPager);
+      placeholder.removeEventListener('click', onSortClick, true);
+      placeholder.removeEventListener('error', replaceBrokenLogo, true);
     };
   }, [allowed, filterSelector, filterQuery, filterLetter, nativeStyle, statsMode, pageSize, cacheKey, expectedCompetition]);
 

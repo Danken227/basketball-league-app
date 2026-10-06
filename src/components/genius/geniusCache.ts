@@ -2,6 +2,8 @@
 // od razu, a świeże dane podmieniają je w tle. W pamięci strony trzymamy wszystko, a w sessionStorage
 // (przetrwa odświeżenie strony, do końca wizyty) tylko mniejsze treści, żeby nie przekroczyć limitu przeglądarki.
 
+import { geniusTranslation } from './geniusConfig';
+
 export interface GeniusEmbedOptions {
   page: string;
   blockDisplay?: string;
@@ -10,9 +12,10 @@ export interface GeniusEmbedOptions {
   showTitle?: boolean;
 }
 
-// Klucz musi uwzględniać wszystko, co zmienia treść zwracaną przez Genius (wartości domyślne jak w GeniusEmbed).
+// Klucz musi uwzględniać wszystko, co zmienia treść zwracaną przez Genius (wartości domyślne jak w GeniusEmbed),
+// a także tłumaczenie — zapamiętujemy treść już po naszych poprawkach.
 export const geniusCacheKey = ({ page, blockDisplay, showSubMenus = true, showMatchFilter = true, showTitle = false }: GeniusEmbedOptions) =>
-  [page, blockDisplay ?? '', showSubMenus, showMatchFilter, showTitle].join('|');
+  [page, blockDisplay ?? '', showSubMenus, showMatchFilter, showTitle, geniusTranslation ? 'pl' : 'en'].join('|');
 
 const memoryCache = new Map<string, string>();
 const STORAGE_PREFIX = 'genius:';
