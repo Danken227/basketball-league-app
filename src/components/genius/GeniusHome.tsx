@@ -7,8 +7,8 @@ import GeniusPrefetch from './GeniusPrefetch';
 import { competitionId, currentGeniusEdition } from './geniusConfig';
 
 // Tabela i Top 10 strony głównej w trybie Genius: nasza oprawa i filtry, dane z Genius Sports.
-// Pasek meczów jest w GeniusMatchBar. Dane dla pozostałych opcji filtrów wczytujemy w tle (GeniusPrefetch),
-// więc przełączanie ligi, grupy czy kategorii pokazuje je od razu.
+// Pasek meczów jest w GeniusMatchBar. Tabele i liderów pozostałych lig wczytujemy w tle (GeniusPrefetch),
+// więc przełączanie ligi i kategorii pokazuje je od razu.
 
 // Skrypt Genius nie przyjmuje "%" w ścieżce, więc spacje zapisujemy jako "+", jak dalk.pl.
 const standingsPage = (cid: number, phase = '') => `/competition/${cid}/standings${phase ? `?phaseName=${phase.replace(/ /g, '+')}&` : ''}`;
@@ -18,9 +18,10 @@ const currentCompetitions = leagues.flatMap((league) => {
   return cid ? [{ league, cid }] : [];
 });
 
-// Tabele domyślne wszystkich lig, a osobno (później) tabele grup lig, które mają grupy.
+// Z wyprzedzeniem wczytujemy tylko tabele i liderów pozostałych lig (po jednym zapytaniu na ligę), żeby nie
+// obciążać serwera Genius — przy zbyt wielu zapytaniach zaczyna odpowiadać wolno albo pustymi stronami.
+// Tabele grup wczytują się dopiero po wybraniu grupy (potem są w pamięci).
 const standingsPrefetch = currentCompetitions.map(({ cid }) => ({ page: standingsPage(cid) }));
-const groupsPrefetch = currentCompetitions.flatMap(({ league, cid }) => league.groups.map((g) => ({ page: standingsPage(cid, `Grupa ${g}`) })));
 const leadersPrefetch = currentCompetitions.map(({ cid }) => ({ page: `/competition/${cid}/leaders`, showSubMenus: false }));
 
 export function GeniusLeagueTable() {
@@ -49,7 +50,6 @@ export function GeniusLeagueTable() {
       </div>
       {cid && <GeniusEmbed page={standingsPage(cid, phase)} compact onLinkClick={onLinkClick} />}
       <GeniusPrefetch items={standingsPrefetch} />
-      <GeniusPrefetch items={groupsPrefetch} delay={4000} />
     </section>
   );
 }

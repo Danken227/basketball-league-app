@@ -4,9 +4,8 @@ import { icons } from '../components/common/icons';
 import GeniusEmbed from '../components/genius/GeniusEmbed';
 import GeniusFilterBar from '../components/genius/GeniusFilterBar';
 import GeniusMissing from '../components/genius/GeniusMissing';
-import GeniusPrefetch from '../components/genius/GeniusPrefetch';
 import { competitionId, geniusStatsSections } from '../components/genius/geniusConfig';
-import { leagues, type LeagueId } from '../data/league';
+import type { LeagueId } from '../data/league';
 import { useGeniusFilters } from '../hooks/useGeniusFilters';
 
 // Oficjalne statystyki ligi z Genius Sports: statystyki zawodników i drużyn oraz liderzy wybranych rozgrywek.
@@ -19,15 +18,6 @@ function StatisticsPage() {
 
   const cid = competitionId(editionId, leagueId);
   const query = params.toString();
-
-  // W tle: pozostałe sekcje tej ligi i ta sama sekcja pozostałych lig edycji.
-  const prefetch = [
-    ...(cid ? geniusStatsSections.filter((s) => s.slug !== section.slug).map((s) => ({ page: `/competition/${cid}/${s.path}`, showSubMenus: false })) : []),
-    ...leagues.flatMap((league) => {
-      const other = competitionId(editionId, league.id);
-      return other && league.id !== leagueId ? [{ page: `/competition/${other}/${section.path}`, showSubMenus: false }] : [];
-    }),
-  ];
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -58,7 +48,6 @@ function StatisticsPage() {
       ) : (
         <GeniusMissing editionId={editionId} leagueId={leagueId} />
       )}
-      <GeniusPrefetch key={`${editionId}-${leagueId}-${section.slug}`} items={prefetch} />
     </div>
   );
 }

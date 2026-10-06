@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type MouseEvent } from 'react';
+import { useEffect, useId, useRef, useState, type MouseEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { geniusCacheKey, readGeniusCache, writeGeniusCache } from './geniusCache';
 import { GENIUS_EMBED_URL, isGeniusDomain, mapGeniusPath } from './geniusConfig';
@@ -85,6 +85,13 @@ function GeniusEmbed({
   const cacheKey = geniusCacheKey({ page, blockDisplay, showSubMenus, showMatchFilter, showTitle });
   const expectedCompetition = page.match(/^\/competition\/(\d+)\//)?.[1];
 
+  // Ponowienie: serwer Genius bywa przeciążony i pod danym adresem potrafi podawać zapamiętaną, pustą odpowiedź.
+  // Gdy poprawna treść nie przyjdzie w 6 s, prosimy jeszcze raz z dodatkowym parametrem "r" (inny adres = świeża
+  // odpowiedź). Stan dotyczy konkretnej treści (klucza), więc zmiana filtra zaczyna od zwykłego zapytania.
+  const [retry, setRetry] = useState<{ key: string; token: number }>();
+  const retryToken = retry?.key === cacheKey ? retry.token : undefined;
+  const requestPage = retryToken ? `${page}${page.includes('?') ? (page.endsWith('&') ? '' : '&') : '?'}r=${retryToken}&` : page;
+
   useEffect(() => {
     const placeholder = ref.current;
     if (!allowed || !placeholder) return;
@@ -95,7 +102,7 @@ function GeniusEmbed({
 
     window[configName] = {
       placeHolder: placeholderId,
-      page,
+      page: requestPage,
       raw: true,
       // Linki Genius kierujemy na /genius, a potem przepisujemy je na nasze adresy (poniżej).
       internalURL: `${window.location.origin}/genius`,
@@ -123,13 +130,26 @@ function GeniusEmbed({
     // jest od razu sprzątane — wtedy jego skrypt nie trafia na stronę i treść nie wstawia się podwójnie.
     const insert = window.setTimeout(() => document.body.appendChild(script), 0);
 
-    // Gdy Genius nie zarejestrował domeny, serwer zwraca stronę "invalidreferrer" (404) i nic się nie wstawia.
-    const timeout = window.setTimeout(() => {
-      if (placeholder.children.length > 1 || !placeholder.querySelector('.genius-status')) return;
-      placeholder.innerHTML = `<p class="genius-status"><strong>Genius Sports nie zwrócił danych.</strong><br>
-        Domena ${window.location.host} nie jest zarejestrowana dla organizacji DALK w Genius Sports
-        albo serwis jest chwilowo niedostępny.</p>`;
-    }, 12000);
+    // Poprawna świeża treść = blok Genius (.hs-embed) spoza zapamiętanej kopii, dla właściwych rozgrywek.
+    const hasValidContent = () =>
+      [...placeholder.children].some(
+        (child) =>
+          child.classList.contains('hs-embed') && (!expectedCompetition || !child.className.includes('_comp_') || child.classList.contains(`_comp_${expectedCompetition}`)),
+      );
+
+    // Pierwsza próba: po 6 s bez poprawnej treści ponawiamy zapytanie (raz).
+    // Po ponowieniu: komunikat o błędzie, ale tylko gdy nie ma czego pokazać (brak zapamiętanej kopii).
+    // Komunikat obejmuje też niezarejestrowaną domenę — wtedy serwer zwraca stronę "invalidreferrer" (404).
+    const timeout = retryToken
+      ? window.setTimeout(() => {
+          if (hasValidContent() || placeholder.querySelector('.genius-cached')) return;
+          placeholder.innerHTML = `<p class="genius-status"><strong>Genius Sports nie zwrócił danych.</strong><br>
+            Serwis jest chwilowo niedostępny albo domena ${window.location.host} nie jest zarejestrowana
+            dla organizacji DALK w Genius Sports. Spróbuj odświeżyć stronę za chwilę.</p>`;
+        }, 8000)
+      : window.setTimeout(() => {
+          if (!hasValidContent()) setRetry({ key: cacheKey, token: Date.now() });
+        }, 6000);
 
     return () => {
       window.clearTimeout(insert);
@@ -138,7 +158,7 @@ function GeniusEmbed({
       delete window[configName];
       placeholder.innerHTML = '';
     };
-  }, [allowed, page, blockDisplay, showSubMenus, showMatchFilter, showTitle, placeholderId, configName, cacheKey]);
+  }, [allowed, requestPage, retryToken, blockDisplay, showSubMenus, showMatchFilter, showTitle, placeholderId, configName, cacheKey, expectedCompetition]);
 
   // Przepisuje linki Genius (".../genius?&WHurl=/competition/..") na nasze adresy i stosuje filtr tekstowy.
   // Treść dochodzi asynchronicznie, więc obserwujemy zmiany w elemencie.
@@ -149,12 +169,18 @@ function GeniusEmbed({
     let saveTimer: number | undefined;
 
     const apply = () => {
-      // Genius dokleja treść obok komunikatu o wczytywaniu (albo zapamiętanej kopii), więc po jej nadejściu
-      // usuwamy komunikat i kopię.
-      const fresh = [...placeholder.children].some((child) => !child.classList.contains('genius-status') && !child.classList.contains('genius-cached'));
-      const status = placeholder.querySelector(':scope > .genius-status');
-      if (status && placeholder.children.length > 1) status.remove();
-      if (fresh) placeholder.querySelector(':scope > .genius-cached')?.remove();
+      // Świeża treść jest poprawna tylko wtedy, gdy to blok Genius (.hs-embed) dla rozgrywek, o które prosiliśmy
+      // (klasa _comp_<numer>). Przy przeciążeniu Genius potrafi zwrócić pustą stronę, a przy kilku osadzeniach naraz
+      // wstawić treść w złe miejsce — wtedy zostawiamy komunikat/zapamiętaną kopię i nic nie zapisujemy.
+      const freshRoot = [...placeholder.children].find((child) => child.classList.contains('hs-embed'));
+      const compClass = freshRoot && [...freshRoot.classList].find((c) => c.startsWith('_comp_'));
+      const valid = Boolean(freshRoot) && (!expectedCompetition || !compClass || compClass === `_comp_${expectedCompetition}`);
+      // Genius dokleja treść obok komunikatu o wczytywaniu (albo zapamiętanej kopii), więc po nadejściu
+      // poprawnej treści usuwamy komunikat i kopię.
+      if (valid) {
+        placeholder.querySelector(':scope > .genius-status')?.remove();
+        placeholder.querySelector(':scope > .genius-cached')?.remove();
+      }
       // Razem z HTML Genius wstawia blok kolorów swojego motywu; zastępują go nasze style (genius.css).
       placeholder.querySelectorAll('style').forEach((style) => style.remove());
       // Nagłówek drużyny przychodzi z pustą nazwą, ale logo ma ją w opisie (alt) — uzupełniamy.
@@ -172,13 +198,8 @@ function GeniusEmbed({
         });
       }
       if (placeholder.querySelector('.hs-embed')) onContentRef.current?.(placeholder);
-      // Świeżą treść (już po naszych poprawkach) zapamiętujemy, gdy przestanie się zmieniać — ale tylko gdy dotyczy
-      // tych rozgrywek, o które prosiliśmy (klasa _comp_<numer>). Przy kilku osadzeniach wczytywanych naraz
-      // skrypty Genius potrafią pomylić miejsce wstawienia, a taka treść nie może trafić do pamięci pod złym kluczem.
-      const freshRoot = [...placeholder.children].find((child) => child.classList.contains('hs-embed'));
-      const compClass = freshRoot && [...freshRoot.classList].find((c) => c.startsWith('_comp_'));
-      const matchesPage = !expectedCompetition || !compClass || compClass === `_comp_${expectedCompetition}`;
-      if (fresh && freshRoot && matchesPage) {
+      // Poprawną świeżą treść (już po naszych poprawkach) zapamiętujemy, gdy przestanie się zmieniać.
+      if (valid) {
         window.clearTimeout(saveTimer);
         saveTimer = window.setTimeout(() => writeGeniusCache(cacheKey, placeholder.innerHTML), 500);
       }
