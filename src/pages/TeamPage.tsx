@@ -1,13 +1,14 @@
 import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { FilterRow, FilterSelect } from '../components/common/Filters';
 import { PlayerLink } from '../components/common/Links';
 import TeamBadge from '../components/common/TeamBadge';
-import { getRoster, getTeamSeason, getTeamSeasons, leagueById, playerById, positionNames, teamById } from '../data/league';
+import { currentSeason, getRoster, getTeamSeason, getTeamSeasons, leagueById, playerById, positionNames, teamById } from '../data/league';
 import Placeholder from './Placeholder';
 
 
 function TeamPage() {
   const { id } = useParams();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const team = id ? teamById.get(id) : undefined;
   if (!team) return <Placeholder title="Nie znaleziono drużyny" />;
 
@@ -27,6 +28,18 @@ function TeamPage() {
         ← Drużyny
       </Link>
 
+      {/* Tylko edycje, w których zespół grał, od najnowszej. */}
+      <div className="mt-4">
+        <FilterRow>
+          <FilterSelect
+            label="Edycja"
+            value={season.id}
+            onChange={(value) => setParams({ edycja: value })}
+            options={[...teamSeasons].reverse().map((s) => ({ value: s.id, label: `Edycja ${s.name}${s.id === currentSeason.id ? ' (bieżąca)' : ''}` }))}
+          />
+        </FilterRow>
+      </div>
+
       <section className="mt-4 flex flex-col items-center gap-6 rounded-xl bg-slate-950 p-6 text-white sm:flex-row">
         <span className="grid h-32 w-32 shrink-0 place-items-center rounded-xl bg-white">
           <span className="scale-[2.6]">
@@ -34,11 +47,12 @@ function TeamPage() {
           </span>
         </span>
         <div className="text-center sm:text-left">
-          <p className="text-sm font-semibold uppercase tracking-wide text-orange-400">
+          <h1 className="text-3xl font-black uppercase sm:text-4xl">{team.name}</h1>
+          {/* Poziom rozgrywek, na którym zespół grał w wybranej edycji. */}
+          <p className="mt-1.5 text-sm font-bold uppercase tracking-wide text-orange-400">
             {league.name}
-            {teamSeason.group && ` · Grupa ${teamSeason.group}`} · Edycja {season.name}
+            {teamSeason.group && ` · Grupa ${teamSeason.group}`} · edycja {season.name}
           </p>
-          <h1 className="mt-1 text-3xl font-black uppercase sm:text-4xl">{team.name}</h1>
         </div>
       </section>
 

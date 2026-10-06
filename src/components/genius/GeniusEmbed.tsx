@@ -15,15 +15,26 @@ interface GeniusEmbedProps {
   showTitle?: boolean;
   // Wariant do wąskich kolumn (strona główna).
   compact?: boolean;
-  // Ukrywa elementy (np. ".playerblock"), których tekst nie zawiera frazy — wyszukiwarka zawodników.
-  textFilter?: { selector: string; query: string };
+  // Ukrywa elementy (np. ".playerblock"), których tekst nie zawiera frazy albo których nazwisko nie zaczyna się
+  // od wybranej litery (Genius oznacza je klasą letter_<litera>) — wyszukiwarka i filtr liter zawodników.
+  textFilter?: { selector: string; query: string; letter?: string };
   // Wywoływane po wczytaniu (i każdej zmianie) treści Genius — np. do odczytania nazwy zawodnika.
   onContent?: (root: HTMLElement) => void;
   // Pozwala obsłużyć kliknięcie w link na miejscu (np. zmiana grupy w tabeli na stronie głównej).
   // Zwraca true, gdy kliknięcie zostało obsłużone i nie trzeba przechodzić pod adres linku.
   onLinkClick?: (href: string) => boolean;
   className?: string;
+  // Wygląd Genius zamiast naszego (strona meczu: shot chart, play by play i nagłówek meczu potrzebują
+  // ich arkusza — boisko, znaczniki rzutów, układ). Arkusz jest usuwany po wyjściu ze strony.
+  nativeStyle?: boolean;
+  // Tabele statystyk: tylko średnie na mecz ("avg") albo tylko wartości sumaryczne ("tot"). Genius pokazuje
+  // jedne i drugie naraz, więc ukrywamy kolumny drugiego rodzaju (patrz statColumnKind).
+  statsMode?: StatsMode;
 }
+
+export type StatsMode = 'avg' | 'tot';
+
+const GENIUS_STYLESHEETS = 'link[href*="hosted.dcd.shared.geniussports.com/css"], link[href*="font-awesome"]';
 
 // Genius buduje linki na dwa sposoby: na zarejestrowanej domenie jako "<adres>?&WHurl=/competition/..",
 // a w pozostałych przypadkach wprost do swoich stron (https://hosted.dcd.shared.geniussports.com/DALK/en/competition/..).
@@ -55,6 +66,36 @@ function preloadJQuery() {
   document.head.appendChild(script);
 }
 
+// Rodzaj kolumny tabeli statystyk Genius po nagłówku: średnia ("Average ..." w opisie albo skrót kończący się na PG,
+// np. PPG, RPG, TOPG), wspólna (procenty, liczba meczów, kolumny tekstowe jak zawodnik czy drużyna) albo suma.
+function statColumnKind(th: HTMLElement, table: HTMLTableElement, index: number): StatsMode | 'both' {
+  const title = th.getAttribute('title') ?? '';
+  const label = (th.textContent ?? '').replace(/\s+/g, '');
+  if (/^average/i.test(title) || /PG$/i.test(label)) return 'avg';
+  if (/%|percentage/i.test(title + label) || /^(G|GP|GS|Games)$/i.test(label)) return 'both';
+  const values = [...table.tBodies].flatMap((body) => [...body.rows]).map((row) => row.cells[index]?.textContent?.trim() ?? '');
+  // Bez wartości (np. wiersze jeszcze niewczytane) nie da się ocenić kolumny — zostaje widoczna.
+  if (!values.some((value) => value !== '')) return 'both';
+  return values.some((value) => value !== '' && !/^[-+]?[\d.,:]+$/.test(value)) ? 'both' : 'tot';
+}
+
+function applyStatsMode(root: HTMLElement, mode: StatsMode | undefined) {
+  root.querySelectorAll('table').forEach((table) => {
+    const headers = [...(table.tHead?.rows[0]?.cells ?? [])];
+    if (headers.some((th) => th.colSpan > 1)) return;
+    const kinds = headers.map((th, index) => (mode ? statColumnKind(th, table, index) : 'both'));
+    // Tabela bez kolumn wybranego rodzaju (np. same średnie) zostaje cała — inaczej zostałaby tylko nazwa.
+    const filtered = kinds.includes(mode!);
+    headers.forEach((th, index) => {
+      const kind = kinds[index];
+      const hidden = filtered && kind !== 'both' && kind !== mode;
+      th.classList.toggle('genius-col-hidden', hidden);
+      for (const row of [...table.tBodies, ...(table.tFoot ? [table.tFoot] : [])].flatMap((section) => [...section.rows])) {
+        row.cells[index]?.classList.toggle('genius-col-hidden', hidden);
+      }
+    });
+  });
+}
 
 function GeniusEmbed({
   page,
@@ -67,6 +108,8 @@ function GeniusEmbed({
   onContent,
   onLinkClick,
   className = '',
+  nativeStyle = false,
+  statsMode,
 }: GeniusEmbedProps) {
   const ref = useRef<HTMLDivElement>(null);
   // Najnowszy callback w refie, żeby jego zmiana nie restartowała obserwatora treści.
@@ -82,6 +125,7 @@ function GeniusEmbed({
   const configName = `spilWHH_${instance}${pageLoadTag}` as const;
   const filterSelector = textFilter?.selector;
   const filterQuery = textFilter?.query ?? '';
+  const filterLetter = textFilter?.letter ?? '';
   const cacheKey = geniusCacheKey({ page, blockDisplay, showSubMenus, showMatchFilter, showTitle });
   const expectedCompetition = page.match(/^\/competition\/(\d+)\//)?.[1];
 
@@ -115,7 +159,7 @@ function GeniusEmbed({
       showCompetitionChooser: false,
       showMatchFilter,
       // Wygląd nadajemy własnym CSS (genius.css), zostawiamy skrypty Genius (sortowanie, zakładki).
-      rawEnableCSS: false,
+      rawEnableCSS: nativeStyle,
       rawEnableJS: true,
       blockDisplay: blockDisplay ?? '',
       language: 'en',
@@ -157,8 +201,15 @@ function GeniusEmbed({
       script.remove();
       delete window[configName];
       placeholder.innerHTML = '';
+      // Arkusz Genius zostawiony w <head> zmieniałby wygląd pozostałych stron — usuwamy go,
+      // gdy na stronie nie ma już osadzenia w ich stylu (Genius doda go ponownie przy następnym).
+      if (nativeStyle) {
+        window.setTimeout(() => {
+          if (!document.querySelector('.genius-native')) document.querySelectorAll(GENIUS_STYLESHEETS).forEach((link) => link.remove());
+        }, 0);
+      }
     };
-  }, [allowed, requestPage, retryToken, blockDisplay, showSubMenus, showMatchFilter, showTitle, placeholderId, configName, cacheKey, expectedCompetition]);
+  }, [allowed, requestPage, retryToken, blockDisplay, showSubMenus, showMatchFilter, showTitle, nativeStyle, placeholderId, configName, cacheKey, expectedCompetition]);
 
   // Przepisuje linki Genius (".../genius?&WHurl=/competition/..") na nasze adresy i stosuje filtr tekstowy.
   // Treść dochodzi asynchronicznie, więc obserwujemy zmiany w elemencie.
@@ -182,7 +233,7 @@ function GeniusEmbed({
         placeholder.querySelector(':scope > .genius-cached')?.remove();
       }
       // Razem z HTML Genius wstawia blok kolorów swojego motywu; zastępują go nasze style (genius.css).
-      placeholder.querySelectorAll('style').forEach((style) => style.remove());
+      if (!nativeStyle) placeholder.querySelectorAll('style').forEach((style) => style.remove());
       // Nagłówek drużyny przychodzi z pustą nazwą, ale logo ma ją w opisie (alt) — uzupełniamy.
       const teamTitle = placeholder.querySelector('.team-header .team-title');
       const teamLogo = placeholder.querySelector<HTMLImageElement>('.team-header img');
@@ -194,9 +245,12 @@ function GeniusEmbed({
       if (filterSelector) {
         const query = filterQuery.trim().toLowerCase();
         placeholder.querySelectorAll<HTMLElement>(filterSelector).forEach((item) => {
-          item.classList.toggle('genius-hidden', Boolean(query) && !item.textContent?.toLowerCase().includes(query));
+          const textMismatch = Boolean(query) && !item.textContent?.toLowerCase().includes(query);
+          const letterMismatch = Boolean(filterLetter) && !item.classList.contains(`letter_${filterLetter}`);
+          item.classList.toggle('genius-hidden', textMismatch || letterMismatch);
         });
       }
+      if (statsMode || placeholder.querySelector('.genius-col-hidden')) applyStatsMode(placeholder, statsMode);
       if (placeholder.querySelector('.hs-embed')) onContentRef.current?.(placeholder);
       // Poprawną świeżą treść (już po naszych poprawkach) zapamiętujemy, gdy przestanie się zmieniać.
       if (valid) {
@@ -212,7 +266,7 @@ function GeniusEmbed({
       observer.disconnect();
       window.clearTimeout(saveTimer);
     };
-  }, [allowed, filterSelector, filterQuery, cacheKey, expectedCompetition]);
+  }, [allowed, filterSelector, filterQuery, filterLetter, nativeStyle, statsMode, cacheKey, expectedCompetition]);
 
   // Kliknięcia w przepisane linki obsługuje router, bez przeładowania strony.
   const onClick = (e: MouseEvent<HTMLDivElement>) => {
@@ -242,7 +296,7 @@ function GeniusEmbed({
       id={placeholderId}
       ref={ref}
       onClick={onClick}
-      className={`genius-embed ${compact ? 'genius-compact' : ''} ${className} min-h-24 overflow-x-auto rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200`}
+      className={`${nativeStyle ? 'genius-native' : 'genius-embed'} ${compact ? 'genius-compact' : ''} ${className} min-h-24 overflow-x-auto rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200`}
     />
   );
 }

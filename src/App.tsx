@@ -5,9 +5,10 @@ import DemoBanner from './components/DemoBanner/DemoBanner';
 import Footer from './components/Footer/Footer';
 import BySource from './components/genius/BySource';
 import Header from './components/Header/Header';
-import GeniusEntityPage from './pages/genius/GeniusEntityPage';
+import GeniusTeamPage from './pages/genius/GeniusTeamPage';
 import GeniusLinkPage from './pages/genius/GeniusLinkPage';
 import GeniusListPage from './pages/genius/GeniusListPage';
+import GeniusMatchPage from './pages/genius/GeniusMatchPage';
 import GeniusPlayerPage from './pages/genius/GeniusPlayerPage';
 import GeniusPlayersPage from './pages/genius/GeniusPlayersPage';
 import Home from './pages/Home';
@@ -49,12 +50,13 @@ function App() {
               element={<BySource genius={<GeniusListPage title="Terminarz" icon={icons.calendar} path="schedule" showMatchFilter />} mock={<SchedulePage />} />}
             />
             <Route path="/druzyny" element={<BySource genius={<GeniusListPage title="Drużyny" icon={icons.teams} path="teams" />} mock={<TeamsPage />} />} />
-            <Route path="/druzyny/:id" element={<BySource genius={<GeniusEntityPage kind="team" />} mock={<TeamPage />} />} />
+            <Route path="/druzyny/:id" element={<BySource genius={<GeniusTeamPage />} mock={<TeamPage />} />} />
             <Route path="/zawodnicy" element={<BySource genius={<GeniusPlayersPage />} mock={<PlayersPage />} />} />
             <Route path="/zawodnicy/:id" element={<BySource genius={<GeniusPlayerPage />} mock={<PlayerPage />} />} />
             <Route path="/statystyki" element={<StatisticsPage />} />
             <Route path="/statystyki/:section" element={<StatisticsPage />} />
             <Route path="/genius" element={<GeniusLinkPage />} />
+            <Route path="/mecze/:id" element={<GeniusMatchPage />} />
             {placeholderPages.map((page) => (
               <Route key={page.path} path={page.path} element={<Placeholder title={page.title} />} />
             ))}
