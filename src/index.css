@@ -54,13 +54,7 @@
   border-radius: 0.375rem;
   /* !important: część kafelków (np. lista drużyn) ma w genius.css własne tło z palety, które w trybie ciemnym ciemnieje. */
   background-color: #fff !important;
-  padding: 2px;
-  /* Podkładka dookoła logo, a nie kosztem logo: przy border-box (domyślnym w Tailwind) logo o stałym rozmiarze
-     zmniejszałoby się o padding i było mniejsze niż w trybie jasnym. */
-  box-sizing: content-box;
-}
-
-/* Kafelki listy drużyn mają szerokość 100% — tam padding musi się mieścić w szerokości. */
-.dark .genius-embed .team-link img.logo {
-  box-sizing: border-box;
+  /* Margines kafelka jako biały pierścień (box-shadow nie zajmuje miejsca): padding zmniejszałby logo o stałym
+     rozmiarze albo powiększał kafelek i przesuwał układ względem trybu jasnego. */
+  box-shadow: 0 0 0 2px #fff;
 }

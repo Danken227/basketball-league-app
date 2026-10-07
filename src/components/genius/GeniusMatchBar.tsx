@@ -7,7 +7,7 @@ import { geniusCacheKey, readGeniusCache } from './geniusCache';
 import { competitionIdByName, geniusSnapshot } from './geniusConfig';
 import { placeholderLogo } from './geniusLogo';
 import { loadSnapshot, widgetSnapshotKey } from './geniusSnapshot';
-import { findStream, loadYoutubeVideos, YOUTUBE_CHANNEL_URL, type YoutubeVideo } from './youtubeStreams';
+import { findStream, loadYoutubeVideos, type YoutubeVideo } from './youtubeStreams';
 
 // Pasek meczów w naszym wyglądzie, z danymi z widgetu Genius (ten sam widget co na dalk.pl).
 // Widget działa ukryty w tle; jego karty (li.spls_lsmatch w ramce z tej samej domeny) przepisujemy
@@ -58,6 +58,9 @@ const leagueBadge: Record<BarLeague, string> = { eks: 'EKS', '1': '1L', '2': '2L
 
 // Co ile ponownie czytamy karty widgetu (wyniki meczów na żywo).
 const LIVE_REFRESH_MS = 20000;
+
+// Transmisja przypięta na stałe do "trwającego" meczu w wersji demonstracyjnej (Care Bears II - Łobuzersi).
+const DEMO_STREAM_URL = 'https://www.youtube.com/watch?v=i_5gLSnPotY';
 
 // Wersja demonstracyjna (migawka): kolejne stany "trwającego" meczu (wynik, kwarta i czas gry),
 // zmieniane co LIVE_REFRESH_MS, w pętli.
@@ -392,21 +395,20 @@ function GeniusMatchBar({ widgetId }: { widgetId: string }) {
   };
 
   // Transmisje na YouTube — tylko dla meczów w trakcie: listę filmów kanału pobieramy, gdy jakiś mecz trwa,
-  // i odświeżamy co 2 minuty. W migawce (demo) lista filmów pochodzi z pliku zapisanego razem z migawką.
+  // i odświeżamy co 2 minuty. W migawce (demo) "trwający" mecz ma przypiętą transmisję.
   const [videos, setVideos] = useState<YoutubeVideo[]>([]);
   const anyLive = (matches ?? []).some((m) => m.status === 'live' || (m.status !== 'final' && schedule.get(m.id)?.live));
   useEffect(() => {
-    if (!anyLive) return;
+    if (!anyLive || geniusSnapshot) return;
     const refresh = () => loadYoutubeVideos().then(setVideos);
     refresh();
     const timer = window.setInterval(refresh, 2 * 60 * 1000);
     return () => window.clearInterval(timer);
   }, [anyLive]);
   const streamFor = (match: WidgetMatch, info?: ScheduleInfo) => {
+    if (geniusSnapshot) return DEMO_STREAM_URL;
     if (!info?.home || !info.away) return undefined;
-    const stream = findStream(videos, info.home, info.away, info.date ?? match.date);
-    // Demo: symulowany mecz bez nagranej transmisji prowadzi do listy transmisji kanału.
-    return stream ?? (geniusSnapshot ? `${YOUTUBE_CHANNEL_URL}/streams` : undefined);
+    return findStream(videos, info.home, info.away, info.date ?? match.date);
   };
 
   const sorted = (matches ?? [])
