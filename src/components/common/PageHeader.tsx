@@ -4,7 +4,7 @@ function PageHeader({ title, icon, aside }: { title: string; icon: ReactNode; as
   return (
     <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
       <div className="flex items-center gap-3">
-        <span className="keep-dark grid h-12 w-12 place-items-center rounded-lg bg-slate-950 text-orange-400" aria-hidden="true">
+        <span className="keep-dark grid h-12 w-12 place-items-center rounded-lg bg-slate-950 text-orange-400 dark:bg-[#fff] dark:text-orange-500" aria-hidden="true">
           {icon}
         </span>
         <h1 className="text-2xl font-black uppercase tracking-tight text-slate-900 sm:text-3xl">{title}</h1>
