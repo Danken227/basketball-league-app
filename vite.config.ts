@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { fetchYoutubeFeed } from './api/_youtube.js'
 
 const snapshotDir = fileURLToPath(new URL('./public/snapshot', import.meta.url))
 
@@ -14,6 +15,20 @@ function snapshotWriter(): Plugin {
     name: 'genius-snapshot-writer',
     apply: 'serve',
     configureServer(server) {
+      // Lista filmów kanału YouTube ligi — to samo co funkcja Vercela api/youtube-feed.js (zapamiętana na 5 minut).
+      let youtubeCache: { at: number; body: string } | undefined
+      server.middlewares.use('/api/youtube-feed', async (_req, res) => {
+        try {
+          if (!youtubeCache || Date.now() - youtubeCache.at > 5 * 60 * 1000) {
+            youtubeCache = { at: Date.now(), body: JSON.stringify(await fetchYoutubeFeed()) }
+          }
+          res.setHeader('content-type', 'application/json')
+          res.end(youtubeCache.body)
+        } catch (error) {
+          res.statusCode = 502
+          res.end(JSON.stringify({ error: String(error) }))
+        }
+      })
       // Pliki migawki prosto z dysku: zapisanych w trakcie pracy serwera Vite nie zna (katalog nie jest
       // obserwowany, żeby zapis nie przeładowywał strony), więc zamiast nich oddałby stronę aplikacji.
       server.middlewares.use('/snapshot', (req, res, nextMiddleware) => {

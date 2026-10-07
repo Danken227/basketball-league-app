@@ -7,6 +7,7 @@ import { geniusCacheKey, readGeniusCache } from './geniusCache';
 import { competitionIdByName, geniusSnapshot } from './geniusConfig';
 import { placeholderLogo } from './geniusLogo';
 import { loadSnapshot, widgetSnapshotKey } from './geniusSnapshot';
+import { findStream, loadYoutubeVideos, YOUTUBE_CHANNEL_URL, type YoutubeVideo } from './youtubeStreams';
 
 // Pasek meczów w naszym wyglądzie, z danymi z widgetu Genius (ten sam widget co na dalk.pl).
 // Widget działa ukryty w tle; jego karty (li.spls_lsmatch w ramce z tej samej domeny) przepisujemy
@@ -42,6 +43,9 @@ interface ScheduleInfo {
   date?: Date;
   venue?: string;
   live: boolean;
+  // Pełne nazwy drużyn (karty widgetu mają tylko skróty) — do dopasowania transmisji na YouTube.
+  home?: string;
+  away?: string;
 }
 
 const filterOptions: { value: Filter; label: string }[] = [
@@ -167,6 +171,8 @@ function readSchedule(root: HTMLElement): Map<string, ScheduleInfo> {
       date: parseScheduleDate(wrap.querySelector('.match-time span')?.textContent ?? ''),
       venue: wrap.querySelector('.match-venue a, .match-venue span')?.textContent?.trim() || undefined,
       live: !wrap.classList.contains('STATUS_SCHEDULED') && !wrap.classList.contains('STATUS_COMPLETE'),
+      home: wrap.querySelector('.home-team .team-name-full')?.textContent?.trim() || undefined,
+      away: wrap.querySelector('.away-team .team-name-full')?.textContent?.trim() || undefined,
     });
   });
   return info;
@@ -178,7 +184,7 @@ const scheduleOptions = (cid: number) => ({ page: `/competition/${cid}/schedule`
 const dayFormat = new Intl.DateTimeFormat('pl-PL', { weekday: 'short', day: '2-digit', month: '2-digit' });
 const timeFormat = new Intl.DateTimeFormat('pl-PL', { hour: '2-digit', minute: '2-digit' });
 
-function MatchCard({ match, schedule }: { match: WidgetMatch; schedule?: ScheduleInfo }) {
+function MatchCard({ match, schedule, streamUrl }: { match: WidgetMatch; schedule?: ScheduleInfo; streamUrl?: string }) {
   const status: MatchStatus = schedule?.live && match.status !== 'final' ? 'live' : match.status;
   const date = schedule?.date ?? match.date;
   const hasTime = Boolean(schedule?.date) || match.hasTime;
@@ -186,20 +192,39 @@ function MatchCard({ match, schedule }: { match: WidgetMatch; schedule?: Schedul
   const winner = status === 'final' ? Math.max(...scores) : undefined;
   const showScores = status !== 'upcoming';
 
-  // Cały kafelek prowadzi do relacji meczu w FIBA LiveStats (nowa karta); drużyny nie są osobnymi linkami.
+  // Cały kafelek prowadzi do relacji meczu w FIBA LiveStats (nowa karta) — link rozciągnięty na kafelek pod treścią.
+  // Mecz w trakcie z odnalezioną transmisją ma dodatkowo przycisk YouTube (osobny link nad nim).
   return (
-    <a
-      href={match.href}
-      target="_blank"
-      rel="noreferrer"
-      draggable={false}
-      aria-label={`${match.teams.map((t) => t.code).join(' – ')}, ${statusLabel[status].toLowerCase()}, relacja w FIBA LiveStats`}
-      className="flex w-60 shrink-0 flex-col rounded-xl bg-white/5 p-3 ring-1 ring-white/10 transition hover:bg-white/10 hover:ring-orange-400/60"
-    >
+    <div className="relative flex w-60 shrink-0 flex-col rounded-xl bg-white/5 p-3 ring-1 ring-white/10 transition hover:bg-white/10 hover:ring-orange-400/60">
+      <a
+        href={match.href}
+        target="_blank"
+        rel="noreferrer"
+        draggable={false}
+        aria-label={`${match.teams.map((t) => t.code).join(' – ')}, ${statusLabel[status].toLowerCase()}, relacja w FIBA LiveStats`}
+        className="absolute inset-0 rounded-xl"
+      />
       <div className="mb-2 flex items-center justify-between gap-2 text-[11px]">
-        <span className="truncate rounded bg-orange-500/20 px-1.5 py-0.5 font-semibold text-orange-300" title={match.competition}>
-          {match.league ? leagueBadge[match.league] : match.competition}
-          {match.league === 'jun' && ` · ${match.competition.match(/U\d+/)?.[0] ?? ''}`}
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate rounded bg-orange-500/20 px-1.5 py-0.5 font-semibold text-orange-300" title={match.competition}>
+            {match.league ? leagueBadge[match.league] : match.competition}
+            {match.league === 'jun' && ` · ${match.competition.match(/U\d+/)?.[0] ?? ''}`}
+          </span>
+          {status === 'live' && streamUrl && (
+            <a
+              href={streamUrl}
+              target="_blank"
+              rel="noreferrer"
+              draggable={false}
+              aria-label="Transmisja meczu na YouTube"
+              title="Oglądaj transmisję na YouTube"
+              className="relative z-10 grid h-5 w-7 shrink-0 place-items-center rounded bg-red-600 text-white transition hover:bg-red-500"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            </a>
+          )}
         </span>
         <span className={`flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 font-semibold ${statusClass[status]}`}>
           {status === 'live' && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-400" aria-hidden="true" />}
@@ -240,7 +265,7 @@ function MatchCard({ match, schedule }: { match: WidgetMatch; schedule?: Schedul
           </span>
         )}
       </div>
-    </a>
+    </div>
   );
 }
 
@@ -366,6 +391,23 @@ function GeniusMatchBar({ widgetId }: { widgetId: string }) {
     });
   };
 
+  // Transmisje na YouTube — tylko dla meczów w trakcie: listę filmów kanału pobieramy, gdy jakiś mecz trwa,
+  // i odświeżamy co 2 minuty. W migawce (demo) "trwający" mecz prowadzi do listy transmisji kanału.
+  const [videos, setVideos] = useState<YoutubeVideo[]>([]);
+  const anyLive = (matches ?? []).some((m) => m.status === 'live' || (m.status !== 'final' && schedule.get(m.id)?.live));
+  useEffect(() => {
+    if (!anyLive || geniusSnapshot) return;
+    const refresh = () => loadYoutubeVideos().then(setVideos);
+    refresh();
+    const timer = window.setInterval(refresh, 2 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, [anyLive]);
+  const streamFor = (match: WidgetMatch, info?: ScheduleInfo) => {
+    if (geniusSnapshot) return `${YOUTUBE_CHANNEL_URL}/streams`;
+    if (!info?.home || !info.away) return undefined;
+    return findStream(videos, info.home, info.away, info.date ?? match.date);
+  };
+
   const sorted = (matches ?? [])
     .map((match) => ({ match, info: schedule.get(match.id) ?? cachedSchedule.get(match.id) }))
     .sort((a, b) => (a.info?.date ?? a.match.date).getTime() - (b.info?.date ?? b.match.date).getTime());
@@ -407,12 +449,12 @@ function GeniusMatchBar({ widgetId }: { widgetId: string }) {
             <DragScroller resetKey={filter}>
               {results.length > 0 && <GroupLabel>Wyniki</GroupLabel>}
               {results.map(({ match, info }) => (
-                <MatchCard key={match.href} match={match} schedule={info} />
+                <MatchCard key={match.href} match={match} schedule={info} streamUrl={streamFor(match, info)} />
               ))}
               {results.length > 0 && upcoming.length > 0 && <div data-divider className="w-px shrink-0 bg-white/15" />}
               {upcoming.length > 0 && <GroupLabel>Najbliższe</GroupLabel>}
               {upcoming.map(({ match, info }) => (
-                <MatchCard key={match.href} match={match} schedule={info} />
+                <MatchCard key={match.href} match={match} schedule={info} streamUrl={streamFor(match, info)} />
               ))}
               {visible.length === 0 && <p className="py-6 text-sm text-slate-400">Brak meczów w tej lidze.</p>}
             </DragScroller>
