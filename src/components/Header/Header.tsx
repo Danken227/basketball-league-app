@@ -107,7 +107,7 @@ function Header() {
       <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-3 sm:px-6 lg:px-8">
         <NavLink to="/" className="flex shrink-0 items-center gap-3 font-semibold text-white" onClick={() => setOpen(false)}>
           {/* Logo ligi z dalk.pl (public/dalk-logo.png). */}
-          <img src="/dalk-logo.png" alt="DALK" width={44} height={44} className="h-11 w-11" />
+          <img src="/dalk-logo.png" alt="DALK" width={56} height={56} className="h-14 w-14" />
           <span className="hidden text-sm leading-tight sm:block">
             Dolnośląska
             <br />
