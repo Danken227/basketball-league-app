@@ -36,11 +36,16 @@ export function markSortedColumns(root: HTMLElement) {
 // Kliknięcie w nagłówek, obsłużone przed footable (nasłuch w fazie przechwytywania): kolumna tekstowa nic nie robi,
 // a trzecie kliknięcie (kolumna już posortowana malejąco) przywraca kolejność z Genius zamiast znów sortować rosnąco.
 // Zwraca true, gdy kliknięcie zostało obsłużone tutaj (footable ma go wtedy nie dostać).
-export function handleSortClick(event: Event): boolean {
+export function handleSortClick(event: Event, ownSort = false): boolean {
   const th = (event.target as HTMLElement).closest<HTMLTableCellElement>('thead th');
   const table = th?.closest('table');
   if (!th || !table) return false;
   if (isTextColumn(th)) return true;
+  // Bez skryptu footable (migawka danych) sortujemy sami: rosnąco, malejąco, potem kolejność z Genius.
+  if (ownSort && th.classList.contains('footable-sortable') && !th.classList.contains('footable-desc')) {
+    sortRows(table, th, th.classList.contains('footable-asc') ? 'desc' : 'asc');
+    return true;
+  }
   if (!th.classList.contains('footable-desc')) return false;
 
   th.classList.remove('footable-desc', 'footable-asc');
@@ -50,4 +55,28 @@ export function handleSortClick(event: Event): boolean {
     body.append(...rows);
   }
   return true;
+}
+
+// Wartość komórki do sortowania: liczba (także "12:34" jako minuty i sekundy), a gdy jej nie ma — tekst.
+function sortValue(cell: HTMLTableCellElement | undefined): number | string {
+  const text = cell?.textContent?.trim() ?? '';
+  const time = text.match(/^(\d+):(\d{2})$/);
+  if (time) return Number(time[1]) * 60 + Number(time[2]);
+  const number = Number(text.replace(',', '.').replace('%', ''));
+  return text !== '' && !Number.isNaN(number) ? number : text.toLowerCase();
+}
+
+function sortRows(table: HTMLTableElement, th: HTMLTableCellElement, direction: 'asc' | 'desc') {
+  const index = [...th.parentElement!.children].indexOf(th);
+  th.parentElement!.querySelectorAll('th').forEach((cell) => cell.classList.remove('footable-asc', 'footable-desc'));
+  th.classList.add(direction === 'asc' ? 'footable-asc' : 'footable-desc');
+  for (const body of table.tBodies) {
+    const rows = [...body.rows].sort((a, b) => {
+      const x = sortValue(a.cells[index]);
+      const y = sortValue(b.cells[index]);
+      const order = typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y), 'pl');
+      return direction === 'asc' ? order : -order;
+    });
+    body.append(...rows);
+  }
 }

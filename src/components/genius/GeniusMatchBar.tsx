@@ -4,8 +4,9 @@ import { DragScroller, GroupLabel } from '../common/DragScroller';
 import GeniusEmbed from './GeniusEmbed';
 import GeniusWidget from './GeniusWidget';
 import { geniusCacheKey, readGeniusCache } from './geniusCache';
-import { competitionIdByName } from './geniusConfig';
+import { competitionIdByName, geniusSnapshot } from './geniusConfig';
 import { placeholderLogo } from './geniusLogo';
+import { loadSnapshot, widgetSnapshotKey } from './geniusSnapshot';
 
 // Pasek meczów w naszym wyglądzie, z danymi z widgetu Genius (ten sam widget co na dalk.pl).
 // Widget działa ukryty w tle; jego karty (li.spls_lsmatch w ramce z tej samej domeny) przepisujemy
@@ -95,7 +96,12 @@ function parseScheduleDate(text: string): Date | undefined {
 
 function readWidget(container: Element | null): WidgetMatch[] | undefined {
   const doc = container?.querySelector('iframe')?.contentDocument;
-  const cards = doc ? [...doc.querySelectorAll('li.spls_lsmatch')] : [];
+  return doc ? readWidgetCards(doc) : undefined;
+}
+
+// Karty meczów (li.spls_lsmatch) z dokumentu widgetu albo z zapisanego HTML kart (migawka danych).
+function readWidgetCards(root: ParentNode): WidgetMatch[] | undefined {
+  const cards = [...root.querySelectorAll('li.spls_lsmatch')];
   if (cards.length === 0) return undefined;
 
   // Karuzela Genius dokleja kopie kart do przewijania w kółko — zostawiamy po jednej na mecz.
@@ -243,7 +249,20 @@ function GeniusMatchBar({ widgetId }: { widgetId: string }) {
   }, [matches]);
 
   // Widget wypełnia się asynchronicznie, więc odpytujemy go co pół sekundy (maks. 15 s).
+  // W migawce danych karty są zapisanym HTML widgetu.
   useEffect(() => {
+    if (geniusSnapshot) {
+      let active = true;
+      loadSnapshot(widgetSnapshotKey(widgetId)).then((html) => {
+        if (!active) return;
+        const root = document.createElement('div');
+        root.innerHTML = html ?? '';
+        setMatches(readWidgetCards(root) ?? []);
+      });
+      return () => {
+        active = false;
+      };
+    }
     const started = Date.now();
     const timer = window.setInterval(() => {
       const found = readWidget(document.getElementById(`spw_${widgetId}`));
@@ -340,7 +359,7 @@ function GeniusMatchBar({ widgetId }: { widgetId: string }) {
       {/* Źródła danych poza ekranem (zostają w DOM, żeby skrypty Genius działały): widget i terminarze. */}
       {!failed && (
         <div aria-hidden="true" className="pointer-events-none absolute -left-[10000px] top-0 w-[1200px]">
-          <GeniusWidget widgetId={widgetId} />
+          {!geniusSnapshot && <GeniusWidget widgetId={widgetId} />}
           {loadSchedules && scheduleToLoad.map((cid) => <GeniusEmbed key={cid} {...scheduleOptions(cid)} onContent={mergeSchedule} />)}
         </div>
       )}

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { icons } from './components/common/icons';
 import DemoBanner from './components/DemoBanner/DemoBanner';
@@ -20,6 +20,9 @@ import StatisticsPage from './pages/StatisticsPage';
 import TablesPage from './pages/TablesPage';
 import TeamPage from './pages/TeamPage';
 import TeamsPage from './pages/TeamsPage';
+
+// Zbieranie migawki danych Genius do wersji demonstracyjnej — tylko na serwerze deweloperskim (poza buildem).
+const SnapshotCrawler = import.meta.env.DEV ? lazy(() => import('./pages/SnapshotCrawler')) : null;
 
 const placeholderPages = [
   { path: '/regulamin', title: 'Regulamin' },
@@ -57,6 +60,16 @@ function App() {
             <Route path="/statystyki/:section" element={<StatisticsPage />} />
             <Route path="/genius" element={<GeniusLinkPage />} />
             <Route path="/mecze/:id" element={<GeniusMatchPage />} />
+            {SnapshotCrawler && (
+              <Route
+                path="/__snapshot"
+                element={
+                  <Suspense>
+                    <SnapshotCrawler />
+                  </Suspense>
+                }
+              />
+            )}
             {placeholderPages.map((page) => (
               <Route key={page.path} path={page.path} element={<Placeholder title={page.title} />} />
             ))}
