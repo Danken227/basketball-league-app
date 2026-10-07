@@ -30,7 +30,7 @@ function NewsArticlePage() {
         ← Wszystkie aktualności
       </Link>
       <article className="mt-4 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200">
-        <NewsCover item={item} className="h-40 sm:h-52" />
+        <NewsCover item={item} className="aspect-video" />
         <div className="p-5 sm:p-8">
           <p className="text-xs text-slate-500">
             <time dateTime={item.date}>{formatNewsDate(item.date)}</time> · {newsCategory(item).label}
