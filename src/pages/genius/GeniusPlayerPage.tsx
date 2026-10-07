@@ -18,6 +18,8 @@ type Section = 'statistics' | 'gamelog';
 
 interface BlockInfo {
   empty: boolean;
+  // Wersja demonstracyjna: tej strony nie ma w migawce danych (to nie znaczy, że zawodnik nie grał).
+  missing?: boolean;
   name?: string;
   // Zdjęcie zawodnika z nagłówka Genius (tylko gdy liga je dodała — bez zdjęcia Genius nie podaje bloku .photo).
   photo?: string;
@@ -50,7 +52,8 @@ function readBlock(root: HTMLElement, section: Section): BlockInfo {
       }
     }
   }
-  return { empty, name, photo, teams };
+  const missing = Boolean(root.querySelector('.genius-snapshot-missing'));
+  return { empty, missing, name, photo, teams };
 }
 
 // Genius podaje zdjęcie w kilku rozmiarach, rozróżnionych końcówką nazwy pliku: T1 (75 px), S1 (200 px, miniatura
@@ -69,7 +72,7 @@ function PlayerBlocks({ personId, editionId, section }: { personId: string; edit
   const report = (cid: number, next: BlockInfo) => {
     // Przy okazji zapisujemy w indeksie, czy zawodnik grał w tych rozgrywkach (lista edycji w filtrze)
     // i w jakich drużynach (zakładka "Mecze" nie ma kolumny drużyny, więc stamtąd ją bierze).
-    savePlayed(personId, cid, !next.empty);
+    if (!next.missing) savePlayed(personId, cid, !next.empty);
     if (next.teams.length > 0) savePersonTeams(personId, cid, next.teams);
     setInfo((prev) => (JSON.stringify(prev[cid]) === JSON.stringify(next) ? prev : { ...prev, [cid]: next }));
   };
@@ -115,7 +118,9 @@ function PlayerBlocks({ personId, editionId, section }: { personId: string; edit
       {loaded < blocks.length && <p className="mt-6 text-sm text-slate-500">Wczytywanie danych Genius Sports…</p>}
       {loaded === blocks.length && played.length === 0 && (
         <p className="mt-6 rounded-xl bg-white p-6 text-center text-sm text-slate-500 ring-1 ring-slate-200">
-          Zawodnik nie wystąpił w żadnym meczu w edycji {edition.name}. Wybierz inną edycję.
+          {blocks.some((b) => info[b.cid]?.missing)
+            ? 'Tej części strony zawodnika nie ma w wersji demonstracyjnej (zapis danych Genius Sports).'
+            : `Zawodnik nie wystąpił w żadnym meczu w edycji ${edition.name}. Wybierz inną edycję.`}
         </p>
       )}
 

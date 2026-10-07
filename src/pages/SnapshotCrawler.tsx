@@ -11,7 +11,7 @@ import { SNAPSHOT_DIR, snapshotFile, snapshotKey, widgetSnapshotKey, type Snapsh
 // Kolejne strony (drużyny, zawodnicy z czołówek, ostatnie mecze) wynikają z treści list. Zapisane wcześniej strony
 // są pomijane, więc przerwane zbieranie można wznowić.
 
-type Derive = 'groups' | 'teams' | 'leaders' | 'schedule';
+type Derive = 'groups' | 'teams' | 'players' | 'leaders' | 'schedule';
 
 interface EmbedItem {
   type: 'embed';
@@ -39,6 +39,8 @@ const embed = (options: EmbedItem['options'], cid?: number, derive?: Derive): Em
 
 const seniorCids = Object.values(currentGeniusEdition.competitions);
 const juniorCids = Object.values(geniusJuniorCompetitions[currentGeniusEdition.id] ?? {});
+// Strony wszystkich zawodników tylko w Ekstralidze, 1. i 2. Lidze (3. Liga ma ich najwięcej — tam tylko czołówka liderów).
+const playerPagesCids = [currentGeniusEdition.competitions.eks, currentGeniusEdition.competitions['1'], currentGeniusEdition.competitions['2']];
 
 // Listy rozgrywek (wszystkie ligi i kategorie juniorów) — z nich wynikają kolejne strony.
 function initialQueue(): Item[] {
@@ -51,7 +53,7 @@ function initialQueue(): Item[] {
       // Terminarz w tle paska meczów (godziny i hale).
       embed({ page: `/competition/${cid}/schedule`, showSubMenus: false, showMatchFilter: false }),
       embed({ page: `/competition/${cid}/teams` }, cid, senior ? 'teams' : undefined),
-      embed({ page: `/competition/${cid}/players`, showSubMenus: false }),
+      embed({ page: `/competition/${cid}/players`, showSubMenus: false }, cid, playerPagesCids.includes(cid) ? 'players' : undefined),
       embed({ page: `/competition/${cid}/statistics/player`, showSubMenus: false }),
       embed({ page: `/competition/${cid}/statistics/team`, showSubMenus: false }),
       embed({ page: `/competition/${cid}/leaders`, showSubMenus: false }, cid, senior ? 'leaders' : undefined),
@@ -77,6 +79,12 @@ function deriveItems(derive: Derive, cid: number, html: string): Item[] {
       embed({ page: `/competition/${cid}/team/${id}/home`, showTitle: true }),
       embed({ page: `/competition/${cid}/team/${id}/roster`, showTitle: true }),
     ]);
+  }
+  // Statystyki każdego zawodnika ligi seniorów (w każdej lidze, w której jest na liście — także dwie drużyny).
+  if (derive === 'players') {
+    return ids('a[href]', /^\/zawodnicy\/(\d+)/).map((id) =>
+      embed({ page: `/competition/${cid}/person/${id}/statistics`, showTitle: true, showSubMenus: false }),
+    );
   }
   if (derive === 'leaders') {
     const blocks = ['sPointsAverage', 'sReboundsTotalAverage', 'sAssistsAverage'].map((id) => root.querySelector(`#BLOCK_LEADER_BASKETBALL_${id}`));
