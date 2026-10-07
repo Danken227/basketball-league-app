@@ -10,7 +10,8 @@ const rootElement = document.getElementById('root')!
 // odświeżenia — treść pomaga zdiagnozować problem na urządzeniu, na którym występuje.
 function showFatalError(error: unknown) {
   if (document.getElementById('fatal-error')) return
-  const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+  // Stos wywołań (pierwsze linie) pozwala odnaleźć miejsce błędu w zminifikowanym kodzie.
+  const message = error instanceof Error ? `${error.name}: ${error.message}\n${(error.stack ?? '').split('\n').slice(0, 8).join('\n')}` : String(error)
   const box = document.createElement('div')
   box.id = 'fatal-error'
   box.setAttribute('style', 'position:fixed;inset:0;z-index:2147483647;background:#fff;color:#0f172a;font:14px/1.5 system-ui,sans-serif;padding:24px;overflow:auto')

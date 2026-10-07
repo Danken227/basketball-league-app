@@ -33,7 +33,12 @@ const placeholderPages = [
 // Po przejściu na inną stronę (np. z linku w tabeli) zaczynamy od góry; zmiana filtrów w adresie nie przewija.
 function ScrollToTop() {
   const { pathname } = useLocation();
-  useEffect(() => window.scrollTo(0, 0), [pathname]);
+  // Klamry są konieczne: wartość zwrócona z efektu to dla Reacta funkcja sprzątająca, a nowsze przeglądarki
+  // (np. Chrome 154) zwracają z window.scrollTo obietnicę — React próbował ją wywołać przy następnym przejściu
+  // i cała strona znikała (biały ekran do odświeżenia).
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
   return null;
 }
 
