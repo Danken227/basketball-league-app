@@ -53,6 +53,16 @@ const leagueBadge: Record<BarLeague, string> = { eks: 'EKS', '1': '1L', '2': '2L
 // Co ile ponownie czytamy karty widgetu (wyniki meczów na żywo).
 const LIVE_REFRESH_MS = 20000;
 
+// Wersja demonstracyjna (migawka): kolejne wyniki "trwającego" meczu, zmieniane co LIVE_REFRESH_MS, w pętli.
+const DEMO_LIVE_SCORES: [number, number][] = [
+  [12, 9],
+  [17, 15],
+  [21, 22],
+  [26, 24],
+  [31, 30],
+  [35, 33],
+];
+
 const statusLabel: Record<MatchStatus, string> = { upcoming: 'Nadchodzący', live: 'Na żywo', final: 'Zakończony' };
 const statusClass: Record<MatchStatus, string> = {
   upcoming: 'bg-sky-500/15 text-sky-300',
@@ -256,14 +266,33 @@ function GeniusMatchBar({ widgetId }: { widgetId: string }) {
   useEffect(() => {
     if (geniusSnapshot) {
       let active = true;
+      let demoTimer: number | undefined;
       loadSnapshot(widgetSnapshotKey(widgetId)).then((html) => {
         if (!active) return;
         const root = document.createElement('div');
         root.innerHTML = html ?? '';
-        setMatches(readWidgetCards(root) ?? []);
+        const cards = readWidgetCards(root) ?? [];
+        setMatches(cards);
+        // Pokaz wyników na żywo w wersji demonstracyjnej: najbliższy mecz "trwa", a wynik zmienia się co 20 s
+        // (tak jak przy odczycie widgetu na żywo) i po ok. 2 minutach zaczyna od nowa.
+        const nearest = cards.filter((m) => m.status !== 'final').sort((a, b) => a.date.getTime() - b.date.getTime())[0];
+        if (!nearest) return;
+        let step = 0;
+        const showStep = () => {
+          const [home, away] = DEMO_LIVE_SCORES[step % DEMO_LIVE_SCORES.length];
+          step++;
+          setMatches((prev) =>
+            prev?.map((m) =>
+              m.href === nearest.href ? { ...m, status: 'live', teams: m.teams.map((t, i) => ({ ...t, score: String(i === 0 ? home : away) })) } : m,
+            ),
+          );
+        };
+        showStep();
+        demoTimer = window.setInterval(showStep, LIVE_REFRESH_MS);
       });
       return () => {
         active = false;
+        window.clearInterval(demoTimer);
       };
     }
     const started = Date.now();
