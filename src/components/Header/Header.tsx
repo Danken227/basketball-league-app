@@ -33,7 +33,7 @@ const navItems: (NavLinkItem | NavGroupItem)[] = [
   { label: 'Regulamin', path: '/regulamin' },
 ];
 
-const youtubeUrl = 'https://www.youtube.com/@dalk';
+const youtubeUrl = 'https://www.youtube.com/@Liga_DALK';
 
 const itemClass = (active: boolean) =>
   `rounded-full px-3 py-2 text-sm transition ${active ? 'bg-white/10 text-white' : 'text-slate-300 hover:bg-white/10 hover:text-white'}`;
