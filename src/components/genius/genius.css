@@ -275,20 +275,21 @@
   color: var(--color-slate-500);
 }
 
-/* Elementy relacji na żywo pokazujemy tylko przy meczach w trakcie (CSS Genius robi to samo). */
+/* Elementy relacji na żywo pokazujemy tylko przy meczach w trakcie (CSS Genius robi to samo). Terminarz drużyny
+   nie ma klas STATUS_* — tam mecz rozegrany albo nadchodzący poznajemy po statusie (complete/upcoming). */
 .genius-embed .match-wrap .livenow {
   display: none;
 }
 
-.genius-embed .match-wrap:not(.STATUS_SCHEDULED):not(.STATUS_COMPLETE) .livenow {
+.genius-embed .match-wrap:not(.STATUS_SCHEDULED):not(.STATUS_COMPLETE):not(:has(.notlive :is(.complete, .upcoming))) .livenow {
   display: inline;
 }
 
-.genius-embed .match-wrap:not(.STATUS_SCHEDULED):not(.STATUS_COMPLETE) .notlive {
+.genius-embed .match-wrap:not(.STATUS_SCHEDULED):not(.STATUS_COMPLETE):not(:has(.notlive :is(.complete, .upcoming))) .notlive {
   display: none;
 }
 
-.genius-embed .match-wrap:not(.STATUS_SCHEDULED):not(.STATUS_COMPLETE) .match-result {
+.genius-embed .match-wrap:not(.STATUS_SCHEDULED):not(.STATUS_COMPLETE):not(:has(.notlive :is(.complete, .upcoming))) .match-result {
   color: #dc2626;
 }
 
@@ -352,7 +353,7 @@
     text-align: left;
   }
 
-  .genius-embed .match-wrap:is(.STATUS_SCHEDULED, .STATUS_COMPLETE) .team-divide {
+  .genius-embed .match-wrap:is(.STATUS_SCHEDULED, .STATUS_COMPLETE, :has(.notlive :is(.complete, .upcoming))) .team-divide {
     display: none;
   }
 }
@@ -1365,6 +1366,25 @@
 
 .genius-embed .page-team .summary td.matchResult span.L {
   background: #dc2626;
+}
+
+/* Rywal i wynik jako linki (geniusTeamSummary) — wyglądają jak tekst, podświetlają się przy wskazaniu. */
+.genius-embed .page-team .summary a.match-link {
+  color: inherit;
+  font-weight: inherit;
+}
+
+.genius-embed .page-team .summary a.match-link:hover {
+  color: #ea580c;
+}
+
+.genius-embed .page-team .summary :is(th, td).matchVenue {
+  white-space: nowrap;
+}
+
+.genius-embed .page-team .summary td.matchVenue {
+  font-size: 0.8125rem;
+  color: var(--color-slate-500);
 }
 
 /* Liderzy drużyny: siatka kart po 5 zawodników. */

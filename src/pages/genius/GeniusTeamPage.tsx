@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { FilterRow, FilterSelect } from '../../components/common/Filters';
 import GeniusEmbed from '../../components/genius/GeniusEmbed';
@@ -6,6 +6,7 @@ import GeniusIndexLoader from '../../components/genius/GeniusIndexLoader';
 import { currentGeniusEdition, findCompetition, geniusEditionById, geniusLeagueName } from '../../components/genius/geniusConfig';
 import { competitionInfo, competitionsWith, pendingCompetitions, readTeamLinks, saveTeamNames, teamName } from '../../components/genius/geniusIndex';
 import { placeholderLogo } from '../../components/genius/geniusLogo';
+import { linkTeamSummary, readTeamSchedule, type TeamScheduleMatch } from '../../components/genius/geniusTeamSummary';
 import { useGeniusIndex } from '../../hooks/useGeniusIndex';
 
 // Strona drużyny z Genius pod naszym adresem (/druzyny/91563?rozgrywki=49970&sekcja=roster).
@@ -73,10 +74,23 @@ function GeniusTeamPage() {
     if (levelLine.textContent !== levelText) levelLine.textContent = levelText;
   };
 
-  // Nazwa może dojść z indeksu już po wczytaniu treści — wtedy poprawiamy nagłówek jeszcze raz.
+  // Podsumowanie: linki do rywali i statystyk meczów oraz hala najbliższych meczów — z terminarza drużyny,
+  // wczytywanego w tle dopiero po treści strony (dwa osadzenia Genius naraz potrafią zamienić się treścią).
+  const [summaryLoaded, setSummaryLoaded] = useState<string>();
+  const [schedule, setSchedule] = useState<{ page: string; matches: TeamScheduleMatch[] }>();
+  const schedulePage = cid && section === 'home' ? `/competition/${cid}/team/${id}/schedule` : undefined;
+  const matches = schedule && schedule.page === schedulePage ? schedule.matches : [];
+  const onContent = (root: HTMLElement) => {
+    polishHeader(root);
+    linkTeamSummary(root, matches);
+    if (root.querySelector('.page-team .summary')) setSummaryLoaded(page);
+  };
+
+  // Nazwa (z indeksu) i terminarz mogą dojść już po wczytaniu treści — wtedy poprawiamy ją jeszcze raz.
   const embedRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (embedRef.current && name) polishHeader(embedRef.current);
+    if (embedRef.current) linkTeamSummary(embedRef.current, matches);
   });
 
   return (
@@ -91,12 +105,24 @@ function GeniusTeamPage() {
         </FilterRow>
       </div>
       <div ref={embedRef} className="mt-6">
-        <GeniusEmbed key={page} page={page} showTitle onContent={polishHeader} />
+        <GeniusEmbed key={page} page={page} showTitle onContent={onContent} />
       </div>
       {/* Nazwy drużyny jeszcze nie znamy (a jest potrzebna, gdy nie ma logo): lista drużyn tych rozgrywek w tle. */}
       {!name && cid && (
         <div aria-hidden="true" className="pointer-events-none fixed -left-[10000px] top-0 h-0 w-[1200px] overflow-hidden">
           <GeniusEmbed page={`/competition/${cid}/teams`} onContent={(root) => saveTeamNames(readTeamLinks(root))} />
+        </div>
+      )}
+      {schedulePage && summaryLoaded === page && (
+        <div aria-hidden="true" className="pointer-events-none fixed -left-[10000px] top-0 h-0 w-[1200px] overflow-hidden">
+          <GeniusEmbed
+            key={schedulePage}
+            page={schedulePage}
+            onContent={(root) => {
+              const found = readTeamSchedule(root, id!);
+              if (found.length > 0 && found.length !== matches.length) setSchedule({ page: schedulePage, matches: found });
+            }}
+          />
         </div>
       )}
       {/* Indeks list drużyn buduje się w tle, po jednym zapytaniu naraz (raz na dobę). */}
