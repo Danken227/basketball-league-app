@@ -52,6 +52,7 @@
 .dark .genius-embed img:not(.genius-logo-placeholder),
 .dark .genius-native img:not(.genius-logo-placeholder):not(#shotchart img) {
   border-radius: 0.375rem;
-  background-color: #fff;
+  /* !important: część kafelków (np. lista drużyn) ma w genius.css własne tło z palety, które w trybie ciemnym ciemnieje. */
+  background-color: #fff !important;
   padding: 2px;
 }
