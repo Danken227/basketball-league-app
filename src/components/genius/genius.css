@@ -576,6 +576,30 @@
   font-family: inherit;
 }
 
+/* Arkusz Genius (hs-embed-style.css) daje kontenerowi strony meczu białe tło, a co drugiemu wierszowi tabel szare
+   (#f2f2f2) — na sztywno, więc w trybie ciemnym jasny tekst znikał na jasnych wierszach, a biały kontener wystawał
+   w rogach karty. Tło dziedziczymy z karty, paski bierzemy z palety strony (w trybie ciemnym ciemnieją). */
+.genius-native .hs-container,
+.genius-native .hs-container .play-by-play {
+  background-color: transparent;
+}
+
+.genius-native .hs-container table > tbody > tr {
+  background-color: transparent;
+}
+
+.genius-native .hs-container table > tbody > tr:nth-child(even),
+.genius-native .hs-container .boxscore-legend {
+  background-color: var(--color-slate-50);
+}
+
+/* Wiersz sum (Totals) — u Genius #ddd. */
+.genius-native .hs-container table > tfoot td {
+  background-color: var(--color-slate-200);
+  font-weight: 700;
+  color: var(--color-slate-900);
+}
+
 .genius-native .print-link {
   display: none !important;
 }
