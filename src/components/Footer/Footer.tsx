@@ -37,7 +37,7 @@ function Footer() {
           </a>
         </div>
       </div>
-      <div className="border-t border-slate-100 py-4 text-center text-xs text-slate-500">© {new Date().getFullYear()} Liga koszykówki amatorskiej</div>
+      <div className="border-t border-slate-100 py-4 text-center text-xs text-slate-500">© {new Date().getFullYear()} Dolnośląska Liga Koszykówki</div>
     </footer>
   );
 }
