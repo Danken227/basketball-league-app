@@ -26,6 +26,7 @@ const navItems: (NavLinkItem | NavGroupItem)[] = [
       { label: 'Statystyki drużyn', path: '/statystyki/druzyny' },
       { label: 'Statystyki zawodników', path: '/statystyki/zawodnicy' },
       { label: 'Liderzy', path: '/statystyki/liderzy' },
+      { label: 'Rekordy', path: '/statystyki/rekordy' },
     ],
   },
   { label: 'Regulamin', path: '/regulamin' },
