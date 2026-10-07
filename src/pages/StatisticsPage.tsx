@@ -4,6 +4,7 @@ import { icons } from '../components/common/icons';
 import GeniusEmbed, { type StatsMode } from '../components/genius/GeniusEmbed';
 import GeniusFilterBar from '../components/genius/GeniusFilterBar';
 import GeniusMissing from '../components/genius/GeniusMissing';
+import GeniusRecords from '../components/genius/GeniusRecords';
 import StatsModeToggle from '../components/genius/StatsModeToggle';
 import { competitionId, geniusStatsSections, type GeniusLeagueId } from '../components/genius/geniusConfig';
 import { useGeniusFilters } from '../hooks/useGeniusFilters';
@@ -32,7 +33,8 @@ function StatisticsPage() {
   const cid = competitionId(editionId, leagueId);
   // Średnie na mecz (domyślnie) albo sumy — w adresie (?widok=sumy), żeby dało się podlinkować widok.
   const statsMode: StatsMode = params.get('widok') === 'sumy' ? 'tot' : 'avg';
-  const hasModes = section.slug !== 'liderzy';
+  const records = section.slug === 'rekordy';
+  const hasModes = section.slug !== 'liderzy' && !records;
   const setStatsMode = (mode: StatsMode) =>
     setParams(
       (prev) => {
@@ -57,7 +59,9 @@ function StatisticsPage() {
           <StatsModeToggle value={statsMode} onChange={setStatsMode} />
         </div>
       )}
-      {cid ? (
+      {cid && records ? (
+        <GeniusRecords key={cid} cid={cid} />
+      ) : cid ? (
         // Sekcje wybieramy w menu strony, więc podmenu Genius (Team / Player) chowamy.
         <GeniusEmbed
           key={`${cid}-${section.slug}`}

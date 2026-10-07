@@ -124,6 +124,8 @@ export const geniusStatsSections = [
   { slug: 'zawodnicy', label: 'Statystyki zawodników', path: 'statistics/player' },
   { slug: 'druzyny', label: 'Statystyki drużyn', path: 'statistics/team' },
   { slug: 'liderzy', label: 'Liderzy', path: 'leaders' },
+  // Rekordy (najwyższe zdobycze w meczu) liczymy sami ze statystyk meczów — Genius nie ma takiej strony.
+  { slug: 'rekordy', label: 'Rekordy', path: '' },
 ] as const;
 
 const leagueQuery = (cid: string) => {

@@ -1,0 +1,200 @@
+import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import GeniusEmbed from './GeniusEmbed';
+
+// Rekordy rozgrywek: najwyższe zdobycze zawodników w jednym meczu (punkty, zbiórki, asysty). Genius nie ma takiej
+// strony, więc liczymy je ze statystyk meczów (box score) wszystkich rozegranych meczów z terminarza. Box score
+// pobieramy po jednym naraz i zapamiętujemy w przeglądarce na dobę — kolejne wejście pobiera tylko nowe mecze.
+
+interface PlayerLine {
+  playerId: string;
+  player: string;
+  team: string;
+  opponent: string;
+  pts: number;
+  reb: number;
+  ast: number;
+}
+
+interface MatchLines {
+  savedAt: number;
+  date: string;
+  lines: PlayerLine[];
+}
+
+const STORAGE_PREFIX = 'genius-records-v1:';
+const MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const MATCH_TIMEOUT_MS = 25000;
+const TOP = 5;
+
+function loadStored(cid: number): Record<string, MatchLines> {
+  try {
+    const stored = JSON.parse(localStorage.getItem(STORAGE_PREFIX + cid) ?? '{}') as Record<string, MatchLines>;
+    return Object.fromEntries(Object.entries(stored).filter(([, match]) => Date.now() - match.savedAt < MAX_AGE_MS));
+  } catch {
+    return {};
+  }
+}
+
+function store(cid: number, matches: Record<string, MatchLines>) {
+  try {
+    localStorage.setItem(STORAGE_PREFIX + cid, JSON.stringify(matches));
+  } catch {
+    // Brak miejsca — rekordy zostają tylko na czas wizyty.
+  }
+}
+
+// Rozegrane mecze z terminarza Genius (id "extfix_<numer>" przy meczach ze statusem STATUS_COMPLETE).
+function readPlayedMatches(root: HTMLElement) {
+  return [...root.querySelectorAll('.match-wrap.STATUS_COMPLETE[id^="extfix_"]')].map((wrap) => wrap.id.replace('extfix_', ''));
+}
+
+const columnIndex = (headers: HTMLTableCellElement[], label: string) =>
+  headers.findIndex((th) => (th.dataset.geniusLabel ?? th.textContent ?? '').trim().toUpperCase() === label);
+
+// Linie zawodników z box score meczu: tabela każdej drużyny poprzedzona nagłówkiem z jej nazwą (sumy są w stopce).
+function readBoxScore(root: HTMLElement): MatchLines | undefined {
+  const box = root.querySelector('.boxscore');
+  if (!box) return undefined;
+  const teams = [...box.querySelectorAll('h4')].map((h) => h.textContent?.trim() ?? '').slice(0, 2);
+  const tables = [...box.querySelectorAll('table')].filter((table) => table.querySelector('td.playerName'));
+  if (tables.length < 2 || teams.length < 2) return undefined;
+  const lines = tables.slice(0, 2).flatMap((table, side) => {
+    const headers = [...(table.tHead?.rows[0]?.cells ?? [])];
+    const [pts, reb, ast] = ['PTS', 'REB', 'AST'].map((label) => columnIndex(headers, label));
+    if (pts < 0 || reb < 0 || ast < 0) return [];
+    return [...table.tBodies].flatMap((body) =>
+      [...body.rows].flatMap((row) => {
+        const link = row.querySelector<HTMLAnchorElement>('td.playerName a[href^="/zawodnicy/"]');
+        const playerId = link?.getAttribute('href')?.match(/^\/zawodnicy\/(\d+)/)?.[1];
+        if (!link || !playerId) return [];
+        const value = (index: number) => Number(row.cells[index]?.textContent?.trim()) || 0;
+        return [{ playerId, player: link.textContent?.trim() ?? '', team: teams[side], opponent: teams[1 - side], pts: value(pts), reb: value(reb), ast: value(ast) }];
+      }),
+    );
+  });
+  const date = root.querySelector('.match-header .match-time span')?.textContent?.trim() ?? '';
+  return lines.length > 0 ? { savedAt: Date.now(), date, lines } : undefined;
+}
+
+const dateFormat = new Intl.DateTimeFormat('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric' });
+// Data meczu z nagłówka Genius ("Oct 4, 2026, 8:30 PM" albo po tłumaczeniu "04.10.2026, 20:30").
+function formatDate(text: string) {
+  const pl = text.match(/^(\d{2}\.\d{2}\.\d{4})/);
+  if (pl) return pl[1];
+  const date = new Date(text.replace(/,(?=\s*\d{1,2}:)/, ''));
+  return Number.isNaN(date.getTime()) ? text : dateFormat.format(date);
+}
+
+const categories = [
+  { key: 'pts', label: 'Punkty', unit: 'PKT' },
+  { key: 'reb', label: 'Zbiórki', unit: 'ZB' },
+  { key: 'ast', label: 'Asysty', unit: 'AS' },
+] as const;
+
+interface RecordRow extends PlayerLine {
+  matchId: string;
+  date: string;
+}
+
+function RecordsTable({ cid, title, unit, rows, field }: { cid: number; title: string; unit: string; rows: RecordRow[]; field: 'pts' | 'reb' | 'ast' }) {
+  return (
+    <section className="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-slate-200">
+      <h2 className="border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-slate-900">{title}</h2>
+      {rows.length === 0 ? (
+        <p className="px-4 py-6 text-center text-sm text-slate-500">Brak danych.</p>
+      ) : (
+        <ol>
+          {rows.map((row, index) => (
+            <li key={`${row.matchId}-${row.playerId}`} className="flex items-center gap-3 border-t border-slate-100 px-4 py-2.5 first:border-t-0">
+              <span className="w-5 shrink-0 text-sm text-slate-400">{index + 1}.</span>
+              <div className="min-w-0 flex-1">
+                <Link to={`/zawodnicy/${row.playerId}?rozgrywki=${cid}`} className="block truncate text-sm font-semibold text-slate-900 hover:text-orange-600">
+                  {row.player}
+                </Link>
+                <p className="truncate text-xs text-slate-500">
+                  {row.team} ·{' '}
+                  <Link to={`/mecze/${row.matchId}?rozgrywki=${cid}&sekcja=boxscore`} className="hover:text-orange-600 hover:underline">
+                    vs {row.opponent}
+                  </Link>
+                  {row.date && `, ${formatDate(row.date)}`}
+                </p>
+              </div>
+              <span className={`shrink-0 text-right text-lg font-black tabular-nums ${index === 0 ? 'text-orange-600' : 'text-slate-900'}`}>
+                {row[field]}
+                <span className="ml-1 text-[10px] font-semibold text-slate-400">{unit}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
+  );
+}
+
+function GeniusRecords({ cid }: { cid: number }) {
+  const [matchIds, setMatchIds] = useState<string[]>();
+  const [matches, setMatches] = useState<Record<string, MatchLines>>(() => loadStored(cid));
+  const [failed, setFailed] = useState<string[]>([]);
+
+  // Kolejny mecz do pobrania: rozegrany, nie zapamiętany i nie pominięty po błędzie.
+  const pending = (matchIds ?? []).filter((id) => !matches[id] && !failed.includes(id));
+  const current = pending[0];
+
+  useEffect(() => {
+    if (!current) return;
+    const timer = window.setTimeout(() => setFailed((prev) => [...prev, current]), MATCH_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [current]);
+
+  const onBoxScore = (matchId: string) => (root: HTMLElement) => {
+    // Wersja demonstracyjna: meczu nie ma w migawce — pomijamy od razu, bez czekania na limit czasu.
+    if (root.querySelector('.genius-snapshot-missing')) {
+      setFailed((prev) => (prev.includes(matchId) ? prev : [...prev, matchId]));
+      return;
+    }
+    const found = readBoxScore(root);
+    if (!found) return;
+    setMatches((prev) => {
+      if (prev[matchId]) return prev;
+      const next = { ...prev, [matchId]: found };
+      store(cid, next);
+      return next;
+    });
+  };
+
+  const records = useMemo(() => {
+    const rows: RecordRow[] = Object.entries(matches).flatMap(([matchId, match]) => match.lines.map((line) => ({ ...line, matchId, date: match.date })));
+    return Object.fromEntries(categories.map(({ key }) => [key, [...rows].sort((a, b) => b[key] - a[key]).filter((row) => row[key] > 0).slice(0, TOP)])) as Record<
+      'pts' | 'reb' | 'ast',
+      RecordRow[]
+    >;
+  }, [matches]);
+
+  const loaded = (matchIds ?? []).filter((id) => matches[id]).length;
+
+  return (
+    <div className="mt-5">
+      <p className="mb-3 text-xs text-slate-500">
+        Najwyższe zdobycze w jednym meczu, liczone ze statystyk rozegranych meczów (zapamiętywane w przeglądarce na dobę).
+        {matchIds === undefined
+          ? ' Wczytywanie terminarza…'
+          : current
+            ? ` Wczytywanie meczów: ${loaded} z ${matchIds.length}…`
+            : ` Mecze: ${loaded} z ${matchIds.length}${failed.length ? ` (${failed.length} niedostępnych)` : ''}.`}
+      </p>
+      <div className="grid gap-4 md:grid-cols-3">
+        {categories.map(({ key, label, unit }) => (
+          <RecordsTable key={key} cid={cid} title={label} unit={unit} rows={records[key]} field={key} />
+        ))}
+      </div>
+      {/* Źródła danych poza ekranem: terminarz (lista rozegranych meczów) i box score bieżącego meczu. */}
+      <div aria-hidden="true" className="pointer-events-none fixed -left-[10000px] top-0 h-0 w-[1200px] overflow-hidden">
+        <GeniusEmbed page={`/competition/${cid}/schedule`} onContent={(root) => setMatchIds((prev) => prev ?? readPlayedMatches(root))} />
+        {current && <GeniusEmbed key={current} page={`/competition/${cid}/match/${current}/boxscore`} onContent={onBoxScore(current)} />}
+      </div>
+    </div>
+  );
+}
+
+export default GeniusRecords;
