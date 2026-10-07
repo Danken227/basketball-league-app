@@ -7,7 +7,7 @@ function Footer() {
         <div className="flex flex-col items-center gap-3 sm:flex-row sm:gap-4">
           <span className="text-[11px] font-semibold uppercase tracking-widest text-slate-500">Partner danych</span>
           <a href="https://www.geniussports.com/" target="_blank" rel="noreferrer" className="transition hover:opacity-80">
-            {/* Logo z dalk.pl; czarny napis na przezroczystym tle, więc w trybie ciemnym dostaje białe podłoże. */}
+            {/* Loga z dalk.pl mają ciemne napisy na przezroczystym tle, więc w trybie ciemnym dostają białe podłoże. */}
             <img
               src="https://dalk.pl/images/PARTNERZY/genius-sports-logo2.png"
               alt="Genius Sports"
@@ -19,14 +19,20 @@ function Footer() {
         </div>
         <div className="flex flex-col items-center gap-3 sm:flex-row sm:gap-4">
           <span className="text-[11px] font-semibold uppercase tracking-widest text-slate-500">Patron medialny</span>
-          <a href="https://strefabasketu.pl" target="_blank" rel="noreferrer" className="transition hover:opacity-80">
-            {/* Logo z dalk.pl; ciemny napis na przezroczystym tle, więc w trybie ciemnym dostaje białe podłoże. */}
+          {/* Logo z dalk.pl ma szeroki przezroczysty margines (rysunek to ok. 70% wysokości obrazka), więc obrazek
+              jest powiększony i przycięty w ramce: rysunek ma wtedy tę samą wysokość co logo Genius Sports (78px). */}
+          <a
+            href="https://strefabasketu.pl"
+            target="_blank"
+            rel="noreferrer"
+            className="block h-20 w-[106px] overflow-hidden rounded-lg transition hover:opacity-80 dark:bg-[#fff]"
+          >
             <img
               src="https://dalk.pl/images/PARTNERZY/logo-strefabasketu-_pl.png"
               alt="Strefa Basketu.pl"
-              width={80}
-              height={80}
-              className="h-20 w-20 rounded-lg dark:bg-[#fff]"
+              width={110}
+              height={110}
+              className="-mt-[14px] -ml-[1px] h-[110px] w-[110px] max-w-none"
             />
           </a>
         </div>
