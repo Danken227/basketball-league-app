@@ -273,7 +273,8 @@ function MatchCard({ match, schedule, streamUrl }: { match: WidgetMatch; schedul
 }
 
 // Oznaczenie źródła jak w widgecie Genius: logo FIBA LiveStats i "powered by Genius Sports".
-// Obrazki pochodzą z widgetu Genius (te same adresy, których używa ich pasek).
+// Obrazki pochodzą z widgetu Genius (te same adresy, których używa ich pasek). Mają tylko 65 px, więc stoją jeden
+// pod drugim w prawie naturalnej wielkości — obok siebie w kafelku musiałyby być małe i nieczytelne.
 const fibaLogo = 'https://widget.wh.geniussports.com/resources/images/fibaH.png';
 const geniusLogo = 'https://widget.wh.geniussports.com/resources/images/gs_widget.png';
 
@@ -284,11 +285,11 @@ function SourceLogos() {
       target="_blank"
       rel="noreferrer"
       aria-label="FIBA LiveStats, powered by Genius Sports"
-      className="my-1 hidden w-36 shrink-0 items-center justify-center gap-2.5 self-stretch rounded-xl bg-white px-3 md:flex"
+      className="my-1 hidden w-36 shrink-0 flex-col items-center justify-center gap-1.5 self-stretch rounded-xl bg-white px-3 md:flex"
     >
-      <img src={fibaLogo} alt="FIBA LiveStats" className="h-10 w-auto object-contain" />
-      <span className="h-10 w-px bg-slate-200" aria-hidden="true" />
-      <img src={geniusLogo} alt="powered by Genius Sports" className="h-10 w-auto object-contain" />
+      <img src={fibaLogo} alt="FIBA LiveStats" className="h-[58px] w-auto object-contain" />
+      <span className="h-px w-16 bg-slate-200" aria-hidden="true" />
+      <img src={geniusLogo} alt="powered by Genius Sports" className="h-[58px] w-auto object-contain" />
     </a>
   );
 }
