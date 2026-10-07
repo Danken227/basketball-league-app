@@ -27,6 +27,8 @@ interface WidgetTeam {
 
 interface WidgetMatch {
   id: string;
+  // Kwarta i czas gry trwającego meczu, np. "2. kw. 08:15" (z karty widgetu).
+  liveTime?: string;
   href: string;
   competition: string;
   league?: BarLeague;
@@ -53,14 +55,15 @@ const leagueBadge: Record<BarLeague, string> = { eks: 'EKS', '1': '1L', '2': '2L
 // Co ile ponownie czytamy karty widgetu (wyniki meczów na żywo).
 const LIVE_REFRESH_MS = 20000;
 
-// Wersja demonstracyjna (migawka): kolejne wyniki "trwającego" meczu, zmieniane co LIVE_REFRESH_MS, w pętli.
-const DEMO_LIVE_SCORES: [number, number][] = [
-  [12, 9],
-  [17, 15],
-  [21, 22],
-  [26, 24],
-  [31, 30],
-  [35, 33],
+// Wersja demonstracyjna (migawka): kolejne stany "trwającego" meczu (wynik, kwarta i czas gry),
+// zmieniane co LIVE_REFRESH_MS, w pętli.
+const DEMO_LIVE_STEPS: { score: [number, number]; time: string }[] = [
+  { score: [12, 9], time: '1. kw. 02:41' },
+  { score: [17, 15], time: '2. kw. 08:12' },
+  { score: [21, 22], time: '2. kw. 03:05' },
+  { score: [26, 24], time: '3. kw. 07:36' },
+  { score: [31, 30], time: '3. kw. 01:58' },
+  { score: [35, 33], time: '4. kw. 06:20' },
 ];
 
 const statusLabel: Record<MatchStatus, string> = { upcoming: 'Nadchodzący', live: 'Na żywo', final: 'Zakończony' };
@@ -79,6 +82,18 @@ function leagueOf(competition: string): BarLeague | undefined {
 }
 
 // Status karty widgetu: "Final", "Upcoming", a w trakcie meczu inne oznaczenia (np. kwarta).
+// Kwarta i czas gry z tekstu statusu karty w trakcie meczu (np. "Q2 08:15", "P2 8:15", "OT 02:00").
+// Gdy nie da się ich rozpoznać, zostaje sam status "Na żywo".
+function liveTimeOf(text: string): string | undefined {
+  if (statusOf(text) !== 'live') return undefined;
+  const clock = text.match(/\b(\d{1,2}:\d{2})\b/)?.[1];
+  const overtime = /\bOT\d?\b|overtime/i.test(text);
+  const period = text.match(/\b[QPK](\d)\b|\b(\d)(?:st|nd|rd|th)\b|period\s*(\d)/i);
+  const periodText = overtime ? 'dogr.' : period ? `${period[1] ?? period[2] ?? period[3]}. kw.` : undefined;
+  if (/half|przerwa/i.test(text)) return 'przerwa';
+  return [periodText, clock].filter(Boolean).join(' ') || undefined;
+}
+
 function statusOf(text: string): MatchStatus {
   if (/final/i.test(text)) return 'final';
   if (/upcoming|scheduled/i.test(text) || !text.trim()) return 'upcoming';
@@ -130,6 +145,7 @@ function readWidgetCards(root: ParentNode): WidgetMatch[] | undefined {
       competition,
       league: leagueOf(competition),
       status: statusOf(card.querySelector('.spls_matchstatus')?.textContent ?? ''),
+      liveTime: liveTimeOf(card.querySelector('.spls_matchstatus')?.textContent ?? ''),
       date: parseWidgetDate(card.querySelector('.spls_datefield')?.textContent?.trim() ?? '', timeText),
       hasTime: Boolean(timeText),
       teams: [...card.querySelectorAll('.spteam')].map((team) => ({
@@ -188,6 +204,7 @@ function MatchCard({ match, schedule }: { match: WidgetMatch; schedule?: Schedul
         <span className={`flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 font-semibold ${statusClass[status]}`}>
           {status === 'live' && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-400" aria-hidden="true" />}
           {statusLabel[status]}
+          {status === 'live' && match.liveTime && <span className="font-normal opacity-90">· {match.liveTime}</span>}
         </span>
       </div>
       <ul className="space-y-1.5">
@@ -279,11 +296,12 @@ function GeniusMatchBar({ widgetId }: { widgetId: string }) {
         if (!nearest) return;
         let step = 0;
         const showStep = () => {
-          const [home, away] = DEMO_LIVE_SCORES[step % DEMO_LIVE_SCORES.length];
+          const { score, time } = DEMO_LIVE_STEPS[step % DEMO_LIVE_STEPS.length];
+          const [home, away] = score;
           step++;
           setMatches((prev) =>
             prev?.map((m) =>
-              m.href === nearest.href ? { ...m, status: 'live', teams: m.teams.map((t, i) => ({ ...t, score: String(i === 0 ? home : away) })) } : m,
+              m.href === nearest.href ? { ...m, status: 'live', liveTime: time, teams: m.teams.map((t, i) => ({ ...t, score: String(i === 0 ? home : away) })) } : m,
             ),
           );
         };
