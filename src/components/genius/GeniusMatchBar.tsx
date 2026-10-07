@@ -50,6 +50,9 @@ const filterOptions: { value: Filter; label: string }[] = [
 
 const leagueBadge: Record<BarLeague, string> = { eks: 'EKS', '1': '1L', '2': '2L', '3': '3L', jun: 'JUN' };
 
+// Co ile ponownie czytamy karty widgetu (wyniki meczów na żywo).
+const LIVE_REFRESH_MS = 20000;
+
 const statusLabel: Record<MatchStatus, string> = { upcoming: 'Nadchodzący', live: 'Na żywo', final: 'Zakończony' };
 const statusClass: Record<MatchStatus, string> = {
   upcoming: 'bg-sky-500/15 text-sky-300',
@@ -264,17 +267,31 @@ function GeniusMatchBar({ widgetId }: { widgetId: string }) {
       };
     }
     const started = Date.now();
+    let liveTimer: number | undefined;
     const timer = window.setInterval(() => {
       const found = readWidget(document.getElementById(`spw_${widgetId}`));
       if (found) {
         setMatches(found);
         window.clearInterval(timer);
+        // Widget Genius sam odświeża karty w trakcie meczów (wynik, status) — czytamy je ponownie co 20 s,
+        // bez dodatkowych zapytań do Genius. Stan zmieniamy tylko, gdy coś się zmieniło.
+        let last = JSON.stringify(found);
+        liveTimer = window.setInterval(() => {
+          const fresh = readWidget(document.getElementById(`spw_${widgetId}`));
+          const text = fresh && JSON.stringify(fresh);
+          if (!fresh || text === last) return;
+          last = text!;
+          setMatches(fresh);
+        }, LIVE_REFRESH_MS);
       } else if (Date.now() - started > 15000) {
         setFailed(true);
         window.clearInterval(timer);
       }
     }, 500);
-    return () => window.clearInterval(timer);
+    return () => {
+      window.clearInterval(timer);
+      window.clearInterval(liveTimer);
+    };
   }, [widgetId]);
 
   // Terminarze tylko tych rozgrywek, które są na pasku. Te zapamiętane wcześniej w tej wizycie czytamy z pamięci
