@@ -46,8 +46,12 @@
   --color-slate-950: oklch(12.9% 0.042 264.695);
 }
 
-/* Obrazki (loga, zdjęcia) mają białe tła kafelków — w trybie ciemnym zostawiamy im jasne podłoże, żeby loga
-   z ciemnymi elementami były czytelne. */
-.dark img {
-  color-scheme: light;
+/* Loga drużyn i zdjęcia w treści Genius projektowane są na jasne tło — w trybie ciemnym zawsze dostają białe
+   podłoże (jak logo w nagłówku strony drużyny), inaczej ciemne loga znikają. Zastępcze loga (geniusLogo) mają
+   własne ciemne tło, więc je pomijamy. */
+.dark .genius-embed img:not(.genius-logo-placeholder),
+.dark .genius-native img:not(.genius-logo-placeholder):not(#shotchart img) {
+  border-radius: 0.375rem;
+  background-color: #fff;
+  padding: 2px;
 }
