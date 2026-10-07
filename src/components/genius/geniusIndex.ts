@@ -27,13 +27,19 @@ export interface PersonTeam {
   href?: string;
 }
 
-const STORAGE_KEY = 'genius-index-v1';
+// Wersja w nazwie: zmiana odrzuca indeksy zapisane wcześniej (v1 mógł zawierać skutki awarii Genius — puste listy
+// i fałszywe "nie grał").
+const STORAGE_KEY = 'genius-index-v2';
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 function load(): StoredIndex {
   try {
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null') as StoredIndex | null;
-    if (stored && Date.now() - stored.savedAt < MAX_AGE_MS) return stored;
+    if (stored && Date.now() - stored.savedAt < MAX_AGE_MS) {
+      // Trwale trzymamy tylko "grał" (patrz savePlayed) — starsze zapisy "nie grał" odrzucamy.
+      stored.played = Object.fromEntries(Object.entries(stored.played).filter(([, played]) => played));
+      return stored;
+    }
   } catch {
     // Uszkodzony albo niedostępny localStorage — zaczynamy od pustego indeksu.
   }
@@ -70,6 +76,9 @@ export const indexedCompetitions = geniusEditions.flatMap((edition) =>
 export const competitionInfo = (cid: number) => indexedCompetitions.find((c) => c.cid === cid);
 
 export function saveList(kind: IndexKind, cid: number, ids: string[]) {
+  // Pusta lista to prawie zawsze pusta odpowiedź Genius (np. przy awarii) — nie zapamiętujemy jej na dobę;
+  // GeniusIndexLoader po limicie czasu pominie te rozgrywki tylko w bieżącej wizycie.
+  if (ids.length === 0) return;
   index.lists[`${kind}:${cid}`] = ids;
   changed();
 }
@@ -88,14 +97,29 @@ export const pendingCompetitions = (kind: IndexKind) =>
 export const competitionsWith = (kind: IndexKind, id: string) =>
   indexedCompetitions.filter(({ cid }) => index.lists[`${kind}:${cid}`]?.includes(id)).map(({ cid }) => cid);
 
+// "Grał" zapamiętujemy na dobę, a "nie grał" tylko do odświeżenia strony: przy awarii Genius potrafi zwracać
+// "No results" nawet dla zawodników z występami i taki błąd nie może zostać w indeksie na cały dzień.
+const notPlayed = new Set<string>();
+
 export function savePlayed(personId: string, cid: number, played: boolean) {
   const key = `${personId}:${cid}`;
-  if (index.played[key] === played) return;
-  index.played[key] = played;
+  if (!played) {
+    if (notPlayed.has(key) || index.played[key] === true) return;
+    notPlayed.add(key);
+    version++;
+    listeners.forEach((listener) => listener());
+    return;
+  }
+  notPlayed.delete(key);
+  if (index.played[key] === true) return;
+  index.played[key] = true;
   changed();
 }
 
-export const playedIn = (personId: string, cid: number): boolean | undefined => index.played[`${personId}:${cid}`];
+export const playedIn = (personId: string, cid: number): boolean | undefined => {
+  const key = `${personId}:${cid}`;
+  return index.played[key] ?? (notPlayed.has(key) ? false : undefined);
+};
 
 export function savePersonTeams(personId: string, cid: number, teams: PersonTeam[]) {
   const key = `${personId}:${cid}`;

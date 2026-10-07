@@ -20,6 +20,8 @@ interface BlockInfo {
   empty: boolean;
   // Wersja demonstracyjna: tej strony nie ma w migawce danych (to nie znaczy, że zawodnik nie grał).
   missing?: boolean;
+  // Genius odpowiedział bez tabeli statystyk (np. przy chwilowej awarii) — nie wiadomo, czy zawodnik grał.
+  failed?: boolean;
   name?: string;
   // Zdjęcie zawodnika z nagłówka Genius (tylko gdy liga je dodała — bez zdjęcia Genius nie podaje bloku .photo).
   photo?: string;
@@ -42,6 +44,9 @@ function readBlock(root: HTMLElement, section: Section): BlockInfo {
   const photo = root.querySelector<HTMLImageElement>('.person-header .photo img')?.getAttribute('src') || undefined;
   const rows = [...root.querySelectorAll('table tbody tr')];
   const empty = rows.length === 0 || (rows.length === 1 && /no results|brak wyników/i.test(rows[0].textContent ?? ''));
+  // Brak występów potwierdza tylko tabela Genius (z wierszem "No results"); odpowiedź bez tabeli to błąd po stronie
+  // Genius — nie zapisujemy jej w indeksie jako "nie grał", bo zostałoby to zapamiętane na dobę.
+  const failed = !root.querySelector('table') && !root.querySelector('.genius-snapshot-missing');
   const teams: PersonTeam[] = [];
   if (!empty && section === 'statistics') {
     for (const row of rows) {
@@ -53,7 +58,7 @@ function readBlock(root: HTMLElement, section: Section): BlockInfo {
     }
   }
   const missing = Boolean(root.querySelector('.genius-snapshot-missing'));
-  return { empty, missing, name, photo, teams };
+  return { empty, missing, failed, name, photo, teams };
 }
 
 // Genius podaje zdjęcie w kilku rozmiarach, rozróżnionych końcówką nazwy pliku: T1 (75 px), S1 (200 px, miniatura
@@ -72,7 +77,7 @@ function PlayerBlocks({ personId, editionId, section }: { personId: string; edit
   const report = (cid: number, next: BlockInfo) => {
     // Przy okazji zapisujemy w indeksie, czy zawodnik grał w tych rozgrywkach (lista edycji w filtrze)
     // i w jakich drużynach (zakładka "Mecze" nie ma kolumny drużyny, więc stamtąd ją bierze).
-    if (!next.missing) savePlayed(personId, cid, !next.empty);
+    if (!next.missing && !next.failed) savePlayed(personId, cid, !next.empty);
     if (next.teams.length > 0) savePersonTeams(personId, cid, next.teams);
     setInfo((prev) => (JSON.stringify(prev[cid]) === JSON.stringify(next) ? prev : { ...prev, [cid]: next }));
   };
@@ -118,9 +123,11 @@ function PlayerBlocks({ personId, editionId, section }: { personId: string; edit
       {loaded < blocks.length && <p className="mt-6 text-sm text-slate-500">Wczytywanie danych Genius Sports…</p>}
       {loaded === blocks.length && played.length === 0 && (
         <p className="mt-6 rounded-xl bg-white p-6 text-center text-sm text-slate-500 ring-1 ring-slate-200">
-          {blocks.some((b) => info[b.cid]?.missing)
-            ? 'Tej części strony zawodnika nie ma w wersji demonstracyjnej (zapis danych Genius Sports).'
-            : `Zawodnik nie wystąpił w żadnym meczu w edycji ${edition.name}. Wybierz inną edycję.`}
+          {blocks.some((b) => info[b.cid]?.failed)
+            ? 'Genius Sports nie zwrócił danych zawodnika. Spróbuj odświeżyć stronę za chwilę.'
+            : blocks.some((b) => info[b.cid]?.missing)
+              ? 'Tej części strony zawodnika nie ma w wersji demonstracyjnej (zapis danych Genius Sports).'
+              : `Zawodnik nie wystąpił w żadnym meczu w edycji ${edition.name}. Wybierz inną edycję.`}
         </p>
       )}
 
@@ -227,7 +234,7 @@ function PlayedChecker({ personId }: { personId: string }) {
         showSubMenus={false}
         onContent={(root) => {
           const block = readBlock(root, 'statistics');
-          savePlayed(personId, next, !block.empty);
+          if (!block.failed) savePlayed(personId, next, !block.empty);
           if (block.teams.length > 0) savePersonTeams(personId, next, block.teams);
         }}
       />
