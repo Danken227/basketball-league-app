@@ -374,7 +374,7 @@ function GeniusMatchBar({ widgetId }: { widgetId: string }) {
   const upcoming = visible.filter(({ match }) => match.status !== 'final');
 
   return (
-    <section aria-label="Wyniki i najbliższe mecze" className="relative overflow-hidden bg-slate-900 text-white">
+    <section aria-label="Wyniki i najbliższe mecze" className="keep-dark relative overflow-hidden bg-slate-900 text-white">
       <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6 lg:px-8">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="flex items-baseline gap-3 text-sm font-semibold text-slate-200">

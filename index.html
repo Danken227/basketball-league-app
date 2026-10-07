@@ -8,6 +8,10 @@
          automatycznego tłumaczenia. Tłumacz podmienia teksty w drzewie strony i przy przejściu na inną stronę
          React się wysypuje (biała strona do odświeżenia), więc tłumaczenie wyłączamy. -->
     <meta name="google" content="notranslate" />
+    <!-- Tryb ciemny zapamiętany w przeglądarce (ThemeToggle) — ustawiany przed wyświetleniem, bez mignięcia jasnej wersji. -->
+    <script>
+      try { if (localStorage.getItem('theme') === 'dark') document.documentElement.classList.add('dark'); } catch {}
+    </script>
     <title>DALK – liga koszykówki amatorskiej</title>
     <!-- Wcześniejsze otwarcie połączeń do serwerów Genius Sports (osadzenia, widget, logo) i jQuery, którego używają. -->
     <link rel="preconnect" href="https://hosted.dcd.shared.geniussports.com" />

@@ -36,7 +36,7 @@ function PlayerPage() {
         ← Zawodnicy
       </Link>
 
-      <section className="mt-4 flex flex-col gap-6 overflow-hidden rounded-xl bg-slate-950 p-6 text-white sm:flex-row sm:items-end">
+      <section className="keep-dark mt-4 flex flex-col gap-6 overflow-hidden rounded-xl bg-slate-950 p-6 text-white sm:flex-row sm:items-end">
         {active ? (
           <PlayerPhoto team={latest.team} number={latest.number} size="lg" />
         ) : (

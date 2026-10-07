@@ -89,7 +89,7 @@ function PlayerBlocks({ personId, editionId, section }: { personId: string; edit
 
   return (
     <>
-      <section className="mt-4 flex items-center gap-5 rounded-xl bg-slate-950 p-6 text-white">
+      <section className="keep-dark mt-4 flex items-center gap-5 rounded-xl bg-slate-950 p-6 text-white">
         {photo && (
           <PhotoDialog thumbnail={photo} full={largePhoto(photo)} alt={name ?? 'Zdjęcie zawodnika'} className="h-24 w-24 ring-2 ring-white/10 sm:h-32 sm:w-32" />
         )}

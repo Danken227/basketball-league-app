@@ -32,7 +32,7 @@ function TeamCell({ teamId, seasonId, won }: { teamId: string; seasonId: string;
 function RoundTable({ round, matches, showGroup }: { round: number; matches: Match[]; showGroup: boolean }) {
   return (
     <section className="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-slate-200">
-      <header className="flex items-center justify-between border-b-2 border-orange-500 bg-slate-950 px-4 py-2.5">
+      <header className="keep-dark flex items-center justify-between border-b-2 border-orange-500 bg-slate-950 px-4 py-2.5">
         <h2 className="font-black uppercase text-white">{round}. kolejka</h2>
         <p className="text-xs text-slate-400">
           {dateFormat.format(matches[0].date)}
@@ -69,7 +69,7 @@ function RoundTable({ round, matches, showGroup }: { round: number; matches: Mat
                   <td className="px-3 py-2.5 text-slate-500">{m.venue}</td>
                   <td className="px-4 py-2.5 text-center">
                     {m.played ? (
-                      <span className="inline-block min-w-20 rounded bg-slate-950 px-2 py-1 font-bold tabular-nums text-white">
+                      <span className="keep-dark inline-block min-w-20 rounded bg-slate-950 px-2 py-1 font-bold tabular-nums text-white">
                         {m.homeScore} : {m.awayScore}
                         {m.overtime && <span className="ml-1 text-[10px] font-semibold text-orange-400">OT</span>}
                       </span>

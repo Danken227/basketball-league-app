@@ -46,7 +46,7 @@ function GroupTable({ league, group, seasonId }: { league: League; group: string
 
   return (
     <section className="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-slate-200">
-      <header className="flex items-center justify-between border-b-2 border-orange-500 bg-slate-950 px-4 py-3">
+      <header className="keep-dark flex items-center justify-between border-b-2 border-orange-500 bg-slate-950 px-4 py-3">
         <p className="text-sm font-semibold uppercase text-slate-400">
           Liga: <span className="text-orange-400">{league.name}</span>
         </p>

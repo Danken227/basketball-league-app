@@ -59,7 +59,7 @@ function ResultsBar() {
   const nextMatches = next.filter(byLeague);
 
   return (
-    <section aria-label="Wyniki i najbliższe mecze" className="bg-slate-900 text-white">
+    <section aria-label="Wyniki i najbliższe mecze" className="keep-dark bg-slate-900 text-white">
       <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6 lg:px-8">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-slate-200">Mecze</h2>
