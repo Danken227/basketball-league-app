@@ -51,6 +51,19 @@ function removeGeniusStylesheets() {
   }, 0);
 }
 
+// Skrypt Genius wczytuje się asynchronicznie i potrafi dodać arkusz już po wyjściu ze strony meczu (np. szybki
+// powrót) — wtedy psuł wygląd następnej strony aż do odświeżenia. Arkusz dodany, gdy na stronie nie ma osadzenia
+// w stylu Genius, usuwamy od razu.
+if (typeof MutationObserver !== 'undefined') {
+  new MutationObserver((mutations) => {
+    if (document.querySelector('.genius-native')) return;
+    for (const mutation of mutations)
+      mutation.addedNodes.forEach((node) => {
+        if (node instanceof HTMLLinkElement && node.matches(GENIUS_STYLESHEETS)) node.remove();
+      });
+  }).observe(document.head, { childList: true });
+}
+
 // W migawce arkusza nie dodaje skrypt Genius — wczytujemy jego kopię (adresy obrazków wskazują serwer Genius).
 function addSnapshotStylesheet() {
   if (document.querySelector('link[data-genius-snapshot]')) return;

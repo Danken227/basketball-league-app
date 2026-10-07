@@ -38,6 +38,7 @@ const phrases: Record<string, string> = {
   competition: 'Rozgrywki',
   date: 'Data',
   opposition: 'Rywal',
+  venue: 'Hala',
   result: 'Wynik',
   position: 'Poz.',
   // Mecz: nagłówek, status, filtry
@@ -307,7 +308,7 @@ function translateChartTitle(title: string): string | undefined {
   return undefined;
 }
 
-function translateDate(text: string): string | undefined {
+export function translateDate(text: string): string | undefined {
   // "Sep 20, 2026, 6:00 PM" → "20.09.2026, 18:00"
   const long = text.match(/^([A-Za-z]{3}) (\d{1,2}), (\d{4})(?:,? (\d{1,2}):(\d{2})\s*(AM|PM))?$/i);
   if (long && months.includes(long[1].toLowerCase())) {
