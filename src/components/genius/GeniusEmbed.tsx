@@ -1,7 +1,8 @@
 import { useEffect, useId, useRef, useState, type MouseEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { geniusCacheKey, readGeniusCache, writeGeniusCache } from './geniusCache';
-import { GENIUS_EMBED_URL, isGeniusDomain, mapGeniusPath } from './geniusConfig';
+import { GENIUS_EMBED_URL, geniusSnapshot, isGeniusDomain, mapGeniusPath } from './geniusConfig';
+import { installSnapshotScripts, loadSnapshot, SNAPSHOT_DIR, snapshotMissingHtml } from './geniusSnapshot';
 import { translateGenius } from './geniusI18n';
 import { fillMissingLogos, replaceBrokenLogo } from './geniusLogo';
 import { handleSortClick, markSortedColumns } from './geniusTableSort';
@@ -40,7 +41,25 @@ interface GeniusEmbedProps {
 
 export type StatsMode = 'avg' | 'tot';
 
-const GENIUS_STYLESHEETS = 'link[href*="hosted.dcd.shared.geniussports.com/css"], link[href*="font-awesome"]';
+const GENIUS_STYLESHEETS = 'link[href*="hosted.dcd.shared.geniussports.com/css"], link[href*="font-awesome"], link[data-genius-snapshot]';
+
+// Arkusz Genius zostawiony w <head> zmieniałby wygląd pozostałych stron — usuwamy go, gdy na stronie
+// nie ma już osadzenia w ich stylu (Genius doda go ponownie przy następnym).
+function removeGeniusStylesheets() {
+  window.setTimeout(() => {
+    if (!document.querySelector('.genius-native')) document.querySelectorAll(GENIUS_STYLESHEETS).forEach((link) => link.remove());
+  }, 0);
+}
+
+// W migawce arkusza nie dodaje skrypt Genius — wczytujemy jego kopię (adresy obrazków wskazują serwer Genius).
+function addSnapshotStylesheet() {
+  if (document.querySelector('link[data-genius-snapshot]')) return;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = `${SNAPSHOT_DIR}/genius.css`;
+  link.dataset.geniusSnapshot = '';
+  document.head.appendChild(link);
+}
 
 // Genius buduje linki na dwa sposoby: na zarejestrowanej domenie jako "<adres>?&WHurl=/competition/..",
 // a w pozostałych przypadkach wprost do swoich stron (https://hosted.dcd.shared.geniussports.com/DALK/en/competition/..).
@@ -126,7 +145,7 @@ function GeniusEmbed({
     onContentRef.current = onContent;
   });
   const navigate = useNavigate();
-  const allowed = isGeniusDomain();
+  const allowed = isGeniusDomain() || geniusSnapshot;
   // Każde osadzenie ma własną zmienną konfiguracji i element, więc kilka może działać na jednej stronie.
   const instance = useId().replace(/[^a-zA-Z0-9]/g, '');
   const placeholderId = `spil_w_h_${instance}`;
@@ -147,6 +166,23 @@ function GeniusEmbed({
   useEffect(() => {
     const placeholder = ref.current;
     if (!allowed || !placeholder) return;
+
+    // Wersja demonstracyjna: treść z migawki zamiast skryptu Genius (na stronie meczu z kopią arkusza Genius).
+    if (geniusSnapshot) {
+      let active = true;
+      placeholder.innerHTML = loadingHtml;
+      if (nativeStyle) addSnapshotStylesheet();
+      installSnapshotScripts();
+      loadSnapshot(cacheKey).then((html) => {
+        if (active) placeholder.innerHTML = html ?? snapshotMissingHtml(expectedCompetition);
+      });
+      return () => {
+        active = false;
+        placeholder.innerHTML = '';
+        if (nativeStyle) removeGeniusStylesheets();
+      };
+    }
+
     preloadJQuery();
     // Zapamiętana kopia (oznaczona klasą genius-cached) albo komunikat o wczytywaniu.
     const cached = readGeniusCache(cacheKey);
@@ -209,13 +245,7 @@ function GeniusEmbed({
       script.remove();
       delete window[configName];
       placeholder.innerHTML = '';
-      // Arkusz Genius zostawiony w <head> zmieniałby wygląd pozostałych stron — usuwamy go,
-      // gdy na stronie nie ma już osadzenia w ich stylu (Genius doda go ponownie przy następnym).
-      if (nativeStyle) {
-        window.setTimeout(() => {
-          if (!document.querySelector('.genius-native')) document.querySelectorAll(GENIUS_STYLESHEETS).forEach((link) => link.remove());
-        }, 0);
-      }
+      if (nativeStyle) removeGeniusStylesheets();
     };
   }, [allowed, requestPage, retryToken, blockDisplay, showSubMenus, showMatchFilter, showTitle, nativeStyle, placeholderId, configName, cacheKey, expectedCompetition]);
 
@@ -282,7 +312,7 @@ function GeniusEmbed({
     placeholder.addEventListener('change', onPager);
     // Przed footable (faza przechwytywania): kolumny tekstowe i trzecie kliknięcie (powrót do kolejności z Genius).
     const onSortClick = (event: Event) => {
-      if (!handleSortClick(event)) return;
+      if (!handleSortClick(event, geniusSnapshot)) return;
       event.stopPropagation();
       // Zatrzymane zdarzenie nie dotrze do obsługi paska stron — powrót na pierwszą stronę wywołujemy sami.
       if (pageSize) handlePagerEvent(event, placeholder, pageSize);

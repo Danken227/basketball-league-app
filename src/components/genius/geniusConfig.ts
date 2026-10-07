@@ -17,11 +17,14 @@ const allowedDomains = ['dalk.pl', 'sportlivepolska.pl'];
 export const isGeniusDomain = (hostname = window.location.hostname) =>
   allowedDomains.some((domain) => hostname === domain || hostname.endsWith(`.${domain}`));
 
-// Źródło danych strony: na domenie ligi elementy Genius, poza nią nasze dane testowe.
-// Można to wymusić zmienną VITE_DATA_SOURCE=genius|mock (np. podgląd danych testowych na dev.dalk.pl).
-export type DataSource = 'genius' | 'mock';
+// Źródło danych strony: na domenie ligi elementy Genius na żywo, poza nią nasze dane testowe (wymyślone drużyny).
+// Zmienna VITE_DATA_SOURCE=genius|snapshot|mock wymusza źródło; "snapshot" to migawka danych Genius (zapisane treści
+// bieżącej edycji, geniusSnapshot.ts) — wersja demonstracyjna budowana z public/snapshot, którego nie ma w repozytorium.
+export type DataSource = 'genius' | 'snapshot' | 'mock';
 const forcedSource = import.meta.env.VITE_DATA_SOURCE;
-export const dataSource: DataSource = forcedSource === 'genius' || forcedSource === 'mock' ? forcedSource : isGeniusDomain() ? 'genius' : 'mock';
+export const dataSource: DataSource =
+  forcedSource === 'genius' || forcedSource === 'snapshot' || forcedSource === 'mock' ? forcedSource : isGeniusDomain() ? 'genius' : 'mock';
+export const geniusSnapshot = dataSource === 'snapshot';
 
 // Pełne polskie tłumaczenie treści Genius (geniusI18n): VITE_GENIUS_TRANSLATION=pl (np. w .env.local).
 // Domyślnie treść zostaje po angielsku, z polskimi tylko nazwami tabel statystyk i datami meczów drużyny.
@@ -35,7 +38,7 @@ export interface GeniusEdition {
   competitions: Partial<Record<LeagueId, number>>;
 }
 
-export const geniusEditions: GeniusEdition[] = [
+const allEditions: GeniusEdition[] = [
   { id: '2026-27', name: '2026/27', competitions: { eks: 49970, '1': 49974, '2': 50006, '3': 50016 } },
   { id: '2026', name: '2026', competitions: { eks: 48294, '1': 48292, '2': 48291, '3': 48293 } },
   { id: '2025-26', name: '2025/26', competitions: { eks: 42328, '1': 42459, '2': 42460, '3': 42461 } },
@@ -44,6 +47,9 @@ export const geniusEditions: GeniusEdition[] = [
   { id: '2024', name: '2024', competitions: { eks: 38002, '1': 38003, '2': 38004, '3': 38007 } },
   { id: '2023-24', name: '2023/24', competitions: { eks: 36963, '1': 36964, '2': 36965, '3': 36966 } },
 ];
+
+// Migawka obejmuje tylko bieżącą edycję, więc w niej filtry nie proponują innych.
+export const geniusEditions = geniusSnapshot ? allEditions.slice(0, 1) : allEditions;
 
 export const currentGeniusEdition = geniusEditions[0];
 export const geniusEditionById = new Map(geniusEditions.map((edition) => [edition.id, edition]));

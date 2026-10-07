@@ -4,7 +4,7 @@ import { FilterRow, FilterSelect } from '../../components/common/Filters';
 import PhotoDialog from '../../components/common/PhotoDialog';
 import GeniusEmbed, { type StatsMode } from '../../components/genius/GeniusEmbed';
 import GeniusIndexLoader from '../../components/genius/GeniusIndexLoader';
-import { currentGeniusEdition, findCompetition, geniusEditionById, geniusEditions } from '../../components/genius/geniusConfig';
+import { currentGeniusEdition, findCompetition, geniusEditionById, geniusEditions, geniusSnapshot } from '../../components/genius/geniusConfig';
 import { competitionsWith, pendingCompetitions, personTeams, playedIn, savePersonTeams, savePlayed, type PersonTeam } from '../../components/genius/geniusIndex';
 import { leagues, type League } from '../../data/league';
 import { useGeniusIndex } from '../../hooks/useGeniusIndex';
@@ -244,7 +244,8 @@ function GeniusPlayerPage() {
   const options = editionOptions.filter((o) => o.value === editionId || playedEditions.some((e) => e.id === o.value));
   const listsLeft = pendingCompetitions('players').length;
   const checksLeft = competitionsWith('players', id!).filter((cid) => playedIn(id!, cid) === undefined).length;
-  const checking = listsLeft > 0 || checksLeft > 0;
+  // W migawce danych jest tylko bieżąca edycja — nie ma czego sprawdzać.
+  const checking = !geniusSnapshot && (listsLeft > 0 || checksLeft > 0);
 
   // Wejście bez wskazanej edycji (np. z listy historycznej): gdy w bieżącej zawodnik nie zagrał,
   // przechodzimy na jego najnowszą edycję z występami.
@@ -308,8 +309,8 @@ function GeniusPlayerPage() {
         </FilterRow>
       </div>
       {/* Indeks list zawodników i sprawdzanie występów działają w tle, po jednym zapytaniu naraz. */}
-      <GeniusIndexLoader kind="players" />
-      <PlayedChecker personId={id!} />
+      {!geniusSnapshot && <GeniusIndexLoader kind="players" />}
+      {!geniusSnapshot && <PlayedChecker personId={id!} />}
       {/* Klucz resetuje zebrane informacje o blokach przy zmianie edycji lub sekcji. */}
       <PlayerBlocks key={`${id}-${editionId}-${section}`} personId={id!} editionId={editionId} section={section} />
     </div>

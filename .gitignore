@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Migawka danych Genius (wersja demonstracyjna wgrywana przez Vercel CLI, poza repozytorium)
+public/snapshot/
+.vercel
