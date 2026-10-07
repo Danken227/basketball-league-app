@@ -106,13 +106,12 @@ function Header() {
     <header className="keep-dark sticky top-0 z-30 bg-slate-950 text-slate-50 shadow-lg shadow-slate-900/20">
       <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-3 sm:px-6 lg:px-8">
         <NavLink to="/" className="flex shrink-0 items-center gap-3 font-semibold text-white" onClick={() => setOpen(false)}>
-          <span className="grid h-11 w-11 place-items-center rounded-full border-2 border-orange-400 bg-gradient-to-br from-orange-500 to-red-600 text-xs font-black tracking-tight text-white">
-            LKA
-          </span>
+          {/* Logo ligi z dalk.pl (public/dalk-logo.png). */}
+          <img src="/dalk-logo.png" alt="DALK" width={44} height={44} className="h-11 w-11" />
           <span className="hidden text-sm leading-tight sm:block">
-            Liga koszykówki
+            Dolnośląska
             <br />
-            <span className="text-slate-400">amatorskiej</span>
+            <span className="text-slate-400">Liga Koszykówki</span>
           </span>
         </NavLink>
 
