@@ -87,9 +87,10 @@ function PlayerBlocks({ personId, editionId, section }: { personId: string; edit
   const name = Object.values(info).find((i) => i.name)?.name;
   const photo = Object.values(info).find((i) => i.photo)?.photo;
 
+  // Cała treść w ramce jak strona drużyny (karta osadzenia Genius) — czarny nagłówek odcina się od niej także w trybie ciemnym.
   return (
-    <>
-      <section className="keep-dark mt-4 flex items-center gap-5 rounded-xl bg-slate-950 p-6 text-white">
+    <div className="mt-4 rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+      <section className="keep-dark flex items-center gap-5 rounded-xl bg-slate-950 p-6 text-white">
         {photo && (
           <PhotoDialog thumbnail={photo} full={largePhoto(photo)} alt={name ?? 'Zdjęcie zawodnika'} className="h-24 w-24 ring-2 ring-white/10 sm:h-32 sm:w-32" />
         )}
@@ -136,7 +137,7 @@ function PlayerBlocks({ personId, editionId, section }: { personId: string; edit
           <LeagueBlock key={cid} league={league} cid={cid} personId={personId} section={section} info={info[cid]} onInfo={(i) => report(cid, i)} />
         ))}
       </div>
-    </>
+    </div>
   );
 }
 
