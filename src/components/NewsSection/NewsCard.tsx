@@ -1,16 +1,13 @@
 import { Link } from 'react-router-dom';
 import { formatNewsDate, newsCategory, newsPath, type NewsItem } from '../../data/news';
 
-// Okładka karty: kolor kategorii z rysunkiem piłki (wpisy na dalk.pl mają wspólny baner zamiast własnych zdjęć).
+// Okładka: baner wpisu z dalk.pl (te same tła co tam). Kolor kategorii widać tylko do wczytania obrazka.
 export function NewsCover({ item, className }: { item: NewsItem; className: string }) {
   const category = newsCategory(item);
   return (
     <div className={`keep-dark relative overflow-hidden bg-gradient-to-br ${category.gradient} ${className}`}>
-      <svg className="absolute -right-6 -bottom-6 h-32 w-32 text-white/15" viewBox="0 0 100 100" fill="none" stroke="currentColor" strokeWidth="4" aria-hidden="true">
-        <circle cx="50" cy="50" r="46" />
-        <path d="M4 50h92M50 4v92M18 18c18 18 18 46 0 64M82 18c-18 18-18 46 0 64" />
-      </svg>
-      <span className="absolute left-3 top-3 rounded-full bg-black/30 px-2 py-0.5 text-[11px] font-semibold text-white backdrop-blur">{category.label}</span>
+      <img src={item.image} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover" />
+      <span className="absolute left-3 top-3 rounded-full bg-black/50 px-2 py-0.5 text-[11px] font-semibold text-white backdrop-blur">{category.label}</span>
     </div>
   );
 }
@@ -25,7 +22,7 @@ function NewsCard({ item, featured = false }: { item: NewsItem; featured?: boole
       }`}
     >
       <article>
-        <NewsCover item={item} className={featured ? 'h-48' : 'h-32'} />
+        <NewsCover item={item} className={featured ? 'aspect-[5/2]' : 'aspect-[2/1]'} />
         <div className="p-4">
           <time dateTime={item.date} className="text-[11px] text-slate-500">
             {formatNewsDate(item.date)}

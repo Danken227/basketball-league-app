@@ -11,6 +11,8 @@ export interface NewsItem {
   date: string;
   excerpt: string;
   html: string;
+  // Baner wpisu z dalk.pl (okładka karty i wpisu).
+  image: string;
   // Adres wpisu na dalk.pl.
   source: string;
 }
@@ -32,7 +34,7 @@ export const regulations: RegulationsSection[] = regulationsData;
 
 export const NEWS_PER_PAGE = 10;
 
-// Wpisy na dalk.pl nie mają kategorii (wszystkie to "Aktualności"), więc ustalamy ją z tytułu — kolor okładki karty.
+// Wpisy na dalk.pl nie mają kategorii (wszystkie to "Aktualności"), więc ustalamy ją z tytułu — etykieta na okładce.
 const categories: { pattern: RegExp; category: NewsCategory }[] = [
   { pattern: /terminarz/i, category: { label: 'Terminarz', gradient: 'from-violet-600 to-purple-700' } },
   { pattern: /zapisy/i, category: { label: 'Zapisy', gradient: 'from-amber-500 to-orange-600' } },
