@@ -210,8 +210,12 @@ function MatchCard({ match, schedule, streamUrl }: { match: WidgetMatch; schedul
       <div className="mb-2 flex items-center justify-between gap-2 text-[11px]">
         <span className="flex min-w-0 items-center gap-1.5">
           <span className="truncate rounded bg-orange-500/20 px-1.5 py-0.5 font-semibold text-orange-300" title={match.competition}>
-            {match.league ? leagueBadge[match.league] : match.competition}
-            {match.league === 'jun' && ` · ${match.competition.match(/U\d+/)?.[0] ?? ''}`}
+            {/* Juniorzy: sama kategoria wiekowa ("U17") — z "JUN · " etykieta nie mieściła się obok statusu meczu w trakcie. */}
+            {match.league === 'jun'
+              ? (match.competition.match(/U\d+/)?.[0] ?? leagueBadge.jun)
+              : match.league
+                ? leagueBadge[match.league]
+                : match.competition}
           </span>
           {status === 'live' && streamUrl && (
             <a
