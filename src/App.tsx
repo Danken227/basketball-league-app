@@ -13,9 +13,12 @@ import GeniusMatchPage from './pages/genius/GeniusMatchPage';
 import GeniusPlayerPage from './pages/genius/GeniusPlayerPage';
 import GeniusPlayersPage from './pages/genius/GeniusPlayersPage';
 import Home from './pages/Home';
+import NewsArticlePage from './pages/NewsArticlePage';
+import NewsPage from './pages/NewsPage';
 import Placeholder from './pages/Placeholder';
 import PlayerPage from './pages/PlayerPage';
 import PlayersPage from './pages/PlayersPage';
+import RegulationsPage from './pages/RegulationsPage';
 import SchedulePage from './pages/SchedulePage';
 import StatisticsPage from './pages/StatisticsPage';
 import TablesPage from './pages/TablesPage';
@@ -26,7 +29,6 @@ import TeamsPage from './pages/TeamsPage';
 const SnapshotCrawler = import.meta.env.DEV ? lazy(() => import('./pages/SnapshotCrawler')) : null;
 
 const placeholderPages = [
-  { path: '/regulamin', title: 'Regulamin' },
   { path: '/rejestracja', title: 'Rejestracja zespołu' },
 ];
 
@@ -60,6 +62,9 @@ function App() {
             {/* Na domenie ligi podstrony pokazują dane Genius Sports, poza nią nasze dane testowe. */}
             <Routes>
               <Route path="/" element={<Home />} />
+              <Route path="/aktualnosci" element={<NewsPage />} />
+              <Route path="/aktualnosci/:slug" element={<NewsArticlePage />} />
+              <Route path="/regulamin" element={<RegulationsPage />} />
               <Route path="/tabele" element={<BySource genius={<GeniusListPage title="Tabele" icon={icons.table} path="standings" />} mock={<TablesPage />} />} />
               <Route
                 path="/terminarz"
