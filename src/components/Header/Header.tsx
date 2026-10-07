@@ -34,6 +34,8 @@ const navItems: (NavLinkItem | NavGroupItem)[] = [
 ];
 
 const youtubeUrl = 'https://www.youtube.com/@Liga_DALK';
+// Formularz zgłoszenia drużyny z dalk.pl (ten sam plik co przycisk „Zgłoś team” na stronie ligi).
+const registrationFormUrl = 'https://dalk.pl/images/PLIKI-DO-POBRANIA/formularz-18-edycja.doc';
 
 const itemClass = (active: boolean) =>
   `rounded-full px-3 py-2 text-sm transition ${active ? 'bg-white/10 text-white' : 'text-slate-300 hover:bg-white/10 hover:text-white'}`;
@@ -156,13 +158,15 @@ function Header() {
             </svg>
             YouTube
           </a>
-          <NavLink
-            to="/rejestracja"
+          {/* Jak na dalk.pl: przycisk pobiera formularz zgłoszeniowy (plik Word), bez przechodzenia na inną stronę. */}
+          <a
+            href={registrationFormUrl}
+            download
             onClick={() => setOpen(false)}
             className="mt-2 rounded-full bg-orange-500 px-4 py-2 text-center text-sm font-semibold text-slate-950 transition hover:bg-orange-400 lg:ml-2 lg:mt-0"
           >
             Zgłoś zespół
-          </NavLink>
+          </a>
         </nav>
         {/* Na telefonie obok przycisku menu, na komputerze na końcu menu (prawy górny róg). */}
         <ThemeToggle />
