@@ -40,7 +40,7 @@ function TeamPage() {
         </FilterRow>
       </div>
 
-      <section className="mt-4 flex flex-col items-center gap-6 rounded-xl bg-slate-950 p-6 text-white sm:flex-row">
+      <section className="keep-dark mt-4 flex flex-col items-center gap-6 rounded-xl bg-slate-950 p-6 text-white sm:flex-row">
         <span className="grid h-32 w-32 shrink-0 place-items-center rounded-xl bg-white">
           <span className="scale-[2.6]">
             <TeamBadge team={team} />

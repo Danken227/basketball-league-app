@@ -4,16 +4,16 @@
 */
 
 .genius-embed {
-  color: #334155;
+  color: var(--color-slate-700);
   font-size: 0.875rem;
 }
 
 .genius-embed .genius-status {
-  color: #64748b;
+  color: var(--color-slate-500);
 }
 
 .genius-embed .genius-status strong {
-  color: #0f172a;
+  color: var(--color-slate-900);
 }
 
 /* Genius ukrywa treść do czasu wczytania własnego CSS, którego nie używamy — odsłaniamy ją od razu. */
@@ -35,12 +35,12 @@
 .genius-embed h4 {
   margin: 0.75rem 0 0.5rem;
   font-weight: 800;
-  color: #0f172a;
+  color: var(--color-slate-900);
 }
 
 .genius-embed a {
   font-weight: 600;
-  color: #0f172a;
+  color: var(--color-slate-900);
   text-underline-offset: 2px;
 }
 
@@ -65,18 +65,18 @@
 .genius-embed .generic-list-menu a,
 .genius-embed .menuoption {
   border-radius: 9999px;
-  background: #ffffff;
+  background: var(--color-white);
   padding: 0.375rem 1rem;
   font-size: 0.8125rem;
-  color: #475569;
-  box-shadow: inset 0 0 0 1px #e2e8f0;
+  color: var(--color-slate-600);
+  box-shadow: inset 0 0 0 1px var(--color-slate-200);
   text-decoration: none;
 }
 
 .genius-embed .generic-list-menu a.currentoption,
 .genius-embed .menuoption.currentoption {
   background: #f97316;
-  color: #020617;
+  color: var(--color-slate-950);
   box-shadow: none;
 }
 
@@ -87,14 +87,14 @@
 }
 
 .genius-embed th {
-  background: #020617;
+  background: var(--color-slate-950);
   padding: 0.625rem 0.75rem;
   text-align: left;
   font-size: 0.6875rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #ffffff;
+  color: var(--color-white);
   white-space: nowrap;
 }
 
@@ -107,14 +107,14 @@
 }
 
 .genius-embed td {
-  color: #334155;
-  border-top: 1px solid #f1f5f9;
+  color: var(--color-slate-700);
+  border-top: 1px solid var(--color-slate-100);
   padding: 0.5rem 0.75rem;
   font-variant-numeric: tabular-nums;
 }
 
 .genius-embed tbody tr:hover td {
-  background: #f8fafc;
+  background: var(--color-slate-50);
 }
 
 .genius-embed td.team-logo,
@@ -137,18 +137,18 @@
 
 .genius-embed td.STANDINGS_standingPoints {
   font-weight: 800;
-  color: #0f172a;
+  color: var(--color-slate-900);
 }
 
 /* Liderzy statystyk (Top 10 na stronie głównej i strona Liderzy). */
 .genius-embed .leader-block {
   overflow: hidden;
   border-radius: 0.75rem;
-  box-shadow: inset 0 0 0 1px #e2e8f0;
+  box-shadow: inset 0 0 0 1px var(--color-slate-200);
 }
 
 .genius-embed .leader-header {
-  background: #020617;
+  background: var(--color-slate-950);
   padding: 0.5rem 0.75rem;
   font-size: 0.75rem;
   font-weight: 700;
@@ -161,7 +161,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  background: #fff7ed;
+  background: color-mix(in oklab, #f97316 12%, var(--color-white));
   padding: 0.75rem;
 }
 
@@ -172,21 +172,21 @@
 .genius-embed .leader-first .ld-team a {
   font-size: 0.75rem;
   font-weight: 400;
-  color: #64748b;
+  color: var(--color-slate-500);
 }
 
 .genius-embed .leader-first-value {
   text-align: right;
   font-size: 1.5rem;
   font-weight: 900;
-  color: #0f172a;
+  color: var(--color-slate-900);
 }
 
 .genius-embed .ld-statname {
   font-size: 0.625rem;
   font-weight: 600;
   text-transform: uppercase;
-  color: #64748b;
+  color: var(--color-slate-500);
 }
 
 .genius-embed .leader-block th {
@@ -195,7 +195,7 @@
 
 .genius-embed .leader-block td.team a {
   font-weight: 400;
-  color: #64748b;
+  color: var(--color-slate-500);
 }
 
 /* Terminarz: każdy mecz jako wiersz — data i hala | gospodarz, wynik, gość | link do relacji. */
@@ -204,7 +204,7 @@
   grid-template-columns: 10rem 1fr auto;
   align-items: center;
   gap: 0.5rem 1.5rem;
-  border-top: 1px solid #f1f5f9;
+  border-top: 1px solid var(--color-slate-100);
   padding: 0.75rem 0.25rem;
 }
 
@@ -214,7 +214,7 @@
 
 .genius-embed .match-details-wrap {
   font-size: 0.75rem;
-  color: #64748b;
+  color: var(--color-slate-500);
 }
 
 .genius-embed .match-details h6 {
@@ -223,12 +223,12 @@
 
 .genius-embed .match-time span {
   font-weight: 600;
-  color: #0f172a;
+  color: var(--color-slate-900);
 }
 
 .genius-embed .match-venue a {
   font-weight: 400;
-  color: #64748b;
+  color: var(--color-slate-500);
 }
 
 .genius-embed .sched-teams {
@@ -264,7 +264,7 @@
   min-width: 2rem;
   font-size: 1.125rem;
   font-weight: 900;
-  color: #0f172a;
+  color: var(--color-slate-900);
 }
 
 .genius-embed .match-result {
@@ -272,7 +272,7 @@
   font-size: 0.75rem;
   font-weight: 700;
   text-transform: uppercase;
-  color: #64748b;
+  color: var(--color-slate-500);
 }
 
 /* Elementy relacji na żywo pokazujemy tylko przy meczach w trakcie (CSS Genius robi to samo). */
@@ -297,7 +297,7 @@
   padding: 0.25rem 0.75rem;
   font-size: 0.75rem;
   color: #ea580c;
-  box-shadow: inset 0 0 0 1px #e2e8f0;
+  box-shadow: inset 0 0 0 1px var(--color-slate-200);
   white-space: nowrap;
 }
 
@@ -326,9 +326,9 @@
   height: 6rem;
   width: 100%;
   border-radius: 0.5rem;
-  background: #ffffff;
+  background: var(--color-white);
   padding: 0.75rem;
-  box-shadow: inset 0 0 0 1px #e2e8f0;
+  box-shadow: inset 0 0 0 1px var(--color-slate-200);
 }
 
 .genius-embed .team-link a {
@@ -348,7 +348,7 @@
 }
 
 .genius-embed .playerblock:hover {
-  background: #f8fafc;
+  background: var(--color-slate-50);
 }
 
 /* Genius pokazuje zawodników po jednej literze; my od razu wszystkich (jak plk.pl), a zawężamy wyszukiwarką. */
@@ -363,7 +363,7 @@
 /* Lista wczytana, ale filtr (litera, wyszukiwarka) ukrył wszystkich zawodników. */
 .genius-embed:has(.playerblock):not(:has(.playerblock:not(.genius-hidden)))::after {
   content: 'Brak zawodników dla wybranych filtrów.';
-  color: #64748b;
+  color: var(--color-slate-500);
 }
 
 .genius-embed .alphabet {
@@ -378,9 +378,9 @@
   gap: 1.5rem;
   margin-bottom: 1.25rem;
   border-radius: 0.75rem;
-  background: #020617;
+  background: var(--color-slate-950);
   padding: 1.5rem;
-  color: #ffffff;
+  color: var(--color-white);
 }
 
 .genius-embed .team-header .logo img {
@@ -388,7 +388,7 @@
   width: 7rem;
   max-width: none;
   border-radius: 0.75rem;
-  background: #ffffff;
+  background: var(--color-white);
   padding: 0.5rem;
   object-fit: contain;
 }
@@ -400,7 +400,7 @@
   font-size: 1.875rem;
   font-weight: 900;
   text-transform: uppercase;
-  color: #ffffff;
+  color: var(--color-white);
 }
 
 /* Poziom rozgrywek pod nazwą drużyny (dopisywany przez GeniusTeamPage). */
@@ -510,8 +510,8 @@
 .genius-native {
   overflow-x: auto;
   border-radius: 0.75rem;
-  border: 1px solid #e2e8f0;
-  background: #ffffff;
+  border: 1px solid var(--color-slate-200);
+  background: var(--color-white);
   padding: 1rem;
 }
 
@@ -540,9 +540,9 @@
   margin-bottom: 1.5rem;
   border: 0;
   border-radius: 0.75rem;
-  background: radial-gradient(circle at 50% 0%, #1e293b 0%, #020617 70%);
+  background: radial-gradient(circle at 50% 0%, var(--color-slate-800) 0%, var(--color-slate-950) 70%);
   padding: 1.5rem 1.5rem 0;
-  color: #ffffff;
+  color: var(--color-white);
 }
 
 .genius-native .match-page .match-header > div {
@@ -573,7 +573,7 @@
   max-width: none;
   margin: 0;
   border-radius: 0.75rem;
-  background: #ffffff;
+  background: var(--color-white);
   padding: 0.375rem;
   object-fit: contain;
 }
@@ -596,7 +596,7 @@
   font-size: 1.25rem;
   font-weight: 800;
   line-height: 1.2;
-  color: #ffffff;
+  color: var(--color-white);
 }
 
 .genius-native .match-page .match-header a:hover {
@@ -613,7 +613,7 @@
 
 /* Przegrany przygaszony (klasę is-loser dopisuje GeniusMatchPage). */
 .genius-native .match-page .match-header .team-box.is-loser .score {
-  color: #64748b;
+  color: var(--color-slate-500);
 }
 
 .genius-native .match-page .match-header .vs-label {
@@ -639,7 +639,7 @@
 }
 
 .genius-native .match-page .match-header .livenow .liveclock {
-  color: #ffffff;
+  color: var(--color-white);
 }
 
 .genius-native .match-page .match-header .details {
@@ -652,7 +652,7 @@
   width: auto;
   background: rgba(255, 255, 255, 0.06);
   padding: 0.75rem 1rem;
-  color: #cbd5e1;
+  color: var(--color-slate-300);
 }
 
 .genius-native .match-page .match-header .details * {
@@ -662,12 +662,12 @@
 .genius-native .match-page .match-header .details h6 {
   margin: 0 0.25rem 0 0;
   font-weight: 400;
-  color: #94a3b8;
+  color: var(--color-slate-400);
 }
 
 .genius-native .match-page .match-header .details span {
   font-weight: 600;
-  color: #ffffff;
+  color: var(--color-white);
 }
 
 @media (max-width: 767px) {
@@ -711,7 +711,7 @@
   overflow-x: auto;
   margin-bottom: 1.5rem;
   border-radius: 0.75rem;
-  background: #f1f5f9;
+  background: var(--color-slate-100);
   padding: 0.375rem;
   white-space: nowrap;
 }
@@ -725,17 +725,17 @@
   font-size: 0.875rem;
   font-weight: 700;
   line-height: 1.25rem;
-  color: #475569;
+  color: var(--color-slate-600);
 }
 
 .genius-native .generic-list-menu a:hover {
-  background: #ffffff;
-  color: #0f172a;
+  background: var(--color-white);
+  color: var(--color-slate-900);
 }
 
 .genius-native .generic-list-menu a.currentoption {
   background: #f97316;
-  color: #ffffff;
+  color: var(--color-white);
 }
 
 .genius-native .match-page a {
@@ -755,16 +755,16 @@
   margin-right: 0.25rem;
   font-size: 0.875rem;
   font-weight: 600;
-  color: #475569;
+  color: var(--color-slate-600);
 }
 
 .genius-native .match-page .play-by-play .pbpmenu a {
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-slate-200);
   border-radius: 9999px;
   padding: 0.25rem 0.875rem;
   font-size: 0.8125rem;
   font-weight: 600;
-  color: #334155;
+  color: var(--color-slate-700);
   text-decoration: none;
 }
 
@@ -774,7 +774,7 @@
 }
 
 .genius-native .match-page .play-by-play .pbpmenu a.inactive {
-  color: #94a3b8;
+  color: var(--color-slate-400);
 }
 
 .genius-native .match-page .play-by-play .pbpscroll {
@@ -817,9 +817,9 @@
   width: min(100%, 34rem);
   min-height: 0;
   overflow: hidden;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-slate-200);
   border-radius: 0.5rem;
-  background: #ffffff;
+  background: var(--color-white);
 }
 
 /* U gości Genius podaje elementy w odwrotnej kolejności (czas, akcja, logo, kolor), więc tylko wyrównujemy tekst. */
@@ -856,11 +856,11 @@
   font-size: 0.875rem;
   line-height: 1.3;
   letter-spacing: 0;
-  color: #334155;
+  color: var(--color-slate-700);
 }
 
 .genius-native .match-page .play-by-play .pbpwrap .pbpscroll #playbyplay .pbpa .pbp-action strong {
-  color: #0f172a;
+  color: var(--color-slate-900);
 }
 
 .genius-native .match-page .play-by-play .pbpwrap .pbpscroll #playbyplay .pbpa .pbp-time {
@@ -871,29 +871,29 @@
   justify-content: center;
   width: auto;
   border: 0;
-  border-left: 1px solid #f1f5f9;
-  background: #f8fafc;
+  border-left: 1px solid var(--color-slate-100);
+  background: var(--color-slate-50);
   padding: 0.25rem;
   font-family: inherit;
   font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
-  color: #64748b;
+  color: var(--color-slate-500);
 }
 
 .genius-native .match-page .play-by-play .pbpwrap .pbpscroll #playbyplay .pbpa .pbp-team2 .pbp-time {
-  border-right: 1px solid #f1f5f9;
+  border-right: 1px solid var(--color-slate-100);
   border-left: 0;
 }
 
 .genius-native .match-page .play-by-play .pbpwrap .pbpscroll #playbyplay .pbpa .pbp-time .pbp-period {
   font-weight: 700;
-  color: #94a3b8;
+  color: var(--color-slate-400);
 }
 
 .genius-native .match-page .play-by-play .pbpwrap .pbpscroll #playbyplay .pbpa .pbp-time .pbpsc {
   font-size: 1rem;
   font-weight: 800;
-  color: #0f172a;
+  color: var(--color-slate-900);
 }
 
 /* Akcje punktowe (z wynikiem) wyróżnione pomarańczowym tłem czasu. */
@@ -902,7 +902,7 @@
 }
 
 .genius-native .match-page .play-by-play .pbpwrap .pbpscroll #playbyplay .pbpa.scaction .pbp-time {
-  background: #fff7ed !important;
+  background: color-mix(in oklab, #f97316 12%, var(--color-white)) !important;
 }
 
 /* Początek i koniec kwarty oraz meczu: ciemna pigułka na środku. */
@@ -911,8 +911,8 @@
   margin: 0;
   border: 0;
   border-radius: 9999px;
-  background: #0f172a;
-  color: #ffffff;
+  background: var(--color-slate-900);
+  color: var(--color-white);
 }
 
 .genius-native .match-page .play-by-play .pbpwrap .pbpscroll #playbyplay .pbpa .pbp-team.pbp-team0 .pbp-action {
@@ -921,7 +921,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #ffffff;
+  color: var(--color-white);
 }
 
 .genius-native .match-page .play-by-play .pbpwrap .pbpscroll #playbyplay .pbpa .pbp-team.pbp-team0 .pbp-time {
@@ -929,11 +929,11 @@
   border: 0;
   background: #f97316;
   padding: 0.375rem 0.75rem;
-  color: #ffffff;
+  color: var(--color-white);
 }
 
 .genius-native .match-page .play-by-play .pbpwrap .pbpscroll #playbyplay .pbpa .pbp-team.pbp-team0 .pbp-time .pbpsc {
-  color: #ffffff;
+  color: var(--color-white);
 }
 
 @media (max-width: 639px) {
@@ -952,13 +952,13 @@
 .genius-native.genius-native .match-page .summary h4 {
   margin: 0;
   border-radius: 0.625rem 0.625rem 0 0;
-  background: #f1f5f9;
+  background: var(--color-slate-100);
   padding: 0.625rem 0.875rem;
   font-size: 0.8125rem;
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #0f172a !important;
+  color: var(--color-slate-900) !important;
 }
 
 .genius-native .match-page .summary a h4 {
@@ -966,14 +966,14 @@
 }
 
 .genius-native .match-page .table-wrap table thead th {
-  border-color: #1e293b;
-  background: #0f172a;
+  border-color: var(--color-slate-800);
+  background: var(--color-slate-900);
   padding: 0.375rem 0.375rem;
   font-size: 0.6875rem;
   font-weight: 700;
   line-height: 1.1;
   letter-spacing: 0.04em;
-  color: #ffffff;
+  color: var(--color-white);
 }
 
 .genius-native .match-page .table-wrap table td {
@@ -988,18 +988,18 @@
 /* Liderzy meczu: karty z obramowaniem i wyróżnioną wartością. */
 .genius-native .match-page .summary .summary-leaders .summary-leaders-detail .table-wrap {
   overflow: hidden;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-slate-200);
   border-top: 0;
   border-radius: 0 0 0.625rem 0.625rem;
 }
 
 .genius-native .match-page .summary .summary-leaders .summary-leaders-detail td.ld-value {
   font-weight: 800;
-  color: #0f172a;
+  color: var(--color-slate-900);
 }
 
 .genius-native .match-page .summary .summary-leaders .summary-leaders-detail td.ld-index {
-  color: #94a3b8;
+  color: var(--color-slate-400);
 }
 
 /* Porównanie drużyn: zaokrąglone paski w kolorach drużyn z shot chartu i play by play. */
@@ -1072,7 +1072,7 @@
   gap: 0.5rem 1rem;
   margin: 0.75rem 0 1.5rem;
   font-size: 0.8125rem;
-  color: #475569;
+  color: var(--color-slate-600);
 }
 
 .genius-embed .genius-pager-size {
@@ -1082,16 +1082,16 @@
 }
 
 .genius-embed .genius-pager select {
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-slate-200);
   border-radius: 0.5rem;
-  background: #ffffff;
+  background: var(--color-white);
   padding: 0.25rem 0.5rem;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--color-slate-900);
 }
 
 .genius-embed .genius-pager-info {
-  color: #64748b;
+  color: var(--color-slate-500);
 }
 
 .genius-embed .genius-pager-nav {
@@ -1103,17 +1103,17 @@
 .genius-embed .genius-pager-nav [data-pager-page] {
   padding: 0 0.5rem;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--color-slate-900);
 }
 
 .genius-embed .genius-pager button {
   min-width: 2rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-slate-200);
   border-radius: 0.5rem;
-  background: #ffffff;
+  background: var(--color-white);
   padding: 0.25rem 0.5rem;
   font-weight: 700;
-  color: #334155;
+  color: var(--color-slate-700);
 }
 
 .genius-embed .genius-pager button:hover:not(:disabled) {
@@ -1181,7 +1181,7 @@
 .genius-native td.genius-sorted-col {
   background-color: rgba(249, 115, 22, 0.07);
   font-weight: 700;
-  color: #0f172a;
+  color: var(--color-slate-900);
 }
 
 /* ===== Strona drużyny: zakładka Summary (sekcja "home" w Genius). ===== */
@@ -1220,22 +1220,22 @@
 .genius-embed .page-team .summary .team-players {
   overflow: hidden;
   margin: 0;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-slate-200);
   border-radius: 0.75rem;
-  background: #ffffff;
+  background: var(--color-white);
 }
 
 .genius-embed .page-team .summary .matches-block > h4,
 .genius-embed .page-team .summary .team-leaders-detail > h4,
 .genius-embed .page-team .summary .team-players > h4 {
   margin: 0;
-  border-bottom: 1px solid #e2e8f0;
-  background: #f8fafc;
+  border-bottom: 1px solid var(--color-slate-200);
+  background: var(--color-slate-50);
   padding: 0.625rem 0.875rem;
   font-size: 0.75rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #0f172a;
+  color: var(--color-slate-900);
 }
 
 .genius-embed .page-team .summary .matches-block th,
@@ -1248,12 +1248,12 @@
   width: 6.5rem;
   white-space: nowrap;
   font-size: 0.8125rem;
-  color: #64748b;
+  color: var(--color-slate-500);
 }
 
 .genius-embed .page-team .summary td.matchOpponent {
   font-weight: 600;
-  color: #0f172a;
+  color: var(--color-slate-900);
 }
 
 .genius-embed .page-team .summary td.matchOpponent img {
@@ -1269,7 +1269,7 @@
   width: 7rem;
   white-space: nowrap;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--color-slate-900);
 }
 
 .genius-embed .page-team .summary td.matchResult span {
@@ -1282,7 +1282,7 @@
   border-radius: 0.375rem;
   font-size: 0.6875rem;
   font-weight: 800;
-  color: #ffffff;
+  color: var(--color-white);
 }
 
 .genius-embed .page-team .summary td.matchResult span.W {
@@ -1309,7 +1309,7 @@
 .genius-embed .page-team .summary .team-leaders-detail td.ld-index {
   width: 2rem;
   padding-right: 0;
-  color: #94a3b8;
+  color: var(--color-slate-400);
 }
 
 .genius-embed .page-team .summary .team-leaders-detail td.ld-person {
@@ -1327,7 +1327,7 @@
   height: 1.75rem;
   width: 1.75rem;
   border-radius: 9999px;
-  background: #f1f5f9;
+  background: var(--color-slate-100);
   object-fit: cover;
   object-position: top;
 }
@@ -1336,7 +1336,7 @@
   width: 3.5rem;
   text-align: right;
   font-weight: 800;
-  color: #0f172a;
+  color: var(--color-slate-900);
 }
 
 .genius-embed .page-team .summary .team-leaders-detail tbody tr:first-child td {
