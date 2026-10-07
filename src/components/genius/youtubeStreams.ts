@@ -2,6 +2,9 @@
 // Tytuły transmisji mają postać "Gospodarz - Gość", np. "4us Basket Maślice - Delta Szwadron"; dopasowujemy je
 // do pełnych nazw drużyn z terminarza Genius, z tolerancją na drobne różnice, i do daty meczu.
 
+import { geniusSnapshot } from './geniusConfig';
+import { SNAPSHOT_DIR } from './geniusSnapshot';
+
 export const YOUTUBE_CHANNEL_URL = 'https://www.youtube.com/@Liga_DALK';
 
 export interface YoutubeVideo {
@@ -18,7 +21,8 @@ export function loadYoutubeVideos() {
   if (!feed || Date.now() - feed.at > FEED_MAX_AGE_MS) {
     feed = {
       at: Date.now(),
-      videos: fetch('/api/youtube-feed')
+      // Wersja demonstracyjna (migawka): lista filmów zapisana razem z migawką danych.
+      videos: fetch(geniusSnapshot ? `${SNAPSHOT_DIR}/youtube-feed.json` : '/api/youtube-feed')
         .then((response) => (response.ok ? (response.json() as Promise<YoutubeVideo[]>) : []))
         .catch(() => []),
     };

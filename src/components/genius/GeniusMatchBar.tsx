@@ -392,20 +392,21 @@ function GeniusMatchBar({ widgetId }: { widgetId: string }) {
   };
 
   // Transmisje na YouTube — tylko dla meczów w trakcie: listę filmów kanału pobieramy, gdy jakiś mecz trwa,
-  // i odświeżamy co 2 minuty. W migawce (demo) "trwający" mecz prowadzi do listy transmisji kanału.
+  // i odświeżamy co 2 minuty. W migawce (demo) lista filmów pochodzi z pliku zapisanego razem z migawką.
   const [videos, setVideos] = useState<YoutubeVideo[]>([]);
   const anyLive = (matches ?? []).some((m) => m.status === 'live' || (m.status !== 'final' && schedule.get(m.id)?.live));
   useEffect(() => {
-    if (!anyLive || geniusSnapshot) return;
+    if (!anyLive) return;
     const refresh = () => loadYoutubeVideos().then(setVideos);
     refresh();
     const timer = window.setInterval(refresh, 2 * 60 * 1000);
     return () => window.clearInterval(timer);
   }, [anyLive]);
   const streamFor = (match: WidgetMatch, info?: ScheduleInfo) => {
-    if (geniusSnapshot) return `${YOUTUBE_CHANNEL_URL}/streams`;
     if (!info?.home || !info.away) return undefined;
-    return findStream(videos, info.home, info.away, info.date ?? match.date);
+    const stream = findStream(videos, info.home, info.away, info.date ?? match.date);
+    // Demo: symulowany mecz bez nagranej transmisji prowadzi do listy transmisji kanału.
+    return stream ?? (geniusSnapshot ? `${YOUTUBE_CHANNEL_URL}/streams` : undefined);
   };
 
   const sorted = (matches ?? [])
