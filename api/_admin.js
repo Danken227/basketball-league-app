@@ -153,7 +153,7 @@ export async function handleAdmin({ method, action, body = {}, cookie: cookieHea
   if (!validSession(cookieHeader)) return fail(401, 'Sesja wygasła — zaloguj się ponownie.');
   if (!store) return fail(503, 'Brak bazy danych: podłącz Upstash Redis do projektu Vercela.');
 
-  if (action === 'news-add') {
+  if (action === 'news-add' || action === 'news-update') {
     const title = text(body.title, 200);
     const content = text(body.body, 20000);
     const date = text(body.date, 10);
@@ -162,13 +162,27 @@ export async function handleAdmin({ method, action, body = {}, cookie: cookieHea
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return fail(400, 'Nieprawidłowa data.');
     if (image && !/^(https:\/\/|\/)[^\s"'<>]+$/.test(image)) return fail(400, 'Adres okładki musi zaczynać się od https://.');
     const news = (await store.get(NEWS_KEY)) ?? [];
+    const fields = { title, date, excerpt: excerptOf(content), html: newsHtml(content), image, body: content };
+
+    // Edycja: adres wpisu (slug) zostaje ten sam, żeby udostępnione linki dalej działały.
+    if (action === 'news-update') {
+      const current = news.find((item) => item.slug === body.slug);
+      if (!current) return fail(404, 'Nie ma takiej aktualności (mogła zostać usunięta).');
+      const item = { ...current, ...fields, updatedAt: new Date().toISOString() };
+      await store.set(
+        NEWS_KEY,
+        news.map((entry) => (entry.slug === current.slug ? item : entry)),
+      );
+      return { status: 200, body: { item } };
+    }
+
     // reservedSlugs (od strony): adresy wpisów przeniesionych z dalk.pl — nowy wpis nie może ich zasłonić.
     const reserved = Array.isArray(body.reservedSlugs) ? body.reservedSlugs.filter((slug) => typeof slug === 'string') : [];
     const taken = new Set([...reserved, ...news.map((item) => item.slug)]);
     const base = slugify(title);
     let slug = base;
     for (let n = 2; taken.has(slug); n++) slug = `${base}-${n}`;
-    const item = { slug, title, date, excerpt: excerptOf(content), html: newsHtml(content), image, source: '', body: content, createdAt: new Date().toISOString() };
+    const item = { slug, ...fields, source: '', createdAt: new Date().toISOString() };
     await store.set(NEWS_KEY, [item, ...news]);
     return { status: 200, body: { item } };
   }

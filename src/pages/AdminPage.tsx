@@ -6,7 +6,7 @@ import { icons } from '../components/common/icons';
 import { geniusEditionById, geniusEditions, geniusJuniorCompetitions, geniusLeagueName, type GeniusLeagueId } from '../components/genius/geniusConfig';
 import { fetchGeniusPage } from '../components/genius/geniusFetch';
 import { formatNewsDate, news as dalkNews, newsPath } from '../data/news';
-import { adminRequest, reloadSiteContent, setAdmin, useAdmin, useSiteContent } from '../data/siteContent';
+import { adminRequest, reloadSiteContent, setAdmin, useAdmin, useSiteContent, type AddedNewsItem } from '../data/siteContent';
 
 // Panel administratora (link w stopce): logowanie, dodawanie aktualności i nazwy drużyn w poszczególnych edycjach.
 // Uprawnienia sprawdza serwer (/api/admin) — ta strona tylko pokazuje formularze.
@@ -89,16 +89,37 @@ function NewsAdmin() {
   const [customCover, setCustomCover] = useState('');
   const [body, setBody] = useState('');
   const [error, setError] = useState<string>();
-  const [added, setAdded] = useState<{ slug: string; title: string }>();
+  const [saved, setSaved] = useState<{ slug: string; title: string; edited: boolean }>();
   const [busy, setBusy] = useState(false);
+  // Edytowany wpis (slug) albo undefined przy dodawaniu nowego.
+  const [editing, setEditing] = useState<string>();
+
+  const fillForm = (item?: AddedNewsItem) => {
+    setEditing(item?.slug);
+    setTitle(item?.title ?? '');
+    setDate(item?.date ?? today());
+    setBody(item?.body ?? '');
+    const image = item ? item.image : (covers[0] ?? '');
+    const known = image === '' || covers.includes(image);
+    setCover(known ? image : 'custom');
+    setCustomCover(known ? '' : image);
+  };
+
+  const startEdit = (item: AddedNewsItem) => {
+    fillForm(item);
+    setSaved(undefined);
+    setError(undefined);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
     setError(undefined);
-    setAdded(undefined);
+    setSaved(undefined);
     try {
-      const { item } = await adminRequest<{ item: { slug: string; title: string } }>('news-add', {
+      const { item } = await adminRequest<{ item: { slug: string; title: string } }>(editing ? 'news-update' : 'news-add', {
+        slug: editing,
         title,
         date,
         body,
@@ -106,9 +127,8 @@ function NewsAdmin() {
         reservedSlugs: dalkNews.map((entry) => entry.slug),
       });
       await reloadSiteContent();
-      setAdded(item);
-      setTitle('');
-      setBody('');
+      setSaved({ ...item, edited: Boolean(editing) });
+      fillForm();
     } catch (e) {
       setError(errorText(e));
     } finally {
@@ -121,6 +141,7 @@ function NewsAdmin() {
     try {
       await adminRequest('news-delete', { slug });
       await reloadSiteContent();
+      if (editing === slug) fillForm();
     } catch (e) {
       setError(errorText(e));
     }
@@ -128,7 +149,7 @@ function NewsAdmin() {
 
   return (
     <div className="grid gap-5 lg:grid-cols-[3fr_2fr]">
-      <Card title="Nowa aktualność">
+      <Card title={editing ? 'Edycja aktualności' : 'Nowa aktualność'}>
         <form onSubmit={submit} className="flex flex-col gap-4">
           <Field label="Tytuł">
             <input className={inputClass} value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} required />
@@ -159,20 +180,25 @@ function NewsAdmin() {
           <Message
             error={error}
             success={
-              added && (
+              saved && (
                 <>
-                  Dodano:{' '}
-                  <Link to={`/aktualnosci/${added.slug}`} className="underline">
-                    {added.title}
+                  {saved.edited ? 'Zapisano zmiany:' : 'Dodano:'}{' '}
+                  <Link to={`/aktualnosci/${saved.slug}`} className="underline">
+                    {saved.title}
                   </Link>
                 </>
               )
             }
           />
-          <div>
+          <div className="flex items-center gap-4">
             <button type="submit" className={buttonClass} disabled={busy}>
-              {busy ? 'Zapisywanie…' : 'Opublikuj'}
+              {busy ? 'Zapisywanie…' : editing ? 'Zapisz zmiany' : 'Opublikuj'}
             </button>
+            {editing && (
+              <button type="button" className={linkButtonClass} onClick={() => fillForm()}>
+                Anuluj edycję
+              </button>
+            )}
           </div>
         </form>
       </Card>
@@ -182,13 +208,16 @@ function NewsAdmin() {
         ) : (
           <ul className="divide-y divide-slate-100">
             {news.map((item) => (
-              <li key={item.slug} className="flex items-start gap-3 py-2.5">
+              <li key={item.slug} className={`flex items-start gap-3 py-2.5 ${editing === item.slug ? 'bg-orange-50' : ''}`}>
                 <div className="min-w-0 flex-1">
                   <Link to={newsPath(item)} className="block truncate text-sm font-semibold text-slate-900 hover:text-orange-600">
                     {item.title}
                   </Link>
                   <p className="text-xs text-slate-500">{formatNewsDate(item.date)}</p>
                 </div>
+                <button type="button" className={linkButtonClass} onClick={() => startEdit(item)}>
+                  Edytuj
+                </button>
                 <button type="button" className="text-sm font-medium text-red-600 hover:text-red-700" onClick={() => remove(item.slug, item.title)}>
                   Usuń
                 </button>
