@@ -1,6 +1,6 @@
 import { handleAdmin, redisStore } from './_admin.js';
 
-// Funkcja Vercela: /api/admin?action=content|session|login|logout|news-add|news-delete|team-name-save|team-name-delete.
+// Funkcja Vercela: /api/admin?action=content|session|login|logout|news-add|news-update|news-delete|team-name-save|team-name-delete.
 // Logika w _admin.js (wspólna z serwerem Vite), dane w Upstash Redis podpiętym do projektu.
 export default async function handler(req, res) {
   try {
