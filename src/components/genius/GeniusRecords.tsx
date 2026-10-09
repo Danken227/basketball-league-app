@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import GeniusEmbed from './GeniusEmbed';
+import { geniusCacheKey } from './geniusCache';
+import { GENIUS_ORGANIZATION, geniusSnapshot } from './geniusConfig';
+import { loadSnapshot } from './geniusSnapshot';
 
 // Rekordy rozgrywek: najwyższe zdobycze zawodników w jednym meczu (punkty, zbiórki, asysty). Genius nie ma takiej
-// strony, więc liczymy je ze statystyk meczów (box score) wszystkich rozegranych meczów z terminarza. Box score
-// pobieramy po jednym naraz i zapamiętujemy w przeglądarce na dobę — kolejne wejście pobiera tylko nowe mecze.
+// strony, więc liczymy je ze statystyk meczów (box score) wszystkich rozegranych meczów z terminarza. Treści nie
+// osadzamy, tylko pobieramy wprost z serwera Genius (to samo zapytanie, które wysyła skrypt osadzenia, bez
+// wczytywania skryptu przy każdym meczu) — kilka meczów naraz. Wyniki zapamiętujemy w przeglądarce na dobę,
+// więc kolejne wejście pobiera tylko nowe mecze.
 
 interface PlayerLine {
   playerId: string;
@@ -24,8 +28,21 @@ interface MatchLines {
 
 const STORAGE_PREFIX = 'genius-records-v1:';
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
-const MATCH_TIMEOUT_MS = 25000;
+const PARALLEL = 6;
 const TOP = 5;
+
+// Treść strony Genius jako element (poza dokumentem). Serwer odpowiada JSON-em z gotowym HTML-em w polu "html";
+// w wersji demonstracyjnej bierzemy treść z migawki (undefined, gdy strony w niej nie ma).
+async function fetchGeniusPage(page: string): Promise<HTMLElement | undefined> {
+  const html = geniusSnapshot
+    ? await loadSnapshot(geniusCacheKey({ page }))
+    : await fetch(
+        `https://hosted.dcd.shared.geniussports.com/embednf/${GENIUS_ORGANIZATION}/en${page}?&iurl=${encodeURIComponent(`${window.location.origin}/genius`)}&_ht=1&_mf=1`,
+      )
+        .then((response) => (response.ok ? (response.json() as Promise<{ html?: string }>) : undefined))
+        .then((data) => data?.html);
+  return html ? new DOMParser().parseFromString(html, 'text/html').body : undefined;
+}
 
 function loadStored(cid: number): Record<string, MatchLines> {
   try {
@@ -65,11 +82,12 @@ function readBoxScore(root: HTMLElement): MatchLines | undefined {
     if (pts < 0 || reb < 0 || ast < 0) return [];
     return [...table.tBodies].flatMap((body) =>
       [...body.rows].flatMap((row) => {
-        const link = row.querySelector<HTMLAnchorElement>('td.playerName a[href^="/zawodnicy/"]');
-        const playerId = link?.getAttribute('href')?.match(/^\/zawodnicy\/(\d+)/)?.[1];
+        // Link Genius (".../person/123") albo — w migawce — już przepisany na nasz adres ("/zawodnicy/123").
+        const link = row.querySelector<HTMLAnchorElement>('td.playerName a');
+        const playerId = link?.getAttribute('href')?.match(/(?:\/person\/|^\/zawodnicy\/)(\d+)/)?.[1];
         if (!link || !playerId) return [];
         const value = (index: number) => Number(row.cells[index]?.textContent?.trim()) || 0;
-        return [{ playerId, player: link.textContent?.trim() ?? '', team: teams[side], opponent: teams[1 - side], pts: value(pts), reb: value(reb), ast: value(ast) }];
+        return [{ playerId, player: link.textContent?.replace(/\s+/g, ' ').trim() ?? '', team: teams[side], opponent: teams[1 - side], pts: value(pts), reb: value(reb), ast: value(ast) }];
       }),
     );
   });
@@ -136,32 +154,40 @@ function GeniusRecords({ cid }: { cid: number }) {
   const [matchIds, setMatchIds] = useState<string[]>();
   const [matches, setMatches] = useState<Record<string, MatchLines>>(() => loadStored(cid));
   const [failed, setFailed] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Kolejny mecz do pobrania: rozegrany, nie zapamiętany i nie pominięty po błędzie.
-  const pending = (matchIds ?? []).filter((id) => !matches[id] && !failed.includes(id));
-  const current = pending[0];
-
+  // Terminarz (lista rozegranych meczów), potem box score meczów spoza pamięci — po PARALLEL naraz.
   useEffect(() => {
-    if (!current) return;
-    const timer = window.setTimeout(() => setFailed((prev) => [...prev, current]), MATCH_TIMEOUT_MS);
-    return () => window.clearTimeout(timer);
-  }, [current]);
-
-  const onBoxScore = (matchId: string) => (root: HTMLElement) => {
-    // Wersja demonstracyjna: meczu nie ma w migawce — pomijamy od razu, bez czekania na limit czasu.
-    if (root.querySelector('.genius-snapshot-missing')) {
-      setFailed((prev) => (prev.includes(matchId) ? prev : [...prev, matchId]));
-      return;
-    }
-    const found = readBoxScore(root);
-    if (!found) return;
-    setMatches((prev) => {
-      if (prev[matchId]) return prev;
-      const next = { ...prev, [matchId]: found };
-      store(cid, next);
-      return next;
-    });
-  };
+    let active = true;
+    (async () => {
+      const schedule = await fetchGeniusPage(`/competition/${cid}/schedule`).catch(() => undefined);
+      if (!active) return;
+      const ids = schedule ? readPlayedMatches(schedule) : [];
+      setMatchIds(ids);
+      const queue = ids.filter((id) => !loadStored(cid)[id]);
+      const worker = async () => {
+        for (let id = queue.shift(); id && active; id = queue.shift()) {
+          const root = await fetchGeniusPage(`/competition/${cid}/match/${id}/boxscore`).catch(() => undefined);
+          const found = root && readBoxScore(root);
+          if (!active) return;
+          if (!found) {
+            setFailed((prev) => [...prev, id]);
+            continue;
+          }
+          setMatches((prev) => {
+            const next = { ...prev, [id]: found };
+            store(cid, next);
+            return next;
+          });
+        }
+      };
+      await Promise.all(Array.from({ length: PARALLEL }, worker));
+      if (active) setLoading(false);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [cid]);
 
   const records = useMemo(() => {
     const rows: RecordRow[] = Object.entries(matches).flatMap(([matchId, match]) => match.lines.map((line) => ({ ...line, matchId, date: match.date })));
@@ -179,7 +205,7 @@ function GeniusRecords({ cid }: { cid: number }) {
         Najwyższe zdobycze w jednym meczu, liczone ze statystyk rozegranych meczów (zapamiętywane w przeglądarce na dobę).
         {matchIds === undefined
           ? ' Wczytywanie terminarza…'
-          : current
+          : loading
             ? ` Wczytywanie meczów: ${loaded} z ${matchIds.length}…`
             : ` Mecze: ${loaded} z ${matchIds.length}${failed.length ? ` (${failed.length} niedostępnych)` : ''}.`}
       </p>
@@ -187,11 +213,6 @@ function GeniusRecords({ cid }: { cid: number }) {
         {categories.map(({ key, label, unit }) => (
           <RecordsTable key={key} cid={cid} title={label} unit={unit} rows={records[key]} field={key} />
         ))}
-      </div>
-      {/* Źródła danych poza ekranem: terminarz (lista rozegranych meczów) i box score bieżącego meczu. */}
-      <div aria-hidden="true" className="pointer-events-none fixed -left-[10000px] top-0 h-0 w-[1200px] overflow-hidden">
-        <GeniusEmbed page={`/competition/${cid}/schedule`} onContent={(root) => setMatchIds((prev) => prev ?? readPlayedMatches(root))} />
-        {current && <GeniusEmbed key={current} page={`/competition/${cid}/match/${current}/boxscore`} onContent={onBoxScore(current)} />}
       </div>
     </div>
   );
