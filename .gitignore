@@ -27,3 +27,6 @@ dist-ssr
 public/snapshot/
 .vercel
 .env*
+
+# Treści panelu administratora na serwerze deweloperskim (na Vercelu: Upstash Redis)
+data/admin-store.json

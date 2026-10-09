@@ -55,12 +55,11 @@ export function formatNewsDate(date: string) {
   return `${day} ${months[month - 1]} ${year}`;
 }
 
-export const newsPageCount = Math.ceil(news.length / NEWS_PER_PAGE);
+// Listy aktualności (wpisy z dalk.pl i dodane w panelu administratora — useNews w siteContent.ts).
+export const newsPageCount = (list: NewsItem[]) => Math.max(1, Math.ceil(list.length / NEWS_PER_PAGE));
 
 // Strona listy aktualności, numerowana od 1.
-export const newsPage = (page: number) => news.slice((page - 1) * NEWS_PER_PAGE, page * NEWS_PER_PAGE);
-
-export const newsBySlug = (slug: string) => news.find((item) => item.slug === slug);
+export const newsPage = (list: NewsItem[], page: number) => list.slice((page - 1) * NEWS_PER_PAGE, page * NEWS_PER_PAGE);
 
 export const newsPath = (item: NewsItem) => `/aktualnosci/${item.slug}`;
 

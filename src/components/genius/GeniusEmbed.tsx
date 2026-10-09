@@ -1,11 +1,13 @@
-import { useEffect, useId, useRef, useState, type MouseEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { geniusCacheKey, readGeniusCache, writeGeniusCache } from './geniusCache';
-import { GENIUS_EMBED_URL, geniusSnapshot, isGeniusDomain, mapGeniusPath } from './geniusConfig';
+import { teamRenames, useSiteContent } from '../../data/siteContent';
+import { findCompetition, GENIUS_EMBED_URL, geniusSnapshot, isGeniusDomain, mapGeniusPath } from './geniusConfig';
 import { installSnapshotScripts, loadSnapshot, SNAPSHOT_DIR, snapshotMissingHtml } from './geniusSnapshot';
 import { translateGenius } from './geniusI18n';
 import { fillMissingLogos, replaceBrokenLogo } from './geniusLogo';
 import { handleSortClick, markSortedColumns } from './geniusTableSort';
+import { applyTeamRenames } from './geniusTeamNames';
 import { applyPagination, handlePagerEvent } from './geniusTablePager';
 import './genius.css';
 
@@ -168,6 +170,10 @@ function GeniusEmbed({
   const filterLetter = textFilter?.letter ?? '';
   const cacheKey = geniusCacheKey({ page, blockDisplay, showSubMenus, showMatchFilter, showTitle });
   const expectedCompetition = page.match(/^\/competition\/(\d+)\//)?.[1];
+  // Nazwy drużyn z edycji tych rozgrywek (panel administratora) zamiast najnowszych nazw z Genius.
+  const { teamNames } = useSiteContent();
+  const editionId = expectedCompetition ? findCompetition(Number(expectedCompetition))?.editionId : undefined;
+  const renames = useMemo(() => teamRenames(teamNames, editionId), [teamNames, editionId]);
 
   // Ponowienie: serwer Genius bywa przeciążony i pod danym adresem potrafi podawać zapamiętaną, pustą odpowiedź.
   // Gdy poprawna treść nie przyjdzie w 6 s, prosimy jeszcze raz z dodatkowym parametrem "r" (inny adres = świeża
@@ -303,6 +309,7 @@ function GeniusEmbed({
         });
       }
       translateGenius(placeholder);
+      applyTeamRenames(placeholder, renames);
       if (statsMode || placeholder.querySelector('.genius-col-hidden')) applyStatsMode(placeholder, statsMode);
       if (pageSize) applyPagination(placeholder, pageSize);
       markSortedColumns(placeholder);
@@ -341,7 +348,7 @@ function GeniusEmbed({
       placeholder.removeEventListener('click', onSortClick, true);
       placeholder.removeEventListener('error', replaceBrokenLogo, true);
     };
-  }, [allowed, filterSelector, filterQuery, filterLetter, nativeStyle, statsMode, pageSize, cacheKey, expectedCompetition]);
+  }, [allowed, filterSelector, filterQuery, filterLetter, nativeStyle, statsMode, pageSize, cacheKey, expectedCompetition, renames]);
 
   // Kliknięcia w przepisane linki obsługuje router, bez przeładowania strony.
   const onClick = (e: MouseEvent<HTMLDivElement>) => {

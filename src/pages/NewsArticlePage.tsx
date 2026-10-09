@@ -1,6 +1,7 @@
 import { Link, useParams } from 'react-router-dom';
 import { NewsCover } from '../components/NewsSection/NewsCard';
-import { formatNewsDate, news, newsBySlug, newsCategory, newsPath, withExternalLinks } from '../data/news';
+import { formatNewsDate, newsCategory, newsPath, withExternalLinks } from '../data/news';
+import { useNews, useSiteContent } from '../data/siteContent';
 import Placeholder from './Placeholder';
 
 // Style treści wpisu (oczyszczony HTML z dalk.pl): akapity, listy, linki, obrazy i tabele.
@@ -17,8 +18,11 @@ const contentClass = [
 // Treść aktualności; pod nią przejście do nowszego i starszego wpisu.
 function NewsArticlePage() {
   const { slug = '' } = useParams();
-  const item = newsBySlug(slug);
-  if (!item) return <Placeholder title="Nie znaleziono aktualności" />;
+  const news = useNews();
+  const { loaded } = useSiteContent();
+  const item = news.find((entry) => entry.slug === slug);
+  // Wpis dodany w panelu znamy dopiero po wczytaniu treści z serwera.
+  if (!item) return loaded ? <Placeholder title="Nie znaleziono aktualności" /> : <p className="py-16 text-center text-sm text-slate-500">Wczytywanie…</p>;
 
   const index = news.indexOf(item);
   const newer = news[index - 1];

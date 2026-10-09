@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { geniusCacheKey } from './geniusCache';
-import { GENIUS_ORGANIZATION, geniusSnapshot } from './geniusConfig';
-import { loadSnapshot } from './geniusSnapshot';
+import { renameTeam, teamRenames, useSiteContent, type TeamNameEntry } from '../../data/siteContent';
+import { findCompetition } from './geniusConfig';
+import { fetchGeniusPage } from './geniusFetch';
 
 // Rekordy rozgrywek: najwyższe zdobycze zawodników w jednym meczu (punkty, zbiórki, asysty). Genius nie ma takiej
 // strony, więc liczymy je ze statystyk meczów (box score) wszystkich rozegranych meczów z terminarza. Treści nie
@@ -30,19 +30,6 @@ const STORAGE_PREFIX = 'genius-records-v1:';
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const PARALLEL = 6;
 const TOP = 5;
-
-// Treść strony Genius jako element (poza dokumentem). Serwer odpowiada JSON-em z gotowym HTML-em w polu "html";
-// w wersji demonstracyjnej bierzemy treść z migawki (undefined, gdy strony w niej nie ma).
-async function fetchGeniusPage(page: string): Promise<HTMLElement | undefined> {
-  const html = geniusSnapshot
-    ? await loadSnapshot(geniusCacheKey({ page }))
-    : await fetch(
-        `https://hosted.dcd.shared.geniussports.com/embednf/${GENIUS_ORGANIZATION}/en${page}?&iurl=${encodeURIComponent(`${window.location.origin}/genius`)}&_ht=1&_mf=1`,
-      )
-        .then((response) => (response.ok ? (response.json() as Promise<{ html?: string }>) : undefined))
-        .then((data) => data?.html);
-  return html ? new DOMParser().parseFromString(html, 'text/html').body : undefined;
-}
 
 function loadStored(cid: number): Record<string, MatchLines> {
   try {
@@ -115,7 +102,21 @@ interface RecordRow extends PlayerLine {
   date: string;
 }
 
-function RecordsTable({ cid, title, unit, rows, field }: { cid: number; title: string; unit: string; rows: RecordRow[]; field: 'pts' | 'reb' | 'ast' }) {
+function RecordsTable({
+  cid,
+  title,
+  unit,
+  rows,
+  field,
+  renames,
+}: {
+  cid: number;
+  title: string;
+  unit: string;
+  rows: RecordRow[];
+  field: 'pts' | 'reb' | 'ast';
+  renames: TeamNameEntry[];
+}) {
   return (
     <section className="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-slate-200">
       <h2 className="border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-slate-900">{title}</h2>
@@ -131,9 +132,9 @@ function RecordsTable({ cid, title, unit, rows, field }: { cid: number; title: s
                   {row.player}
                 </Link>
                 <p className="truncate text-xs text-slate-500">
-                  {row.team} ·{' '}
+                  {renameTeam(row.team, renames)} ·{' '}
                   <Link to={`/mecze/${row.matchId}?rozgrywki=${cid}&sekcja=boxscore`} className="hover:text-orange-600 hover:underline">
-                    vs {row.opponent}
+                    vs {renameTeam(row.opponent, renames)}
                   </Link>
                   {row.date && `, ${formatDate(row.date)}`}
                 </p>
@@ -155,6 +156,8 @@ function GeniusRecords({ cid }: { cid: number }) {
   const [matches, setMatches] = useState<Record<string, MatchLines>>(() => loadStored(cid));
   const [failed, setFailed] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  // Nazwy drużyn z edycji tych rozgrywek (panel administratora).
+  const renames = teamRenames(useSiteContent().teamNames, findCompetition(cid)?.editionId);
 
   // Terminarz (lista rozegranych meczów), potem box score meczów spoza pamięci — po PARALLEL naraz.
   useEffect(() => {
@@ -211,7 +214,7 @@ function GeniusRecords({ cid }: { cid: number }) {
       </p>
       <div className="grid gap-4 md:grid-cols-3">
         {categories.map(({ key, label, unit }) => (
-          <RecordsTable key={key} cid={cid} title={label} unit={unit} rows={records[key]} field={key} />
+          <RecordsTable key={key} cid={cid} title={label} unit={unit} rows={records[key]} field={key} renames={renames} />
         ))}
       </div>
     </div>
