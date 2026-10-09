@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { defineConfig, type Plugin } from 'vite'
+import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { fetchYoutubeFeed } from './api/_youtube.js'
@@ -100,18 +100,23 @@ function snapshotWriter(): Plugin {
   }
 }
 
-export default defineConfig({
-  plugins: [
-    react(),
-    tailwindcss(),
-    snapshotWriter(),
-  ],
-  server: {
-    port: 5180,
-    // Adres do testu osadzania Genius Sports (wpis "127.0.0.1 dev.dalk.pl" w pliku hosts). Zadziała dopiero,
-    // gdy Genius dopisze tę domenę do zarejestrowanych dla DALK.
-    allowedHosts: ['dev.dalk.pl'],
-    // Zapisywanie migawki nie przeładowuje strony, która ją zbiera.
-    watch: { ignored: ['**/public/snapshot/**', '**/data/admin-store.json'] },
-  },
+export default defineConfig(({ mode }) => {
+  // Dane logowania administratora (ADMIN_LOGIN, ADMIN_PASSWORD) z .env.local dla api/_admin.js — Vite domyślnie
+  // udostępnia zmienne z plików .env tylko stronie (i tylko z przedrostkiem VITE_).
+  for (const [key, value] of Object.entries(loadEnv(mode, process.cwd(), 'ADMIN_'))) process.env[key] ??= value
+  return {
+    plugins: [
+      react(),
+      tailwindcss(),
+      snapshotWriter(),
+    ],
+    server: {
+      port: 5180,
+      // Adres do testu osadzania Genius Sports (wpis "127.0.0.1 dev.dalk.pl" w pliku hosts). Zadziała dopiero,
+      // gdy Genius dopisze tę domenę do zarejestrowanych dla DALK.
+      allowedHosts: ['dev.dalk.pl'],
+      // Zapisywanie migawki nie przeładowuje strony, która ją zbiera.
+      watch: { ignored: ['**/public/snapshot/**', '**/data/admin-store.json'] },
+    },
+  }
 })

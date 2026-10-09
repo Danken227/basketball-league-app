@@ -5,9 +5,11 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
-// Dane logowania na razie stałe (admin/admin); zmienne środowiskowe pozwalają je zmienić bez zmiany kodu.
-const ADMIN_LOGIN = process.env.ADMIN_LOGIN || 'admin';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
+// Dane logowania ze zmiennych środowiskowych (repozytorium jest publiczne, więc hasła nie ma w kodzie): na Vercelu
+// w ustawieniach projektu, na serwerze deweloperskim w .env.local. Bez ADMIN_PASSWORD logowanie jest wyłączone.
+// Czytane przy każdym logowaniu — serwer Vite wczytuje .env.local dopiero po zaimportowaniu tego modułu.
+const adminLogin = () => process.env.ADMIN_LOGIN || 'admin';
+const adminPassword = () => process.env.ADMIN_PASSWORD;
 
 const COOKIE = 'dalk_admin';
 const SESSION_SECONDS = 12 * 60 * 60;
@@ -134,8 +136,10 @@ export async function handleAdmin({ method, action, body = {}, cookie: cookieHea
 
   if (action === 'login') {
     // Oba porównania zawsze (w stałym czasie), żeby czas odpowiedzi nie zdradzał, które pole jest błędne.
-    const loginOk = safeEqual(text(body.login, 100), ADMIN_LOGIN);
-    const passwordOk = safeEqual(typeof body.password === 'string' ? body.password : '', ADMIN_PASSWORD);
+    const password = adminPassword();
+    if (!password) return fail(503, 'Logowanie wyłączone: brak hasła administratora (ADMIN_PASSWORD) w konfiguracji serwera.');
+    const loginOk = safeEqual(text(body.login, 100), adminLogin());
+    const passwordOk = safeEqual(typeof body.password === 'string' ? body.password : '', password);
     if (!loginOk || !passwordOk) {
       // Spowolnienie prób zgadywania hasła.
       await new Promise((resolve) => setTimeout(resolve, 600));
