@@ -15,6 +15,8 @@ export interface NewsItem {
   image: string;
   // Adres wpisu na dalk.pl.
   source: string;
+  // Temat wybrany w panelu administratora (etykieta z newsCategories); bez niego temat wynika z tytułu.
+  category?: string;
 }
 
 export interface NewsCategory {
@@ -45,7 +47,11 @@ const categories: { pattern: RegExp; category: NewsCategory }[] = [
 ];
 const defaultCategory: NewsCategory = { label: 'Wydarzenia', gradient: 'from-rose-600 to-pink-700' };
 
-export const newsCategory = (item: NewsItem) => categories.find(({ pattern }) => pattern.test(item.title))?.category ?? defaultCategory;
+// Tematy do wyboru w panelu administratora.
+export const newsCategories = [...categories.map(({ category }) => category), defaultCategory];
+
+export const newsCategory = (item: NewsItem) =>
+  newsCategories.find(({ label }) => label === item.category) ?? categories.find(({ pattern }) => pattern.test(item.title))?.category ?? defaultCategory;
 
 const months = ['stycznia', 'lutego', 'marca', 'kwietnia', 'maja', 'czerwca', 'lipca', 'sierpnia', 'września', 'października', 'listopada', 'grudnia'];
 
