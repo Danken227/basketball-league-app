@@ -12,6 +12,7 @@ import GeniusListPage from './pages/genius/GeniusListPage';
 import GeniusMatchPage from './pages/genius/GeniusMatchPage';
 import GeniusPlayerPage from './pages/genius/GeniusPlayerPage';
 import GeniusPlayersPage from './pages/genius/GeniusPlayersPage';
+import AdminPage from './pages/AdminPage';
 import Home from './pages/Home';
 import NewsArticlePage from './pages/NewsArticlePage';
 import NewsPage from './pages/NewsPage';
@@ -61,6 +62,7 @@ function App() {
               <Route path="/aktualnosci" element={<NewsPage />} />
               <Route path="/aktualnosci/:slug" element={<NewsArticlePage />} />
               <Route path="/regulamin" element={<RegulationsPage />} />
+              <Route path="/admin" element={<AdminPage />} />
               <Route path="/tabele" element={<BySource genius={<GeniusListPage title="Tabele" icon={icons.table} path="standings" />} mock={<TablesPage />} />} />
               <Route
                 path="/terminarz"

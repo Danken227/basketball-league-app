@@ -5,8 +5,10 @@ import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { fetchYoutubeFeed } from './api/_youtube.js'
+import { fileStore, handleAdmin } from './api/_admin.js'
 
 const snapshotDir = fileURLToPath(new URL('./public/snapshot', import.meta.url))
+const adminStoreFile = fileURLToPath(new URL('./data/admin-store.json', import.meta.url))
 
 // Zapis migawki danych Genius do public/snapshot (wersja demonstracyjna poza domeną ligi, geniusSnapshot.ts).
 // Pliki wysyła strona /__snapshot (SnapshotCrawler) otwarta na dev.dalk.pl — tylko na serwerze deweloperskim.
@@ -28,6 +30,32 @@ function snapshotWriter(): Plugin {
           res.statusCode = 502
           res.end(JSON.stringify({ error: String(error) }))
         }
+      })
+      // Panel administratora — to samo co funkcja Vercela api/admin.js, z zapisem do pliku data/admin-store.json.
+      const adminStore = fileStore(adminStoreFile)
+      server.middlewares.use('/api/admin', (req, res) => {
+        let body = ''
+        req.setEncoding('utf8')
+        req.on('data', (chunk: string) => (body += chunk))
+        req.on('end', async () => {
+          try {
+            const result = await handleAdmin({
+              method: req.method,
+              action: new URL(req.url ?? '', 'http://localhost').searchParams.get('action') ?? '',
+              body: body && req.headers['content-type']?.includes('application/json') ? JSON.parse(body) : {},
+              cookie: req.headers.cookie,
+              store: adminStore,
+            })
+            if (result.setCookie) res.setHeader('set-cookie', result.setCookie)
+            res.statusCode = result.status
+            res.setHeader('content-type', 'application/json')
+            res.setHeader('cache-control', 'no-store')
+            res.end(JSON.stringify(result.body))
+          } catch (error) {
+            res.statusCode = 500
+            res.end(JSON.stringify({ error: String(error) }))
+          }
+        })
       })
       // Pliki migawki prosto z dysku: zapisanych w trakcie pracy serwera Vite nie zna (katalog nie jest
       // obserwowany, żeby zapis nie przeładowywał strony), więc zamiast nich oddałby stronę aplikacji.
@@ -84,6 +112,6 @@ export default defineConfig({
     // gdy Genius dopisze tę domenę do zarejestrowanych dla DALK.
     allowedHosts: ['dev.dalk.pl'],
     // Zapisywanie migawki nie przeładowuje strony, która ją zbiera.
-    watch: { ignored: ['**/public/snapshot/**'] },
+    watch: { ignored: ['**/public/snapshot/**', '**/data/admin-store.json'] },
   },
 })

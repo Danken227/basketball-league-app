@@ -1,11 +1,12 @@
 import { Link } from 'react-router-dom';
-import { news } from '../../data/news';
+import { useNews } from '../../data/siteContent';
 import NewsCard from './NewsCard';
 
 // Najnowsze aktualności na stronie głównej; pełna lista na /aktualnosci.
 const HOME_NEWS_COUNT = 8;
 
 const NewsSection = () => {
+  const news = useNews();
   return (
     <section>
       <div className="mb-3 flex items-baseline justify-between">
