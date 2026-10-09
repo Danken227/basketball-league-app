@@ -5,7 +5,7 @@ import PageHeader from '../components/common/PageHeader';
 import { icons } from '../components/common/icons';
 import { geniusEditionById, geniusEditions, geniusJuniorCompetitions, geniusLeagueName, type GeniusLeagueId } from '../components/genius/geniusConfig';
 import { fetchGeniusPage } from '../components/genius/geniusFetch';
-import { formatNewsDate, news as dalkNews, newsPath } from '../data/news';
+import { formatNewsDate, news as dalkNews, newsCategories, newsCategory, newsPath } from '../data/news';
 import { adminRequest, reloadSiteContent, setAdmin, useAdmin, useSiteContent, type AddedNewsItem } from '../data/siteContent';
 
 // Panel administratora (link w stopce): logowanie, dodawanie aktualności i nazwy drużyn w poszczególnych edycjach.
@@ -80,6 +80,7 @@ function LoginForm() {
 const covers = [...new Set(dalkNews.map((item) => item.image))];
 const coverLabel = (url: string) => url.split('/').pop()!;
 const today = () => new Date().toLocaleDateString('sv-SE');
+const emptyNews = { slug: '', title: '', date: '', excerpt: '', html: '', image: '', source: '' };
 
 function NewsAdmin() {
   const { news } = useSiteContent();
@@ -88,6 +89,7 @@ function NewsAdmin() {
   const [cover, setCover] = useState(covers[0] ?? '');
   const [customCover, setCustomCover] = useState('');
   const [body, setBody] = useState('');
+  const [category, setCategory] = useState('');
   const [error, setError] = useState<string>();
   const [saved, setSaved] = useState<{ slug: string; title: string; edited: boolean }>();
   const [busy, setBusy] = useState(false);
@@ -99,6 +101,7 @@ function NewsAdmin() {
     setTitle(item?.title ?? '');
     setDate(item?.date ?? today());
     setBody(item?.body ?? '');
+    setCategory(item?.category ?? '');
     const image = item ? item.image : (covers[0] ?? '');
     const known = image === '' || covers.includes(image);
     setCover(known ? image : 'custom');
@@ -123,6 +126,7 @@ function NewsAdmin() {
         title,
         date,
         body,
+        category,
         image: cover === 'custom' ? customCover : cover,
         reservedSlugs: dalkNews.map((entry) => entry.slug),
       });
@@ -154,7 +158,17 @@ function NewsAdmin() {
           <Field label="Tytuł">
             <input className={inputClass} value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} required />
           </Field>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-3">
+            <FilterSelect
+              label="Temat"
+              value={category}
+              onChange={setCategory}
+              options={[
+                // Bez wyboru temat wynika z tytułu (jak we wpisach z dalk.pl) — podpowiadamy, jaki wyjdzie.
+                { value: '', label: `Automatycznie (${newsCategory({ ...emptyNews, title }).label})` },
+                ...newsCategories.map(({ label }) => ({ value: label, label })),
+              ]}
+            />
             <Field label="Data publikacji">
               <input className={inputClass} type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
             </Field>
@@ -213,7 +227,9 @@ function NewsAdmin() {
                   <Link to={newsPath(item)} className="block truncate text-sm font-semibold text-slate-900 hover:text-orange-600">
                     {item.title}
                   </Link>
-                  <p className="text-xs text-slate-500">{formatNewsDate(item.date)}</p>
+                  <p className="text-xs text-slate-500">
+                    {formatNewsDate(item.date)} · {newsCategory(item).label}
+                  </p>
                 </div>
                 <button type="button" className={linkButtonClass} onClick={() => startEdit(item)}>
                   Edytuj
