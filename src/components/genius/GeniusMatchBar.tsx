@@ -34,7 +34,9 @@ interface WidgetMatch {
   competition: string;
   league?: BarLeague;
   status: MatchStatus;
+  // Termin z karty; bez rozpoznanej daty (hasDate = false) bieżąca chwila — tylko do kolejności kart.
   date: Date;
+  hasDate: boolean;
   hasTime: boolean;
   teams: WidgetTeam[];
 }
@@ -89,14 +91,16 @@ function leagueOf(competition: string): BarLeague | undefined {
 }
 
 // Status karty widgetu: "Final", "Upcoming", a w trakcie meczu inne oznaczenia (np. kwarta).
-// Kwarta i czas gry z tekstu statusu karty w trakcie meczu (np. "Q2 08:15", "P2 8:15", "OT 02:00").
+// Kwarta i czas gry trwającego meczu (np. "Q2 08:15", "P2 8:15", "OT 02:00"). Widget podaje je w polu daty karty
+// ("Per 4 00:00"), a status ma wtedy samo "Live" — sprawdzamy oba teksty. Kwarta powyżej 4. to dogrywka.
 // Gdy nie da się ich rozpoznać, zostaje sam status "Na żywo".
 function liveTimeOf(text: string): string | undefined {
   if (statusOf(text) !== 'live') return undefined;
   const clock = text.match(/\b(\d{1,2}:\d{2})\b/)?.[1];
   const overtime = /\bOT\d?\b|overtime/i.test(text);
-  const period = text.match(/\b[QPK](\d)\b|\b(\d)(?:st|nd|rd|th)\b|period\s*(\d)/i);
-  const periodText = overtime ? 'dogr.' : period ? `${period[1] ?? period[2] ?? period[3]}. kw.` : undefined;
+  const period = text.match(/\b[QPK](\d)\b|\b(\d)(?:st|nd|rd|th)\b|\bper(?:iod)?\.?\s*(\d)/i);
+  const periodNumber = period ? Number(period[1] ?? period[2] ?? period[3]) : undefined;
+  const periodText = overtime || (periodNumber ?? 0) > 4 ? 'dogr.' : periodNumber ? `${periodNumber}. kw.` : undefined;
   if (/half|przerwa/i.test(text)) return 'przerwa';
   return [periodText, clock].filter(Boolean).join(' ') || undefined;
 }
@@ -146,15 +150,20 @@ function readWidgetCards(root: ParentNode): WidgetMatch[] | undefined {
     if (!href || byHref.has(href)) continue;
     const competition = card.querySelector('.spls_matchcomp')?.textContent?.trim() ?? '';
     const timeText = card.querySelector('.spls_timefield')?.textContent?.trim() || undefined;
+    // Karta meczu w trakcie potrafi mieć w polu daty inny tekst niż "03/10/2026" — wtedy daty nie pokazujemy
+    // (nieprawidłowa data wywracała formatowanie, a z nim całą stronę).
+    const parsed = parseWidgetDate(card.querySelector('.spls_datefield')?.textContent?.trim() ?? '', timeText);
+    const hasDate = !Number.isNaN(parsed.getTime());
     byHref.set(href, {
       id: href.match(/\/(\d+)\/?$/)?.[1] ?? href,
       href,
       competition,
       league: leagueOf(competition),
       status: statusOf(card.querySelector('.spls_matchstatus')?.textContent ?? ''),
-      liveTime: liveTimeOf(card.querySelector('.spls_matchstatus')?.textContent ?? ''),
-      date: parseWidgetDate(card.querySelector('.spls_datefield')?.textContent?.trim() ?? '', timeText),
-      hasTime: Boolean(timeText),
+      liveTime: liveTimeOf(`${card.querySelector('.spls_matchstatus')?.textContent ?? ''} ${hasDate ? '' : (card.querySelector('.spls_datefield')?.textContent ?? '')}`),
+      date: hasDate ? parsed : new Date(),
+      hasDate,
+      hasTime: hasDate && Boolean(timeText),
       teams: [...card.querySelectorAll('.spteam')].map((team) => ({
         id: [...team.classList].find((c) => c.startsWith('tid'))?.slice(3) ?? '',
         code: team.querySelector('.teamname')?.textContent?.trim() ?? '',
@@ -190,6 +199,7 @@ const timeFormat = new Intl.DateTimeFormat('pl-PL', { hour: '2-digit', minute: '
 function MatchCard({ match, schedule, streamUrl }: { match: WidgetMatch; schedule?: ScheduleInfo; streamUrl?: string }) {
   const status: MatchStatus = schedule?.live && match.status !== 'final' ? 'live' : match.status;
   const date = schedule?.date ?? match.date;
+  const hasDate = Boolean(schedule?.date) || match.hasDate;
   const hasTime = Boolean(schedule?.date) || match.hasTime;
   const scores = match.teams.map((t) => Number(t.score));
   const winner = status === 'final' ? Math.max(...scores) : undefined;
@@ -263,7 +273,7 @@ function MatchCard({ match, schedule, streamUrl }: { match: WidgetMatch; schedul
       {/* Termin i hala na dole kafelka, jak w widgecie Genius — także po zakończeniu meczu. */}
       <div className="mt-2 flex items-center justify-between gap-2 border-t border-white/10 pt-2 text-[11px] text-slate-400">
         <span className="shrink-0">
-          {dayFormat.format(date)}
+          {hasDate && dayFormat.format(date)}
           {hasTime && ` · ${timeFormat.format(date)}`}
         </span>
         {schedule?.venue && (
