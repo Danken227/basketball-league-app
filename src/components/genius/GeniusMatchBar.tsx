@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { leagues, type LeagueId } from '../../data/league';
 import { DragScroller, GroupLabel } from '../common/DragScroller';
-import GeniusEmbed from './GeniusEmbed';
 import GeniusWidget from './GeniusWidget';
-import { geniusCacheKey, readGeniusCache } from './geniusCache';
 import { competitionIdByName, geniusSnapshot } from './geniusConfig';
+import { fetchGeniusPage } from './geniusFetch';
 import { placeholderLogo } from './geniusLogo';
 import { loadSnapshot, widgetSnapshotKey } from './geniusSnapshot';
 import { findStream, loadYoutubeVideos, type YoutubeVideo } from './youtubeStreams';
@@ -196,14 +195,61 @@ function readSchedule(root: HTMLElement): Map<string, ScheduleInfo> {
   return info;
 }
 
-// Ustawienia osadzenia terminarza (te same przy osadzaniu i przy szukaniu w pamięci — wspólny klucz).
-const scheduleOptions = (cid: number) => ({ page: `/competition/${cid}/schedule`, showSubMenus: false, showMatchFilter: false });
+// Terminarze odczytane w tej wizycie (sessionStorage, 10 min): po przejściu na inną stronę albo odświeżeniu
+// godziny i hale są od razu, zanim przyjdzie świeży terminarz.
+const SCHEDULE_CACHE_PREFIX = 'genius-bar-schedule-v1:';
+const SCHEDULE_CACHE_MS = 10 * 60 * 1000;
+
+function loadCachedSchedule(cid: number): Map<string, ScheduleInfo> | undefined {
+  try {
+    const stored = JSON.parse(sessionStorage.getItem(SCHEDULE_CACHE_PREFIX + cid) ?? 'null') as {
+      savedAt: number;
+      entries: [string, Omit<ScheduleInfo, 'date'> & { date?: string }][];
+    } | null;
+    if (!stored || Date.now() - stored.savedAt > SCHEDULE_CACHE_MS) return undefined;
+    return new Map(stored.entries.map(([id, info]) => [id, { ...info, date: info.date ? new Date(info.date) : undefined }]));
+  } catch {
+    return undefined;
+  }
+}
+
+function saveCachedSchedule(cid: number, info: Map<string, ScheduleInfo>) {
+  try {
+    sessionStorage.setItem(SCHEDULE_CACHE_PREFIX + cid, JSON.stringify({ savedAt: Date.now(), entries: [...info] }));
+  } catch {
+    // Brak miejsca albo zablokowany storage — terminarz zostaje tylko w stanie paska.
+  }
+}
+
+// Mecz, który w Genius wisi jako trwający, choć dawno się skończył: przy stoliku nie zawsze zamyka się protokół
+// (na dalk.pl taki mecz też zostaje "Live"). Uznajemy go za zakończony, gdy w tej samej hali zaczął się już
+// późniejszy mecz (trwa albo jest zakończony) albo od jego początku minęły 3 godziny.
+const STALE_LIVE_MS = 3 * 60 * 60 * 1000;
+
+interface BarItem {
+  match: WidgetMatch;
+  info?: ScheduleInfo;
+}
+
+const startOf = ({ match, info }: BarItem) => (info?.date ?? match.date).getTime();
+const reportedStatus = ({ match, info }: BarItem): MatchStatus => (info?.live && match.status !== 'final' ? 'live' : match.status);
+
+function displayStatus(item: BarItem, all: BarItem[], now: number): MatchStatus {
+  const status = reportedStatus(item);
+  if (status !== 'live') return status;
+  const start = startOf(item);
+  if (now - start > STALE_LIVE_MS) return 'final';
+  const venue = item.info?.venue;
+  const laterStarted =
+    Boolean(venue) &&
+    all.some((other) => other !== item && other.info?.venue === venue && startOf(other) > start && startOf(other) <= now && reportedStatus(other) !== 'upcoming');
+  return laterStarted ? 'final' : 'live';
+}
 
 const dayFormat = new Intl.DateTimeFormat('pl-PL', { weekday: 'short', day: '2-digit', month: '2-digit' });
 const timeFormat = new Intl.DateTimeFormat('pl-PL', { hour: '2-digit', minute: '2-digit' });
 
-function MatchCard({ match, schedule, streamUrl }: { match: WidgetMatch; schedule?: ScheduleInfo; streamUrl?: string }) {
-  const status: MatchStatus = schedule?.live && match.status !== 'final' ? 'live' : match.status;
+function MatchCard({ match, status, schedule, streamUrl }: { match: WidgetMatch; status: MatchStatus; schedule?: ScheduleInfo; streamUrl?: string }) {
   const date = schedule?.date ?? match.date;
   const hasDate = Boolean(schedule?.date) || match.hasDate;
   const hasTime = Boolean(schedule?.date) || match.hasTime;
@@ -325,13 +371,6 @@ function GeniusMatchBar({ widgetId }: { widgetId: string }) {
   // Czy warto odświeżać widget: aktualizowane przy każdym renderze (patrz niżej), czytane przez licznik.
   const needsRefresh = useRef<() => boolean>(() => false);
   const [schedule, setSchedule] = useState<Map<string, ScheduleInfo>>(new Map());
-  // Terminarze (godziny i hale) wczytujemy chwilę po kartach, żeby nie spowalniały tabeli i Top 10 obok.
-  const [loadSchedules, setLoadSchedules] = useState(false);
-  useEffect(() => {
-    if (!matches) return;
-    const timer = window.setTimeout(() => setLoadSchedules(true), 1500);
-    return () => window.clearTimeout(timer);
-  }, [matches]);
 
   // Widget wypełnia się asynchronicznie, więc czytamy go co pół sekundy. Po każdym odświeżeniu źródła
   // nowe wyniki i czas gry trafiają do paska od razu po wstawieniu iframe.
@@ -414,35 +453,58 @@ function GeniusMatchBar({ widgetId }: { widgetId: string }) {
     };
   }, []);
 
-  // Terminarze tylko tych rozgrywek, które są na pasku. Te zapamiętane wcześniej w tej wizycie czytamy z pamięci
-  // (bez zapytania do Genius), a osadzamy tylko brakujące. Liczone raz po wczytaniu kart, nie przy każdym kliknięciu.
-  const { cachedSchedule, scheduleToLoad } = useMemo(() => {
-    const competitions = [...new Set((matches ?? []).map((m) => competitionIdByName(m.competition)).filter((cid) => cid !== undefined))];
+  // Terminarze rozgrywek z paska: godzina i hala (karta trwającego meczu ma w miejscu daty czas gry), pełne nazwy
+  // drużyn (dopasowanie transmisji) i to, czy mecz trwa. Pobierane wprost z Genius, wszystkie naraz, zaraz po
+  // kartach — wcześniej osadzane jedno po drugim z opóźnieniem, więc hala i godzina trwającego meczu długo nie
+  // dochodziły. Zapamiętane w tej wizycie pokazujemy od razu.
+  const competitionsKey = [...new Set((matches ?? []).map((m) => competitionIdByName(m.competition)).filter((cid) => cid !== undefined))]
+    .sort()
+    .join(',');
+  const cachedSchedule = useMemo(() => {
     const fromCache = new Map<string, ScheduleInfo>();
-    const toLoad = competitions.filter((cid) => {
-      const html = readGeniusCache(geniusCacheKey(scheduleOptions(cid)));
-      if (!html) return true;
-      const root = document.createElement('div');
-      root.innerHTML = html;
-      readSchedule(root).forEach((info, id) => fromCache.set(id, info));
-      return false;
-    });
-    return { cachedSchedule: fromCache, scheduleToLoad: toLoad };
-  }, [matches]);
+    competitionsKey
+      .split(',')
+      .filter(Boolean)
+      .forEach((cid) => loadCachedSchedule(Number(cid))?.forEach((info, id) => fromCache.set(id, info)));
+    return fromCache;
+  }, [competitionsKey]);
 
-  const mergeSchedule = (root: HTMLElement) => {
-    const found = readSchedule(root);
-    if (found.size === 0) return;
-    setSchedule((prev) => {
-      const changed = [...found].some(([id, info]) => JSON.stringify(prev.get(id)) !== JSON.stringify(info));
-      return changed ? new Map([...prev, ...found]) : prev;
-    });
-  };
+  // Przy odświeżeniu widgetu (mecze trwają) pobieramy terminarze ponownie — status meczów i hale.
+  useEffect(() => {
+    if (!competitionsKey) return;
+    let active = true;
+    for (const cid of competitionsKey.split(',').map(Number)) {
+      fetchGeniusPage(`/competition/${cid}/schedule`)
+        .then((root) => {
+          const found = root && readSchedule(root);
+          if (!active || !found || found.size === 0) return;
+          saveCachedSchedule(cid, found);
+          setSchedule((prev) => {
+            const changed = [...found].some(([id, info]) => JSON.stringify(prev.get(id)) !== JSON.stringify(info));
+            return changed ? new Map([...prev, ...found]) : prev;
+          });
+        })
+        .catch(() => undefined);
+    }
+    return () => {
+      active = false;
+    };
+  }, [competitionsKey, widgetRefresh]);
+
+  // Bieżąca chwila do oceny "wiszących" meczów — co minutę (wystarczy przy progach liczonych w godzinach).
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const items: BarItem[] = (matches ?? []).map((match) => ({ match, info: schedule.get(match.id) ?? cachedSchedule.get(match.id) }));
+  // W migawce (demo) "trwający" mecz jest symulowany na meczu sprzed kilku dni — bez reguły wiszących meczów.
+  const statusOf = new Map(items.map((item) => [item.match.href, geniusSnapshot ? reportedStatus(item) : displayStatus(item, items, now)]));
 
   // Transmisje na YouTube — tylko dla meczów w trakcie: listę filmów kanału pobieramy, gdy jakiś mecz trwa,
   // i odświeżamy co 2 minuty. W migawce (demo) "trwający" mecz ma przypiętą transmisję.
   const [videos, setVideos] = useState<YoutubeVideo[]>([]);
-  const anyLive = (matches ?? []).some((m) => m.status === 'live' || (m.status !== 'final' && schedule.get(m.id)?.live));
+  const anyLive = [...statusOf.values()].includes('live');
   useEffect(() => {
     if (!anyLive || geniusSnapshot) return;
     const refresh = () => loadYoutubeVideos().then(setVideos);
@@ -460,22 +522,18 @@ function GeniusMatchBar({ widgetId }: { widgetId: string }) {
   // nie każdy mecz od razu zmienia status w Genius).
   useEffect(() => {
     needsRefresh.current = () =>
-      (matches ?? []).some((m) => {
-        if (m.status === 'final') return false;
-        if (m.status === 'live') return true;
-        const info = schedule.get(m.id) ?? cachedSchedule.get(m.id);
-        if (info?.live) return true;
-        const start = (info?.date ?? m.date).getTime();
-        return start - Date.now() < REFRESH_AHEAD_MS && Date.now() - start < 3 * 60 * 60 * 1000;
+      items.some((item) => {
+        const status = displayStatus(item, items, Date.now());
+        if (status !== 'upcoming') return status === 'live';
+        const start = startOf(item);
+        return start - Date.now() < REFRESH_AHEAD_MS && Date.now() - start < STALE_LIVE_MS;
       });
   });
 
-  const sorted = (matches ?? [])
-    .map((match) => ({ match, info: schedule.get(match.id) ?? cachedSchedule.get(match.id) }))
-    .sort((a, b) => (a.info?.date ?? a.match.date).getTime() - (b.info?.date ?? b.match.date).getTime());
+  const sorted = [...items].sort((a, b) => startOf(a) - startOf(b));
   const visible = sorted.filter(({ match }) => filter === 'all' || match.league === filter);
-  const results = visible.filter(({ match }) => match.status === 'final');
-  const upcoming = visible.filter(({ match }) => match.status !== 'final');
+  const results = visible.filter(({ match }) => statusOf.get(match.href) === 'final');
+  const upcoming = visible.filter(({ match }) => statusOf.get(match.href) !== 'final');
 
   return (
     <section aria-label="Wyniki i najbliższe mecze" className="keep-dark relative overflow-hidden bg-slate-900 text-white">
@@ -511,12 +569,12 @@ function GeniusMatchBar({ widgetId }: { widgetId: string }) {
             <DragScroller resetKey={filter}>
               {results.length > 0 && <GroupLabel>Wyniki</GroupLabel>}
               {results.map(({ match, info }) => (
-                <MatchCard key={match.href} match={match} schedule={info} streamUrl={streamFor(match, info)} />
+                <MatchCard key={match.href} match={match} status={statusOf.get(match.href)!} schedule={info} streamUrl={streamFor(match, info)} />
               ))}
               {results.length > 0 && upcoming.length > 0 && <div data-divider className="w-px shrink-0 bg-white/15" />}
               {upcoming.length > 0 && <GroupLabel>Najbliższe</GroupLabel>}
               {upcoming.map(({ match, info }) => (
-                <MatchCard key={match.href} match={match} schedule={info} streamUrl={streamFor(match, info)} />
+                <MatchCard key={match.href} match={match} status={statusOf.get(match.href)!} schedule={info} streamUrl={streamFor(match, info)} />
               ))}
               {visible.length === 0 && <p className="py-6 text-sm text-slate-400">Brak meczów w tej lidze.</p>}
             </DragScroller>
@@ -528,7 +586,6 @@ function GeniusMatchBar({ widgetId }: { widgetId: string }) {
       {!failed && (
         <div aria-hidden="true" className="pointer-events-none absolute -left-[10000px] top-0 w-[1200px]">
           {!geniusSnapshot && <GeniusWidget widgetId={widgetId} refreshKey={widgetRefresh} />}
-          {loadSchedules && scheduleToLoad.map((cid) => <GeniusEmbed key={cid} {...scheduleOptions(cid)} onContent={mergeSchedule} />)}
         </div>
       )}
     </section>
