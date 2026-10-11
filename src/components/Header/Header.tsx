@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
+import client from '@client/client';
 import { useAdmin } from '../../data/siteContent';
 import ThemeToggle from './ThemeToggle';
 
@@ -34,9 +35,9 @@ const navItems: (NavLinkItem | NavGroupItem)[] = [
   { label: 'Regulamin', path: '/regulamin' },
 ];
 
-const youtubeUrl = 'https://www.youtube.com/@Liga_DALK';
+const youtubeUrl = client.links.youtube;
 // Formularz zgłoszenia drużyny z dalk.pl (ten sam plik co przycisk „Zgłoś team” na stronie ligi).
-const registrationFormUrl = 'https://dalk.pl/images/PLIKI-DO-POBRANIA/formularz-18-edycja.doc';
+const registrationFormUrl = client.links.registrationForm;
 
 const itemClass = (active: boolean) =>
   `rounded-full px-3 py-2 text-sm transition ${active ? 'bg-white/10 text-white' : 'text-slate-300 hover:bg-white/10 hover:text-white'}`;
@@ -109,13 +110,13 @@ function Header() {
     <header className="keep-dark sticky top-0 z-30 bg-slate-950 text-slate-50 shadow-lg shadow-slate-900/20">
       <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-3 sm:px-6 lg:px-8">
         <NavLink to="/" className="flex shrink-0 items-center gap-3 font-semibold text-white" onClick={() => setOpen(false)}>
-          {/* Logo ligi z dalk.pl, zmniejszone do 112 px (public/dalk-logo.webp; ikona strony to dalk-logo.png). */}
-          <img src="/dalk-logo.webp" alt="DALK" width={56} height={56} className="h-14 w-14" />
+          {/* Logo i nazwa ligi z konfiguracji klienta. */}
+          <img src={client.brand.logo} alt={client.brand.shortName} width={56} height={56} className="h-14 w-14" />
           {/* Między 1024 a 1280 px pełne menu nie zmieściłoby się obok nazwy ligi — wtedy samo logo. */}
           <span className="hidden text-sm leading-tight sm:block lg:hidden xl:block">
-            Dolnośląska
+            {client.brand.nameLines[0]}
             <br />
-            <span className="text-slate-400">Liga Koszykówki</span>
+            <span className="text-slate-400">{client.brand.nameLines[1]}</span>
           </span>
         </NavLink>
 
@@ -181,15 +182,17 @@ function Header() {
             </svg>
             <span className="lg:hidden xl:inline">YouTube</span>
           </a>
-          {/* Jak na dalk.pl: przycisk pobiera formularz zgłoszeniowy (plik Word), bez przechodzenia na inną stronę. */}
-          <a
-            href={registrationFormUrl}
-            download
-            onClick={() => setOpen(false)}
-            className="mt-2 whitespace-nowrap rounded-full bg-orange-500 px-4 py-2 text-center text-sm font-semibold text-slate-950 transition hover:bg-orange-400 lg:ml-2 lg:mt-0"
-          >
-            Zgłoś zespół
-          </a>
+          {/* Przycisk pobiera formularz zgłoszeniowy klienta (np. plik Word), bez przechodzenia na inną stronę. */}
+          {registrationFormUrl && (
+            <a
+              href={registrationFormUrl}
+              download
+              onClick={() => setOpen(false)}
+              className="mt-2 whitespace-nowrap rounded-full bg-orange-500 px-4 py-2 text-center text-sm font-semibold text-slate-950 transition hover:bg-orange-400 lg:ml-2 lg:mt-0"
+            >
+              Zgłoś zespół
+            </a>
+          )}
         </nav>
         {/* Na telefonie obok przycisku menu, na komputerze na końcu menu (prawy górny róg). */}
         <ThemeToggle />

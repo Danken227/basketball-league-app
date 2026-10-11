@@ -1,3 +1,4 @@
+import client from '@client/client';
 import { lazy, Suspense, useEffect, type ReactNode } from 'react';
 import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { icons } from './components/common/icons';
@@ -52,8 +53,8 @@ function VisitCounter() {
     if (pathname.startsWith('/admin') || pathname.startsWith('/__')) return;
     let visit = false;
     try {
-      visit = !sessionStorage.getItem('dalk-visit');
-      sessionStorage.setItem('dalk-visit', '1');
+      visit = !sessionStorage.getItem(`${client.storagePrefix}-visit`);
+      sessionStorage.setItem(`${client.storagePrefix}-visit`, '1');
     } catch {
       // Zablokowany storage — liczymy samo wyświetlenie.
     }

@@ -1,3 +1,4 @@
+import client from '@client/client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { leagues, type LeagueId } from '../../data/league';
 import { DragScroller, GroupLabel } from '../common/DragScroller';
@@ -67,7 +68,7 @@ const REFRESH_AHEAD_MS = 15 * 60 * 1000;
 const WIDGET_READ_MS = 500;
 
 // Transmisja przypięta na stałe do "trwającego" meczu w wersji demonstracyjnej (Care Bears II - Łobuzersi).
-const DEMO_STREAM_URL = 'https://www.youtube.com/watch?v=i_5gLSnPotY';
+const DEMO_STREAM_URL = client.demo.streamUrl;
 
 // Wersja demonstracyjna (migawka): kolejne stany "trwającego" meczu (wynik, kwarta i czas gry),
 // zmieniane co LIVE_REFRESH_MS, w pętli.

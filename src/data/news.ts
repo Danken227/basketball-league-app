@@ -1,7 +1,8 @@
 // Aktualności i regulamin przeniesione z dalk.pl na potrzeby prezentacji (20 ostatnich wpisów, stan z 8.10.2026).
 // Pliki JSON tworzy scripts/scrape-dalk.mjs; treść to oczyszczony HTML (akapity, pogrubienia, linki,
 // listy, obrazy) — bez stylów z Worda i edytora strony.
-import newsData from './dalkNews.json';
+import client from '@client/client';
+import newsData from '@client/content/news.json';
 
 export interface NewsItem {
   slug: string;
@@ -34,10 +35,7 @@ export interface RegulationsSection {
 
 // Banery wpisów z dalk.pl mamy u siebie, zmniejszone (WebP): oryginał PNG ważył 860 KB, a strona główna pokazuje
 // go kilka razy. Inne obrazki (np. w treści wpisów) zostają z dalk.pl.
-const localImages: Record<string, string> = {
-  'https://dalk.pl/images/aktualnosci-foto/baner18edycja.png': '/news/baner18edycja.webp',
-  'https://dalk.pl/images/aktualnosci-foto/baner-dalk.jpg': '/news/baner-dalk.webp',
-};
+const localImages: Record<string, string> = client.news.imageRewrites;
 export const newsImage = (url: string) => localImages[url] ?? url;
 
 export const news: NewsItem[] = newsData.map((item) => ({ ...item, image: newsImage(item.image) }));

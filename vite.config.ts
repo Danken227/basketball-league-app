@@ -7,10 +7,24 @@ import tailwindcss from '@tailwindcss/vite'
 import { fetchYoutubeFeed } from './api/_youtube.js'
 import { fileStore, handleAdmin } from './api/_admin.js'
 
-const snapshotDir = fileURLToPath(new URL('./public/snapshot', import.meta.url))
+// Klient (liga), dla którego budujemy stronę: clients/<CLIENT> (domyślnie dalk). Jego public/ to pliki strony
+// (logo, banery, migawka demo), site.json — tytuł, ikona i adres deweloperski, a reszta konfiguracji jest
+// dostępna w kodzie strony jako @client (clients/<klient>/client.ts).
+const clientId = process.env.CLIENT ?? 'dalk'
+const clientDir = fileURLToPath(new URL(`./clients/${clientId}`, import.meta.url))
+const clientSite = JSON.parse(fs.readFileSync(path.join(clientDir, 'site.json'), 'utf8')) as { title: string; favicon: string; devHost: string }
+const snapshotDir = path.join(clientDir, 'public', 'snapshot')
+
+// Tytuł i ikona klienta w index.html (%CLIENT_TITLE%, %CLIENT_FAVICON%).
+function clientHtml(): Plugin {
+  return {
+    name: 'client-html',
+    transformIndexHtml: (html) => html.replaceAll('%CLIENT_TITLE%', clientSite.title).replaceAll('%CLIENT_FAVICON%', clientSite.favicon),
+  }
+}
 const adminStoreFile = fileURLToPath(new URL('./data/admin-store.json', import.meta.url))
 
-// Zapis migawki danych Genius do public/snapshot (wersja demonstracyjna poza domeną ligi, geniusSnapshot.ts).
+// Zapis migawki danych Genius do clients/<klient>/public/snapshot (wersja demonstracyjna poza domeną ligi, geniusSnapshot.ts).
 // Pliki wysyła strona /__snapshot (SnapshotCrawler) otwarta na dev.dalk.pl — tylko na serwerze deweloperskim.
 function snapshotWriter(): Plugin {
   return {
@@ -126,12 +140,15 @@ export default defineConfig(({ mode }) => {
       react(),
       tailwindcss(),
       snapshotWriter(),
+      clientHtml(),
     ],
+    publicDir: path.join(clientDir, 'public'),
+    resolve: { alias: { '@client': clientDir } },
     server: {
       port: 5180,
-      // Adres do testu osadzania Genius Sports (wpis "127.0.0.1 dev.dalk.pl" w pliku hosts). Zadziała dopiero,
-      // gdy Genius dopisze tę domenę do zarejestrowanych dla DALK.
-      allowedHosts: ['dev.dalk.pl'],
+      // Adres deweloperski w domenie ligi (np. wpis "127.0.0.1 dev.dalk.pl" w pliku hosts) — Genius wydaje dane
+      // tylko domenom zarejestrowanym dla organizacji.
+      allowedHosts: [clientSite.devHost],
       // Zapisywanie migawki nie przeładowuje strony, która ją zbiera.
       watch: { ignored: ['**/public/snapshot/**', '**/data/admin-store.json'] },
     },

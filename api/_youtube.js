@@ -3,7 +3,10 @@
 // funkcja Vercela api/youtube-feed.js albo serwer deweloperski Vite (vite.config.ts). Plik z "_" na początku
 // Vercel traktuje jako pomocniczy, nie jako osobną funkcję.
 
-export const YOUTUBE_CHANNEL_ID = 'UCAPNMcSyuqGYAzFEg3qL_wA'; // @Liga_DALK
+import client from './_client.js';
+
+// Kanał YouTube ligi (konfiguracja klienta, clients/<klient>/server.js).
+export const YOUTUBE_CHANNEL_ID = client.youtubeChannelId;
 
 const decode = (text) =>
   text.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
