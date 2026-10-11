@@ -1,5 +1,5 @@
 // Migawka danych Genius do wersji demonstracyjnej poza domeną ligi (np. na Vercelu): treści osadzeń zapisane
-// na dev.dalk.pl przez stronę /__snapshot (SnapshotCrawler) leżą w public/snapshot jako pliki HTML, a manifest
+// na adresie deweloperskim ligi przez stronę /__snapshot (SnapshotCrawler) leżą w clients/<klient>/public/snapshot jako pliki HTML, a manifest
 // index.json wiąże je z kluczami osadzeń (geniusCacheKey). GeniusEmbed w trybie migawki czyta je zamiast Genius.
 
 export interface SnapshotManifest {

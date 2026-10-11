@@ -4,6 +4,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import client from './_client.js';
 
 // Dane logowania ze zmiennych środowiskowych (repozytorium jest publiczne, więc hasła nie ma w kodzie): na Vercelu
 // w ustawieniach projektu, na serwerze deweloperskim w .env.local. Bez ADMIN_PASSWORD logowanie jest wyłączone.
@@ -11,22 +12,22 @@ import path from 'node:path';
 const adminLogin = () => process.env.ADMIN_LOGIN || 'admin';
 const adminPassword = () => process.env.ADMIN_PASSWORD;
 
-const COOKIE = 'dalk_admin';
+const COOKIE = `${client.storagePrefix}_admin`;
 const SESSION_SECONDS = 12 * 60 * 60;
 
-const NEWS_KEY = 'dalk:news';
-const TEAM_NAMES_KEY = 'dalk:team-names';
+const NEWS_KEY = `${client.storagePrefix}:news`;
+const TEAM_NAMES_KEY = `${client.storagePrefix}:team-names`;
 // Logo drużyny w edycji wgrane w panelu (data URL) — osobno od listy nazw, żeby lista (wczytywana przez każdego
 // odwiedzającego) była lekka. Strona pobiera logo z /api/admin?action=team-logo (z długą pamięcią podręczną).
-const teamLogoKey = (teamId, editionId) => `dalk:team-logo:${teamId}:${editionId}`;
+const teamLogoKey = (teamId, editionId) => `${client.storagePrefix}:team-logo:${teamId}:${editionId}`;
 // Odwiedziny strony: hasz na dzień (czas polski) z polami visits (wejście na stronę — pierwsza podstrona w karcie
 // przeglądarki) i views (każda podstrona). Bez ciasteczek i danych osobowych — same liczniki. Miesiące to sumy dni.
-const visitsKey = (day) => `dalk:visits:${day}`;
-const warsawDay = (date) => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Warsaw' }).format(date);
+const visitsKey = (day) => `${client.storagePrefix}:visits:${day}`;
+const warsawDay = (date) => new Intl.DateTimeFormat('sv-SE', { timeZone: client.timeZone }).format(date);
 const VISIT_DAYS = 400;
 
 // Rekordy rozgrywek przeliczone w panelu (GeniusRecords czyta je zamiast liczyć w przeglądarce odwiedzającego).
-const recordsKey = (cid) => `dalk:records:${cid}`;
+const recordsKey = (cid) => `${client.storagePrefix}:records:${cid}`;
 const RECORD_FIELDS = ['pts', 'reb', 'ast'];
 const MAX_RECORDS_LENGTH = 60000;
 
@@ -51,7 +52,7 @@ const redisToken = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_RE
 // Klucz podpisu sesji: ADMIN_SECRET, a bez niego skrót tokenu bazy (tajny, znany tylko serwerowi). Bez bazy
 // (serwer deweloperski) losowy — sesje kończą się wtedy z restartem serwera.
 const sessionSecret =
-  process.env.ADMIN_SECRET || (redisToken ? crypto.createHash('sha256').update(`dalk-admin:${redisToken}`).digest('hex') : crypto.randomBytes(32).toString('hex'));
+  process.env.ADMIN_SECRET || (redisToken ? crypto.createHash('sha256').update(`${client.storagePrefix}-admin:${redisToken}`).digest('hex') : crypto.randomBytes(32).toString('hex'));
 
 export function redisStore() {
   if (!redisUrl || !redisToken) return undefined;

@@ -1,49 +1,29 @@
+import client from '@client/client';
 import { Link } from 'react-router-dom';
 import { useAdmin } from '../../data/siteContent';
 
-// Belka partnerów, jak na dalk.pl: partner danych (statystyki ligi prowadzone są w systemie Genius Sports)
-// i patron medialny. Na dole wejście do panelu administratora.
+// Belka partnerów ligi (konfiguracja klienta, np. partner danych i patron medialny). Na dole wejście do panelu
+// administratora.
 function Footer() {
   const admin = useAdmin();
   return (
     <footer className="mt-12 border-t border-slate-200 bg-white">
       <div className="mx-auto flex max-w-7xl flex-col items-center gap-6 px-4 py-6 sm:flex-row sm:justify-center sm:gap-12 sm:px-6 lg:px-8">
-        <div className="flex flex-col items-center gap-3 sm:flex-row sm:gap-4">
-          <span className="text-[11px] font-semibold uppercase tracking-widest text-slate-500">Partner danych</span>
-          <a href="https://www.geniussports.com/" target="_blank" rel="noreferrer" className="transition hover:opacity-80">
-            {/* Loga z dalk.pl (u nas zmniejszone, WebP) mają ciemne napisy na przezroczystym tle, więc w trybie ciemnym
-                dostają białe podłoże. */}
-            <img
-              src="/partners/genius-sports.webp"
-              alt="Genius Sports"
-              width={133}
-              height={80}
-              className="h-20 w-auto rounded-lg dark:bg-[#fff]"
-            />
-          </a>
-        </div>
-        <div className="flex flex-col items-center gap-3 sm:flex-row sm:gap-4">
-          <span className="text-[11px] font-semibold uppercase tracking-widest text-slate-500">Patron medialny</span>
-          {/* Logo z dalk.pl ma szeroki przezroczysty margines (rysunek to ok. 70% wysokości obrazka), więc obrazek
-              jest powiększony i przycięty w ramce: rysunek ma wtedy tę samą wysokość co logo Genius Sports (78px). */}
-          <a
-            href="https://strefabasketu.pl"
-            target="_blank"
-            rel="noreferrer"
-            className="block h-20 w-[106px] overflow-hidden rounded-lg transition hover:opacity-80 dark:bg-[#fff]"
-          >
-            <img
-              src="/partners/strefabasketu.webp"
-              alt="Strefa Basketu.pl"
-              width={110}
-              height={110}
-              className="-mt-[14px] -ml-[1px] h-[110px] w-[110px] max-w-none"
-            />
-          </a>
-        </div>
+        {client.partners.map((partner) => (
+          <div key={partner.href} className="flex flex-col items-center gap-3 sm:flex-row sm:gap-4">
+            <span className="text-[11px] font-semibold uppercase tracking-widest text-slate-500">{partner.label}</span>
+            {/* Loga mają zwykle ciemne napisy na przezroczystym tle, więc w trybie ciemnym dostają białe podłoże
+                (klasy w konfiguracji klienta; logo z dużym marginesem przycina ramka). */}
+            <a href={partner.href} target="_blank" rel="noreferrer" className={`${partner.frameClassName ?? ''} transition hover:opacity-80`}>
+              <img src={partner.logo} alt={partner.name} width={partner.width} height={partner.height} className={partner.imgClassName} />
+            </a>
+          </div>
+        ))}
       </div>
       <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-center gap-x-4 gap-y-1 border-t border-slate-100 px-4 py-4 text-xs text-slate-500 sm:px-6 lg:px-8">
-        <span>© {new Date().getFullYear()} Dolnośląska Liga Koszykówki</span>
+        <span>
+          © {new Date().getFullYear()} {client.brand.copyrightName}
+        </span>
         <Link to="/admin" className="inline-flex items-center gap-1 font-medium text-slate-500 transition hover:text-orange-600">
           <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5" aria-hidden="true">
             <path

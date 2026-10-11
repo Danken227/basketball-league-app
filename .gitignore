@@ -23,8 +23,8 @@ dist-ssr
 *.sln
 *.sw?
 
-# Migawka danych Genius (wersja demonstracyjna wgrywana przez Vercel CLI, poza repozytorium)
-public/snapshot/
+# Migawka danych Genius klienta (wersja demonstracyjna wgrywana przez Vercel CLI, poza repozytorium)
+clients/*/public/snapshot/
 .vercel
 .env*
 

@@ -15,6 +15,8 @@
     "moduleDetection": "force",
     "noEmit": true,
     "jsx": "react-jsx",
+    /* Konfiguracja klienta (ligi) — w budowaniu wybiera ją vite.config.ts (CLIENT), tu typy dla domyślnego. */
+    "paths": { "@client/*": ["./clients/dalk/*"] },
 
     /* Linting */
     "noUnusedLocals": true,
@@ -22,6 +24,6 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"],
+  "include": ["src", "clients/*/client.ts"],
   "exclude": ["src/components/application/**", "src/components/base/**", "src/components/foundations/**"]
 }

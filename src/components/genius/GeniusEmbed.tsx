@@ -2,7 +2,8 @@ import { useEffect, useId, useMemo, useRef, useState, type MouseEvent } from 're
 import { useNavigate } from 'react-router-dom';
 import { geniusCacheKey, readGeniusCache, writeGeniusCache } from './geniusCache';
 import { teamRenames, useSiteContent } from '../../data/siteContent';
-import { findCompetition, geniusSnapshot, isGeniusDomain, mapGeniusPath } from './geniusConfig';
+import client from '@client/client';
+import { findCompetition, GENIUS_ORGANIZATION, geniusSnapshot, isGeniusDomain, mapGeniusPath } from './geniusConfig';
 import { fetchGeniusJson } from './geniusFetch';
 import { installSnapshotScripts, loadSnapshot, SNAPSHOT_DIR, snapshotMissingHtml } from './geniusSnapshot';
 import { translateGenius } from './geniusI18n';
@@ -79,7 +80,7 @@ function addSnapshotStylesheet() {
 
 // Genius buduje linki na dwa sposoby: na zarejestrowanej domenie jako "<adres>?&WHurl=/competition/..",
 // a w pozostałych przypadkach wprost do swoich stron (https://hosted.dcd.shared.geniussports.com/DALK/en/competition/..).
-const hostedPrefix = /^https:\/\/hosted\.dcd\.shared\.geniussports\.com\/DALK\/[a-z]{2}(\/.*)$/;
+const hostedPrefix = new RegExp(`^https://hosted\\.dcd\\.shared\\.geniussports\\.com/${GENIUS_ORGANIZATION}/[a-z]{2}(/.*)$`);
 
 function geniusLinkPath(href: string): string | undefined {
   if (href.includes('WHurl=')) return decodeURIComponent(href.split('WHurl=')[1] ?? '');
@@ -270,7 +271,7 @@ function GeniusEmbed({
           if (hasValidContent() || target.querySelector('.genius-cached')) return;
           target.innerHTML = `<p class="genius-status"><strong>Genius Sports nie zwrócił danych.</strong><br>
             Serwis jest chwilowo niedostępny albo domena ${window.location.host} nie jest zarejestrowana
-            dla organizacji DALK w Genius Sports. Spróbuj odświeżyć stronę za chwilę.</p>`;
+            dla organizacji ${GENIUS_ORGANIZATION} w Genius Sports. Spróbuj odświeżyć stronę za chwilę.</p>`;
         }, 8000)
       : window.setTimeout(() => {
           if (!hasValidContent()) setRetry({ key: cacheKey, token: Date.now() });
@@ -386,8 +387,8 @@ function GeniusEmbed({
       <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-600">
         <p className="font-semibold text-slate-900">Dane Genius Sports są dostępne tylko na domenie ligi.</p>
         <p className="mt-2">
-          Genius Sports wyświetla statystyki DALK wyłącznie na domenach zarejestrowanych dla ligi (np.{' '}
-          <code className="rounded bg-slate-100 px-1">dalk.pl</code>). Na tej domenie (
+          Genius Sports wyświetla statystyki {client.brand.shortName} wyłącznie na domenach zarejestrowanych dla ligi (np.{' '}
+          <code className="rounded bg-slate-100 px-1">{client.genius.allowedDomains[0]}</code>). Na tej domenie (
           <code className="rounded bg-slate-100 px-1">{window.location.hostname}</code>) osadzenie zwróciłoby tylko komunikat o niedozwolonej domenie.
         </p>
       </div>

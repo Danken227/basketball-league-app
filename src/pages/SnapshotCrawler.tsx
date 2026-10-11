@@ -1,3 +1,4 @@
+import client from '@client/client';
 import { useEffect, useRef, useState } from 'react';
 import GeniusEmbed from '../components/genius/GeniusEmbed';
 import GeniusWidget from '../components/genius/GeniusWidget';
@@ -7,7 +8,7 @@ import { SNAPSHOT_DIR, snapshotFile, snapshotKey, widgetSnapshotKey, type Snapsh
 
 // Zbieranie migawki danych Genius do wersji demonstracyjnej (tylko serwer deweloperski, adres /__snapshot na dev.dalk.pl).
 // Przechodzi po kolei przez strony Genius bieżącej edycji, po jednej naraz (z przerwami, żeby nie obciążać Genius),
-// i zapisuje ich treść — już po naszych poprawkach — do public/snapshot (zapis robi wtyczka w vite.config.ts).
+// i zapisuje ich treść — już po naszych poprawkach — do clients/<klient>/public/snapshot (zapis robi wtyczka w vite.config.ts).
 // Kolejne strony (drużyny, zawodnicy z czołówek, ostatnie mecze) wynikają z treści list. Zapisane wcześniej strony
 // są pomijane, więc przerwane zbieranie można wznowić.
 
@@ -249,7 +250,7 @@ function SnapshotCrawler() {
   };
 
   if (!isGeniusDomain()) {
-    return <p className="mx-auto max-w-3xl p-8 text-sm">Migawkę zbiera się na domenie ligi (np. http://dev.dalk.pl:5180/__snapshot).</p>;
+    return <p className="mx-auto max-w-3xl p-8 text-sm">Migawkę zbiera się na domenie ligi (np. http://{client.site.devHost}:5180/__snapshot).</p>;
   }
 
   return (

@@ -1,22 +1,27 @@
-// Oficjalne statystyki z Genius Sports (FIBA LiveStats) — te same dane co na dalk.pl. Gotowy HTML z serwera Genius
-// dla organizacji DALK pobieramy wprost (geniusFetch) i wstawiamy we wskazany element (GeniusEmbed).
+// Oficjalne statystyki z Genius Sports (FIBA LiveStats). Gotowy HTML z serwera Genius dla organizacji ligi pobieramy
+// wprost (geniusFetch) i wstawiamy we wskazany element (GeniusEmbed). Identyfikatory ligi (organizacja, domeny,
+// edycje i rozgrywki, widget) są w konfiguracji klienta (clients/<klient>/client.ts).
 
+import client from '@client/client';
+import type { GeniusEdition } from '../../clientConfig';
 import { leagues, type LeagueId } from '../../data/league';
 
-export const GENIUS_ORGANIZATION = 'DALK';
+export type { GeniusEdition };
+
+export const GENIUS_ORGANIZATION = client.genius.organization;
 export const GENIUS_WIDGET_URL = 'https://widget.wh.geniussports.com/widget/';
 
 // Genius wyświetla dane tylko na domenach zarejestrowanych dla organizacji. Serwer sprawdza domenę strony
 // (Referer) i dla niezarejestrowanej zwraca stronę "invalidreferrer" — samo dopasowanie subdomeny tu nie wystarcza.
 // Ta lista służy tylko do wyboru źródła danych i komunikatu zamiast pustego miejsca poza domeną ligi.
-const allowedDomains = ['dalk.pl', 'sportlivepolska.pl'];
+const allowedDomains = client.genius.allowedDomains;
 
 export const isGeniusDomain = (hostname = window.location.hostname) =>
   allowedDomains.some((domain) => hostname === domain || hostname.endsWith(`.${domain}`));
 
 // Źródło danych strony: na domenie ligi elementy Genius na żywo, poza nią nasze dane testowe (wymyślone drużyny).
 // Zmienna VITE_DATA_SOURCE=genius|snapshot|mock wymusza źródło; "snapshot" to migawka danych Genius (zapisane treści
-// bieżącej edycji, geniusSnapshot.ts) — wersja demonstracyjna budowana z public/snapshot, którego nie ma w repozytorium.
+// bieżącej edycji, geniusSnapshot.ts) — wersja demonstracyjna budowana z clients/<klient>/public/snapshot, którego nie ma w repozytorium.
 export type DataSource = 'genius' | 'snapshot' | 'mock';
 const forcedSource = import.meta.env.VITE_DATA_SOURCE;
 export const dataSource: DataSource =
@@ -27,23 +32,8 @@ export const geniusSnapshot = dataSource === 'snapshot';
 // Domyślnie treść zostaje po angielsku, z polskimi tylko nazwami tabel statystyk i datami meczów drużyny.
 export const geniusTranslation = import.meta.env.VITE_GENIUS_TRANSLATION === 'pl';
 
-// Edycje DALK w Genius (od najnowszej) i numery rozgrywek poszczególnych lig.
-// Liga ma edycję jesienną (np. 2025/26) i wiosenną (np. 2026), każdą z osobnymi rozgrywkami.
-export interface GeniusEdition {
-  id: string;
-  name: string;
-  competitions: Partial<Record<LeagueId, number>>;
-}
-
-const allEditions: GeniusEdition[] = [
-  { id: '2026-27', name: '2026/27', competitions: { eks: 49970, '1': 49974, '2': 50006, '3': 50016 } },
-  { id: '2026', name: '2026', competitions: { eks: 48294, '1': 48292, '2': 48291, '3': 48293 } },
-  { id: '2025-26', name: '2025/26', competitions: { eks: 42328, '1': 42459, '2': 42460, '3': 42461 } },
-  { id: '2025', name: '2025', competitions: { eks: 40641, '1': 40640, '2': 40642, '3': 40666 } },
-  { id: '2024-25', name: '2024/25', competitions: { eks: 39633, '1': 39634, '2': 39635, '3': 39636 } },
-  { id: '2024', name: '2024', competitions: { eks: 38002, '1': 38003, '2': 38004, '3': 38007 } },
-  { id: '2023-24', name: '2023/24', competitions: { eks: 36963, '1': 36964, '2': 36965, '3': 36966 } },
-];
+// Edycje ligi w Genius (od najnowszej) i numery rozgrywek poszczególnych lig.
+const allEditions: GeniusEdition[] = client.genius.editions;
 
 // Migawka obejmuje tylko bieżącą edycję, więc w niej filtry nie proponują innych.
 export const geniusEditions = geniusSnapshot ? allEditions.slice(0, 1) : allEditions;
@@ -76,9 +66,7 @@ export function findCompetition(id: number): { editionId: string; leagueId: Geni
   return undefined;
 }
 
-// Rozgrywki juniorskie DALK, osobno dla każdej kategorii wiekowej (pasek meczów, tabela i Top 10 strony głównej).
-// Numery z listy rozgrywek DALK w Genius (wybór rozgrywek: parametr _cc=1). W edycji 2023/24 juniorzy grali
-// we wspólnych rozgrywkach bez podziału na kategorie, a U13 jest od 2025.
+// Rozgrywki juniorskie, osobno dla każdej kategorii wiekowej (pasek meczów, tabela i Top 10 strony głównej).
 // Kolejność na listach wyboru: od najstarszych.
 export const juniorCategories = ['U19', 'U17', 'U15', 'U13'] as const;
 export type JuniorCategory = (typeof juniorCategories)[number];
@@ -92,16 +80,9 @@ export const geniusLeagueOptions: { value: GeniusLeagueId; label: string }[] = [
 export const isGeniusLeagueId = (value: string): value is GeniusLeagueId => geniusLeagueOptions.some((option) => option.value === value);
 export const geniusLeagueName = (leagueId: GeniusLeagueId) => geniusLeagueOptions.find((option) => option.value === leagueId)?.label ?? leagueId;
 
-export const geniusJuniorCompetitions: Record<string, Partial<Record<JuniorCategory, number>>> = {
-  '2026-27': { U13: 49971, U15: 49972, U17: 49975, U19: 49982 },
-  '2026': { U13: 48295, U15: 48296, U17: 48376, U19: 48375 },
-  '2025-26': { U13: 42329, U15: 42326, U17: 42324, U19: 42323 },
-  '2025': { U13: 40711, U15: 40710, U17: 40713, U19: 40667 },
-  '2024-25': { U15: 39640, U17: 39639, U19: 39638 },
-  '2024': { U15: 38021, U17: 38006, U19: 38005 },
-};
+export const geniusJuniorCompetitions: Record<string, Partial<Record<JuniorCategory, number>>> = client.genius.juniorCompetitions;
 
-// Numer rozgrywek z ich nazwy w Genius, np. "2. Liga 2026/27" albo "DALK Junior U15 2026/27".
+// Numer rozgrywek z ich nazwy w Genius, np. "2. Liga 2026/27" albo "<organizacja> Junior U15 2026/27".
 export function competitionIdByName(name: string): number | undefined {
   const senior = name.match(/^(Ekstraliga|[123]\. Liga) (.+)$/i);
   if (senior) {
@@ -116,11 +97,9 @@ export function competitionIdByName(name: string): number | undefined {
   return undefined;
 }
 
-// Widget paska meczów skonfigurowany w panelu Genius (ten sam co na dalk.pl, obejmuje wszystkie ligi).
+// Widget paska meczów skonfigurowany w panelu Genius (konfiguracja klienta).
 // Filtr ligi robi nasz pasek (GeniusMatchBar) na podstawie nazwy rozgrywek w kartach.
-export const geniusResultsWidgets: Partial<Record<LeagueId | 'all', string>> = {
-  all: 'L65TRHI9J4MAGUYV9HYOQO094QLVMS',
-};
+export const geniusResultsWidgets: Partial<Record<LeagueId | 'all', string>> = client.genius.resultsWidgets;
 
 // Sekcje strony Statystyki (dane wybranych rozgrywek).
 export const geniusStatsSections = [

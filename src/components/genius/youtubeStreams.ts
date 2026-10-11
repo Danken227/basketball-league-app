@@ -1,8 +1,9 @@
 // Transmisje meczów z kanału YouTube ligi (lista z /api/youtube-feed — funkcja Vercela albo serwer Vite).
 // Tytuły transmisji mają postać "Gospodarz - Gość", np. "4us Basket Maślice - Delta Szwadron"; dopasowujemy je
 // do pełnych nazw drużyn z terminarza Genius, z tolerancją na drobne różnice, i do daty meczu.
+import client from '@client/client';
 
-export const YOUTUBE_CHANNEL_URL = 'https://www.youtube.com/@Liga_DALK';
+export const YOUTUBE_CHANNEL_URL = client.links.youtube;
 
 export interface YoutubeVideo {
   id: string;

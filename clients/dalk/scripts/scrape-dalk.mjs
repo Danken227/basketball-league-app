@@ -1,4 +1,4 @@
-// Pobiera 20 ostatnich aktualności i regulamin z dalk.pl do plików JSON: node scripts/scrape-dalk.mjs src/data
+// Pobiera 20 ostatnich aktualności i regulamin z dalk.pl do plików JSON klienta: node clients/dalk/scripts/scrape-dalk.mjs clients/dalk/content
 // Strony otwieramy w przeglądarce, bo adresy e-mail Joomla wstawia skryptem dopiero po załadowaniu strony.
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
@@ -148,6 +148,6 @@ const mailto = (html) => html.replace(/(^|[\s>(:])([\w.+-]+@[\w-]+(?:\.[\w-]+)+)
 for (const post of news) post.html = mailto(post.html);
 for (const section of sections) for (const item of section.items) item.html = mailto(item.html);
 
-fs.writeFileSync(path.join(outDir, 'dalkNews.json'), `${JSON.stringify(news, null, 1)}\n`);
-fs.writeFileSync(path.join(outDir, 'dalkRegulations.json'), `${JSON.stringify(sections, null, 1)}\n`);
+fs.writeFileSync(path.join(outDir, 'news.json'), `${JSON.stringify(news, null, 1)}\n`);
+fs.writeFileSync(path.join(outDir, 'regulations.json'), `${JSON.stringify(sections, null, 1)}\n`);
 console.log(news.length, 'aktualności;', sections.length, 'sekcji regulaminu,', sections.reduce((n, s) => n + s.items.length, 0), 'punktów');

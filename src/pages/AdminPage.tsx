@@ -6,6 +6,7 @@ import { icons } from '../components/common/icons';
 import { geniusEditionById, geniusEditions, geniusJuniorCompetitions, geniusLeagueName, type GeniusLeagueId } from '../components/genius/geniusConfig';
 import { fetchGeniusPage } from '../components/genius/geniusFetch';
 import { loadStoredRecords, playedMatchIds, recomputeRecords, type RecordsProgress, type StoredRecords } from '../components/genius/geniusRecordsData';
+import client from '@client/client';
 import { news as dalkNews, newsCategories, newsCategory, newsDateLabel, newsPath } from '../data/news';
 import { adminRequest, reloadSiteContent, setAdmin, useAdmin, useSiteContent, type AddedNewsItem } from '../data/siteContent';
 
@@ -242,7 +243,7 @@ function NewsAdmin() {
       </Card>
       <Card title="Dodane w panelu">
         {news.length === 0 ? (
-          <p className="text-sm text-slate-500">Brak — na stronie są tylko aktualności przeniesione z dalk.pl.</p>
+          <p className="text-sm text-slate-500">Brak — na stronie są tylko aktualności przeniesione z {client.news.sourceSite}.</p>
         ) : (
           <>
             <ul className="divide-y divide-slate-100">
