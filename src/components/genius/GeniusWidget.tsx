@@ -3,7 +3,9 @@ import { GENIUS_WIDGET_URL } from './geniusConfig';
 
 // Widget skonfigurowany w panelu Genius (np. pasek meczów na stronie głównej dalk.pl).
 // Wstawiamy go tak jak dalk.pl: element "spw_<id>", pusta konfiguracja window.spw_<id> i skrypt widgetu.
-function GeniusWidget({ widgetId }: { widgetId: string }) {
+// Skrypt zawiera migawkę wyników z chwili pobrania, dlatego refreshKey wstawia go ponownie po wygaśnięciu
+// minutowej pamięci podręcznej Genius. Klucz widgetu musi pozostać jedynym parametrem adresu.
+function GeniusWidget({ widgetId, refreshKey = 0 }: { widgetId: string; refreshKey?: number }) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -22,7 +24,7 @@ function GeniusWidget({ widgetId }: { widgetId: string }) {
       delete window[configName];
       if (placeholder) placeholder.innerHTML = '';
     };
-  }, [widgetId]);
+  }, [widgetId, refreshKey]);
 
   return <div id={`spw_${widgetId}`} ref={ref} className="genius-widget min-h-24" />;
 }

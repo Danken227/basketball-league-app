@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { leagues, type LeagueId } from '../../data/league';
 import { DragScroller, GroupLabel } from '../common/DragScroller';
 import GeniusEmbed from './GeniusEmbed';
@@ -60,6 +60,12 @@ const leagueBadge: Record<BarLeague, string> = { eks: 'EKS', '1': '1L', '2': '2L
 
 // Co ile ponownie czytamy karty widgetu (wyniki meczów na żywo).
 const LIVE_REFRESH_MS = 20000;
+// Widget Genius odpowiada z pamięci podręcznej przez minutę, więc wtedy odtwarzamy jego skrypt —
+// tylko gdy karta przeglądarki jest widoczna, a na pasku coś trwa albo zaraz się zaczyna (REFRESH_AHEAD_MS).
+const WIDGET_SOURCE_REFRESH_MS = 65 * 1000;
+const REFRESH_AHEAD_MS = 15 * 60 * 1000;
+// Po ponownym pobraniu widgetu wystarczy krótki odczyt jego iframe — nie wysyłamy przy tym dodatkowych zapytań.
+const WIDGET_READ_MS = 500;
 
 // Transmisja przypięta na stałe do "trwającego" meczu w wersji demonstracyjnej (Care Bears II - Łobuzersi).
 const DEMO_STREAM_URL = 'https://www.youtube.com/watch?v=i_5gLSnPotY';
@@ -312,6 +318,12 @@ function GeniusMatchBar({ widgetId }: { widgetId: string }) {
   const [filter, setFilter] = useState<Filter>('all');
   const [matches, setMatches] = useState<WidgetMatch[]>();
   const [failed, setFailed] = useState(false);
+  // Widget Genius jest statyczną migawką, więc w trakcie wizyty odtwarzamy go po wygaśnięciu cache'u serwera.
+  const [widgetRefresh, setWidgetRefresh] = useState(0);
+  // Ostatnio odczytane karty (JSON) — zmieniamy stan tylko przy zmianie; undefined, dopóki nic nie odczytano.
+  const lastCards = useRef<string>(undefined);
+  // Czy warto odświeżać widget: aktualizowane przy każdym renderze (patrz niżej), czytane przez licznik.
+  const needsRefresh = useRef<() => boolean>(() => false);
   const [schedule, setSchedule] = useState<Map<string, ScheduleInfo>>(new Map());
   // Terminarze (godziny i hale) wczytujemy chwilę po kartach, żeby nie spowalniały tabeli i Top 10 obok.
   const [loadSchedules, setLoadSchedules] = useState(false);
@@ -321,7 +333,8 @@ function GeniusMatchBar({ widgetId }: { widgetId: string }) {
     return () => window.clearTimeout(timer);
   }, [matches]);
 
-  // Widget wypełnia się asynchronicznie, więc odpytujemy go co pół sekundy (maks. 15 s).
+  // Widget wypełnia się asynchronicznie, więc czytamy go co pół sekundy. Po każdym odświeżeniu źródła
+  // nowe wyniki i czas gry trafiają do paska od razu po wstawieniu iframe.
   // W migawce danych karty są zapisanym HTML widgetu.
   useEffect(() => {
     if (geniusSnapshot) {
@@ -357,32 +370,49 @@ function GeniusMatchBar({ widgetId }: { widgetId: string }) {
       };
     }
     const started = Date.now();
-    let liveTimer: number | undefined;
-    const timer = window.setInterval(() => {
+    // Odczyt tylko do znalezienia kart — kolejne odświeżenie źródła (widgetRefresh) uruchamia go od nowa.
+    const read = () => {
       const found = readWidget(document.getElementById(`spw_${widgetId}`));
       if (found) {
-        setMatches(found);
         window.clearInterval(timer);
-        // Widget Genius sam odświeża karty w trakcie meczów (wynik, status) — czytamy je ponownie co 20 s,
-        // bez dodatkowych zapytań do Genius. Stan zmieniamy tylko, gdy coś się zmieniło.
-        let last = JSON.stringify(found);
-        liveTimer = window.setInterval(() => {
-          const fresh = readWidget(document.getElementById(`spw_${widgetId}`));
-          const text = fresh && JSON.stringify(fresh);
-          if (!fresh || text === last) return;
-          last = text!;
-          setMatches(fresh);
-        }, LIVE_REFRESH_MS);
-      } else if (Date.now() - started > 15000) {
+        const text = JSON.stringify(found);
+        if (text !== lastCards.current) {
+          lastCards.current = text;
+          setMatches(found);
+        }
+        setFailed(false);
+      } else if (Date.now() - started > 15000 && lastCards.current === undefined) {
+        // Wolna odpowiedź przy odświeżeniu nie psuje paska — zostają karty z poprzedniego odczytu.
+        // Na widget Genius przechodzimy tylko wtedy, gdy kart nie udało się odczytać ani razu.
+        window.clearInterval(timer);
         setFailed(true);
-        window.clearInterval(timer);
       }
-    }, 500);
+    };
+    const timer = window.setInterval(read, WIDGET_READ_MS);
+    read();
     return () => {
       window.clearInterval(timer);
-      window.clearInterval(liveTimer);
     };
-  }, [widgetId]);
+  }, [widgetId, widgetRefresh]);
+
+  useEffect(() => {
+    if (geniusSnapshot) return;
+    const refresh = () => {
+      if (document.visibilityState === 'visible' && needsRefresh.current()) setWidgetRefresh((previous) => previous + 1);
+    };
+    const timer = window.setInterval(refresh, WIDGET_SOURCE_REFRESH_MS);
+    // Powrót do karty po dłuższej przerwie: od razu świeże wyniki zamiast czekania na kolejny takt.
+    let hiddenAt = 0;
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') hiddenAt = Date.now();
+      else if (hiddenAt && Date.now() - hiddenAt > WIDGET_SOURCE_REFRESH_MS) refresh();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, []);
 
   // Terminarze tylko tych rozgrywek, które są na pasku. Te zapamiętane wcześniej w tej wizycie czytamy z pamięci
   // (bez zapytania do Genius), a osadzamy tylko brakujące. Liczone raz po wczytaniu kart, nie przy każdym kliknięciu.
@@ -426,6 +456,20 @@ function GeniusMatchBar({ widgetId }: { widgetId: string }) {
     return findStream(videos, info.home, info.away, info.date ?? match.date);
   };
 
+  // Odświeżamy, gdy jakiś mecz trwa albo powinien się zaczynać (od kwadransa przed do 3 godzin po terminie —
+  // nie każdy mecz od razu zmienia status w Genius).
+  useEffect(() => {
+    needsRefresh.current = () =>
+      (matches ?? []).some((m) => {
+        if (m.status === 'final') return false;
+        if (m.status === 'live') return true;
+        const info = schedule.get(m.id) ?? cachedSchedule.get(m.id);
+        if (info?.live) return true;
+        const start = (info?.date ?? m.date).getTime();
+        return start - Date.now() < REFRESH_AHEAD_MS && Date.now() - start < 3 * 60 * 60 * 1000;
+      });
+  });
+
   const sorted = (matches ?? [])
     .map((match) => ({ match, info: schedule.get(match.id) ?? cachedSchedule.get(match.id) }))
     .sort((a, b) => (a.info?.date ?? a.match.date).getTime() - (b.info?.date ?? b.match.date).getTime());
@@ -458,7 +502,7 @@ function GeniusMatchBar({ widgetId }: { widgetId: string }) {
         </div>
 
         {failed ? (
-          <GeniusWidget widgetId={widgetId} />
+          <GeniusWidget widgetId={widgetId} refreshKey={widgetRefresh} />
         ) : !matches ? (
           <p className="py-8 text-sm text-slate-400">Wczytywanie meczów…</p>
         ) : (
@@ -483,7 +527,7 @@ function GeniusMatchBar({ widgetId }: { widgetId: string }) {
       {/* Źródła danych poza ekranem (zostają w DOM, żeby skrypty Genius działały): widget i terminarze. */}
       {!failed && (
         <div aria-hidden="true" className="pointer-events-none absolute -left-[10000px] top-0 w-[1200px]">
-          {!geniusSnapshot && <GeniusWidget widgetId={widgetId} />}
+          {!geniusSnapshot && <GeniusWidget widgetId={widgetId} refreshKey={widgetRefresh} />}
           {loadSchedules && scheduleToLoad.map((cid) => <GeniusEmbed key={cid} {...scheduleOptions(cid)} onContent={mergeSchedule} />)}
         </div>
       )}
