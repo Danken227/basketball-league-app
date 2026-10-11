@@ -39,17 +39,24 @@ function snapshotWriter(): Plugin {
         req.on('data', (chunk: string) => (body += chunk))
         req.on('end', async () => {
           try {
+            const params = new URL(req.url ?? '', 'http://localhost').searchParams
             const result = await handleAdmin({
               method: req.method,
-              action: new URL(req.url ?? '', 'http://localhost').searchParams.get('action') ?? '',
+              action: params.get('action') ?? '',
+              query: Object.fromEntries(params),
               body: body && req.headers['content-type']?.includes('application/json') ? JSON.parse(body) : {},
               cookie: req.headers.cookie,
               store: adminStore,
             })
             if (result.setCookie) res.setHeader('set-cookie', result.setCookie)
             res.statusCode = result.status
+            res.setHeader('cache-control', result.cacheControl ?? 'no-store')
+            if (result.binary) {
+              res.setHeader('content-type', result.binary.contentType)
+              res.end(result.binary.data)
+              return
+            }
             res.setHeader('content-type', 'application/json')
-            res.setHeader('cache-control', 'no-store')
             res.end(JSON.stringify(result.body))
           } catch (error) {
             res.statusCode = 500

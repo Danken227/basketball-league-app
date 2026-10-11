@@ -16,6 +16,11 @@ const SESSION_SECONDS = 12 * 60 * 60;
 
 const NEWS_KEY = 'dalk:news';
 const TEAM_NAMES_KEY = 'dalk:team-names';
+// Logo drużyny w edycji wgrane w panelu (data URL) — osobno od listy nazw, żeby lista (wczytywana przez każdego
+// odwiedzającego) była lekka. Strona pobiera logo z /api/admin?action=team-logo (z długą pamięcią podręczną).
+const teamLogoKey = (teamId, editionId) => `dalk:team-logo:${teamId}:${editionId}`;
+const LOGO_DATA_URL = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/;
+const MAX_LOGO_LENGTH = 300000;
 
 // Baza Upstash Redis podpięta do projektu Vercela (integracja dodaje zmienne KV_* albo UPSTASH_REDIS_REST_*).
 const redisUrl = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
@@ -123,8 +128,17 @@ const slugify = (title) =>
 const fail = (status, error) => ({ status, body: { error } });
 
 // Obsługa zapytania niezależna od serwera: { method, action, body, cookie, secure } → { status, body, setCookie }.
-export async function handleAdmin({ method, action, body = {}, cookie: cookieHeader, secure = false, store }) {
+// Odpowiedź może też być plikiem (binary: { contentType, data }) — logo drużyny.
+export async function handleAdmin({ method, action, query = {}, body = {}, cookie: cookieHeader, secure = false, store }) {
   if (action === 'session') return { status: 200, body: { admin: validSession(cookieHeader) } };
+
+  if (action === 'team-logo') {
+    const logo = store && /^\d+$/.test(query.team ?? '') && /^[\d-]+$/.test(query.edition ?? '') ? await store.get(teamLogoKey(query.team, query.edition)) : undefined;
+    const match = typeof logo === 'string' ? logo.match(/^data:(image\/[a-z+]+);base64,(.+)$/) : null;
+    if (!match) return fail(404, 'Brak logo.');
+    // Adres logo zawiera znacznik wersji (v), więc przeglądarka może je trzymać bez sprawdzania.
+    return { status: 200, binary: { contentType: match[1], data: Buffer.from(match[2], 'base64') }, cacheControl: 'public, max-age=31536000, immutable' };
+  }
 
   if (action === 'content') {
     if (!store) return { status: 200, body: { news: [], teamNames: [] } };
@@ -205,8 +219,21 @@ export async function handleAdmin({ method, action, body = {}, cookie: cookieHea
     const geniusName = text(body.geniusName, 120);
     if (!/^\d+$/.test(teamId) || !/^[\d-]+$/.test(editionId)) return fail(400, 'Wybierz edycję i drużynę.');
     if (!name || !geniusName) return fail(400, 'Podaj nazwę drużyny w tej edycji.');
-    const names = ((await store.get(TEAM_NAMES_KEY)) ?? []).filter((entry) => !(entry.teamId === teamId && entry.editionId === editionId));
-    const entry = { teamId, editionId, name, geniusName, updatedAt: new Date().toISOString() };
+    const all = (await store.get(TEAM_NAMES_KEY)) ?? [];
+    const current = all.find((entry) => entry.teamId === teamId && entry.editionId === editionId);
+    // Logo: "keep" (bez zmian), pusty tekst (bez logo — jak w Genius), adres https albo wgrany obrazek (data URL).
+    const logoInput = typeof body.logo === 'string' ? body.logo.trim() : '';
+    let logo;
+    if (logoInput === 'keep') logo = current?.logo;
+    else if (LOGO_DATA_URL.test(logoInput)) {
+      if (logoInput.length > MAX_LOGO_LENGTH) return fail(400, 'Logo jest za duże (maks. ok. 200 KB).');
+      await store.set(teamLogoKey(teamId, editionId), logoInput);
+      logo = `/api/admin?action=team-logo&team=${teamId}&edition=${editionId}&v=${Date.now()}`;
+    } else if (/^https:\/\/[^\s"'<>]+$/.test(logoInput) && logoInput.length <= 500) logo = logoInput;
+    else if (logoInput) return fail(400, 'Logo: wgraj obrazek albo podaj adres zaczynający się od https://.');
+    if (!logo?.startsWith('/api/')) await store.set(teamLogoKey(teamId, editionId), null);
+    const names = all.filter((entry) => entry !== current);
+    const entry = { teamId, editionId, name, geniusName, ...(logo ? { logo } : {}), updatedAt: new Date().toISOString() };
     await store.set(TEAM_NAMES_KEY, [...names, entry]);
     return { status: 200, body: { entry } };
   }
@@ -217,6 +244,7 @@ export async function handleAdmin({ method, action, body = {}, cookie: cookieHea
       TEAM_NAMES_KEY,
       names.filter((entry) => !(entry.teamId === body.teamId && entry.editionId === body.editionId)),
     );
+    if (/^\d+$/.test(String(body.teamId)) && /^[\d-]+$/.test(String(body.editionId))) await store.set(teamLogoKey(body.teamId, body.editionId), null);
     return { status: 200, body: { ok: true } };
   }
 
