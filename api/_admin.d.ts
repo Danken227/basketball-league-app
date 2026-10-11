@@ -8,8 +8,15 @@ export declare function fileStore(file: string): AdminStore;
 export declare function handleAdmin(request: {
   method?: string;
   action: string;
+  query?: Record<string, string>;
   body?: Record<string, unknown>;
   cookie?: string;
   secure?: boolean;
   store?: AdminStore;
-}): Promise<{ status: number; body: unknown; setCookie?: string }>;
+}): Promise<{
+  status: number;
+  body?: unknown;
+  setCookie?: string;
+  cacheControl?: string;
+  binary?: { contentType: string; data: Buffer };
+}>;

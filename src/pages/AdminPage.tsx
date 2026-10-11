@@ -291,16 +291,51 @@ const editionCompetitions = (editionId: string) => {
   }));
 };
 
-// Drużyny z listy rozgrywek Genius: link ".../team/123" (albo w migawce już "/druzyny/123") z nazwą.
-async function loadTeams(cid: string): Promise<{ id: string; name: string }[]> {
+interface GeniusTeam {
+  id: string;
+  name: string;
+  // Logo z Genius (podgląd w formularzu).
+  logo?: string;
+}
+
+// Drużyny z listy rozgrywek Genius: link ".../team/123" (albo w migawce już "/druzyny/123") z nazwą; logo
+// rozpoznajemy po opisie obrazka (Genius opisuje logo nazwą drużyny).
+async function loadTeams(cid: string): Promise<GeniusTeam[]> {
   const root = await fetchGeniusPage(`/competition/${cid}/teams`);
-  const teams = new Map<string, string>();
+  const logos = new Map([...(root?.querySelectorAll('img[alt]') ?? [])].map((img) => [img.getAttribute('alt')!.trim(), img.getAttribute('src') ?? '']));
+  const teams = new Map<string, GeniusTeam>();
   root?.querySelectorAll('a[href]').forEach((link) => {
     const id = link.getAttribute('href')!.match(/(?:\/team\/|^\/druzyny\/)(\d+)/)?.[1];
     const name = link.textContent?.replace(/\s+/g, ' ').trim();
-    if (id && name && !teams.has(id)) teams.set(id, name);
+    if (id && name && !teams.has(id)) teams.set(id, { id, name, logo: logos.get(name) || undefined });
   });
-  return [...teams].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, 'pl'));
+  return [...teams.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl'));
+}
+
+// Wgrane logo zmniejszamy w przeglądarce do 160 px (WebP, a gdy przeglądarka go nie zapisze — PNG): mały plik
+// w bazie i szybkie wczytywanie na stronie.
+const LOGO_SIZE = 160;
+
+async function resizeLogo(file: File): Promise<string> {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, LOGO_SIZE / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  const webp = canvas.toDataURL('image/webp', 0.9);
+  return webp.startsWith('data:image/webp') ? webp : canvas.toDataURL('image/png');
+}
+
+function LogoPreview({ src, label }: { src?: string; label: string }) {
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <span className="grid h-16 w-16 place-items-center overflow-hidden rounded-lg bg-white ring-1 ring-slate-200 dark:bg-[#fff]">
+        {src ? <img src={src} alt="" className="h-14 w-14 object-contain" /> : <span className="text-[10px] text-slate-400">brak</span>}
+      </span>
+      <span className="text-[10px] uppercase tracking-wide text-slate-500">{label}</span>
+    </div>
+  );
 }
 
 const editionName = (editionId: string) => geniusEditionById.get(editionId)?.name ?? editionId;
@@ -310,9 +345,12 @@ function TeamNamesAdmin() {
   const { teamNames } = useSiteContent();
   const [editionId, setEditionId] = useState(geniusEditions[0].id);
   const [cid, setCid] = useState(() => editionCompetitions(geniusEditions[0].id)[0]?.value ?? '');
-  const [teams, setTeams] = useState<{ cid: string; list: { id: string; name: string }[] }>();
-  const [team, setTeam] = useState<{ id: string; geniusName: string }>();
+  const [teams, setTeams] = useState<{ cid: string; list: GeniusTeam[] }>();
+  const [team, setTeam] = useState<{ id: string; geniusName: string; geniusLogo?: string }>();
   const [name, setName] = useState('');
+  // Logo w edycji: '' — jak w Genius, 'keep' — zapisane wcześniej bez zmian, data URL — nowo wgrane, https — adres.
+  const [logo, setLogo] = useState('');
+  const [savedLogo, setSavedLogo] = useState<string>();
   const [error, setError] = useState<string>();
   const [saved, setSaved] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -332,25 +370,48 @@ function TeamNamesAdmin() {
   const teamList = teams?.cid === cid ? teams.list : undefined;
   const existing = (teamId: string, edition: string) => teamNames.find((entry) => entry.teamId === teamId && entry.editionId === edition);
 
+  const resetTeam = () => {
+    setTeam(undefined);
+    setName('');
+    setLogo('');
+    setSavedLogo(undefined);
+  };
+
   const changeEdition = (value: string) => {
     setEditionId(value);
     setCid(editionCompetitions(value)[0]?.value ?? '');
-    setTeam(undefined);
-    setName('');
+    resetTeam();
   };
 
   // Inne rozgrywki to inna lista drużyn — wybrana drużyna i wpisana nazwa przestają pasować, więc je czyścimy.
   const changeCompetition = (value: string) => {
     setCid(value);
-    setTeam(undefined);
-    setName('');
+    resetTeam();
     setSaved(undefined);
+  };
+
+  // Logo zapisane wcześniej dla tej drużyny i edycji (wgrane w panelu zostaje bez zmian, dopóki nie wgrasz nowego).
+  const applySavedLogo = (entryLogo?: string) => {
+    setSavedLogo(entryLogo);
+    setLogo(entryLogo ? (entryLogo.startsWith('/api/') ? 'keep' : entryLogo) : '');
+  };
+
+  const uploadLogo = async (file?: File) => {
+    if (!file) return;
+    try {
+      setLogo(await resizeLogo(file));
+      setError(undefined);
+    } catch {
+      setError('Nie udało się odczytać obrazka — wybierz plik PNG, JPG albo WebP.');
+    }
   };
 
   const chooseTeam = (teamId: string) => {
     const found = teamList?.find((entry) => entry.id === teamId);
-    setTeam(found && { id: found.id, geniusName: found.name });
-    setName(found ? (existing(found.id, editionId)?.name ?? found.name) : '');
+    setTeam(found && { id: found.id, geniusName: found.name, geniusLogo: found.logo });
+    const entry = found && existing(found.id, editionId);
+    setName(found ? (entry?.name ?? found.name) : '');
+    applySavedLogo(entry?.logo);
     setSaved(undefined);
   };
 
@@ -361,9 +422,10 @@ function TeamNamesAdmin() {
     setError(undefined);
     setSaved(undefined);
     try {
-      await adminRequest('team-name-save', { teamId: team.id, editionId, name, geniusName: team.geniusName });
+      const { entry } = await adminRequest<{ entry: { logo?: string } }>('team-name-save', { teamId: team.id, editionId, name, geniusName: team.geniusName, logo });
       await reloadSiteContent();
-      setSaved(`Zapisano: ${team.geniusName} → ${name} (edycja ${editionName(editionId)}).`);
+      applySavedLogo(entry.logo);
+      setSaved(`Zapisano: ${team.geniusName} → ${name}${entry.logo ? ' (z logo)' : ''} (edycja ${editionName(editionId)}).`);
     } catch (e) {
       setError(errorText(e));
     } finally {
@@ -388,6 +450,7 @@ function TeamNamesAdmin() {
     setCid(editionCompetitions(edition)[0]?.value ?? '');
     setTeam({ id: entry.teamId, geniusName: entry.geniusName });
     setName(entry.name);
+    applySavedLogo(entry.logo);
     setSaved(undefined);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -402,10 +465,10 @@ function TeamNamesAdmin() {
 
   return (
     <div className="flex flex-col gap-5">
-      <Card title="Nazwa drużyny w edycji">
+      <Card title="Nazwa i logo drużyny w edycji">
         <p className="mb-4 text-sm text-slate-600">
-          Genius pokazuje we wszystkich edycjach najnowszą nazwę drużyny. Tu ustawisz nazwę, pod którą drużyna grała w danej edycji — strona pokaże ją w tabelach,
-          terminarzu, meczach i na stronie drużyny tej edycji.
+          Genius pokazuje we wszystkich edycjach najnowszą nazwę i logo drużyny. Tu ustawisz nazwę i logo, pod którymi drużyna grała w danej edycji — strona
+          pokaże je w tabelach, terminarzu, meczach i na stronie drużyny tej edycji.
         </p>
         <form onSubmit={submit} className="flex flex-col gap-4">
           <div className="flex flex-wrap items-end gap-3">
@@ -416,10 +479,40 @@ function TeamNamesAdmin() {
           <Field label={`Nazwa w edycji ${editionName(editionId)}`}>
             <input className={`${inputClass} max-w-md`} value={name} onChange={(e) => setName(e.target.value)} maxLength={120} disabled={!team} required />
           </Field>
+          {team && (
+            <div className="flex flex-col gap-2">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Logo w edycji {editionName(editionId)}</span>
+              <div className="flex flex-wrap items-center gap-4">
+                <LogoPreview src={team.geniusLogo} label="w Genius" />
+                <span className="text-slate-400" aria-hidden="true">
+                  →
+                </span>
+                <LogoPreview src={logo === 'keep' ? savedLogo : logo || team.geniusLogo} label={logo ? 'w tej edycji' : 'bez zmian'} />
+                <div className="flex flex-wrap gap-2">
+                  <label className={`${smallButtonClass} cursor-pointer`}>
+                    Wgraj plik…
+                    <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="sr-only" onChange={(e) => uploadLogo(e.target.files?.[0])} />
+                  </label>
+                  {logo && (
+                    <button type="button" className={dangerButtonClass} onClick={() => setLogo('')}>
+                      Logo z Genius
+                    </button>
+                  )}
+                </div>
+              </div>
+              <input
+                className={`${inputClass} max-w-md`}
+                type="url"
+                placeholder="albo adres obrazka: https://…"
+                value={logo.startsWith('https://') ? logo : ''}
+                onChange={(e) => setLogo(e.target.value)}
+              />
+            </div>
+          )}
           <Message error={error} success={saved} />
           <div>
             <button type="submit" className={buttonClass} disabled={busy || !team}>
-              {busy ? 'Zapisywanie…' : 'Zapisz nazwę'}
+              {busy ? 'Zapisywanie…' : 'Zapisz'}
             </button>
           </div>
         </form>
@@ -435,6 +528,7 @@ function TeamNamesAdmin() {
                   <th className="py-2 pr-4 font-semibold">Edycja</th>
                   <th className="py-2 pr-4 font-semibold">Nazwa w Genius</th>
                   <th className="py-2 pr-4 font-semibold">Nazwa w edycji</th>
+                  <th className="py-2 pr-4 font-semibold">Logo</th>
                   <th className="py-2 pr-4 font-semibold">Zmieniono</th>
                   <th className="py-2" />
                 </tr>
@@ -449,6 +543,9 @@ function TeamNamesAdmin() {
                       </Link>
                     </td>
                     <td className="py-2 pr-4 font-semibold text-slate-900">{entry.name}</td>
+                    <td className="py-2 pr-4">
+                      {entry.logo ? <img src={entry.logo} alt="" className="h-8 w-8 rounded bg-white object-contain dark:bg-[#fff]" /> : <span className="text-xs text-slate-400">z Genius</span>}
+                    </td>
                     <td className="whitespace-nowrap py-2 pr-4 text-xs text-slate-500">{new Date(entry.updatedAt).toLocaleString('pl-PL')}</td>
                     <td className="whitespace-nowrap py-2 text-right">
                       <button type="button" className={`${smallButtonClass} mr-2`} onClick={() => edit(entry.teamId, entry.editionId)}>

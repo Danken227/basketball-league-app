@@ -17,6 +17,8 @@ export interface TeamNameEntry {
   editionId: string;
   name: string;
   geniusName: string;
+  // Logo z tamtego sezonu: adres obrazka (wgrany w panelu: /api/admin?action=team-logo…); bez niego logo z Genius.
+  logo?: string;
   updatedAt: string;
 }
 
@@ -70,9 +72,9 @@ export function useNews(): NewsItem[] {
   return news.length === 0 ? dalkNews : [...news, ...dalkNews].sort((a, b) => b.date.localeCompare(a.date));
 }
 
-// Nazwy drużyn wybranej edycji: nazwa z Genius → nazwa w tej edycji.
+// Drużyny wybranej edycji z inną nazwą (nazwa z Genius → nazwa w tej edycji) albo innym logo.
 export function teamRenames(teamNames: TeamNameEntry[], editionId: string | undefined) {
-  return editionId ? teamNames.filter((entry) => entry.editionId === editionId && entry.name !== entry.geniusName) : [];
+  return editionId ? teamNames.filter((entry) => entry.editionId === editionId && (entry.name !== entry.geniusName || entry.logo)) : [];
 }
 
 export const renameTeam = (name: string, renames: TeamNameEntry[]) => renames.find((entry) => entry.geniusName === name)?.name ?? name;
