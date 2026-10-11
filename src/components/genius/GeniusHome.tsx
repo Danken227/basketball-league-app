@@ -4,6 +4,7 @@ import SegmentedControl from '../common/SegmentedControl';
 import GeniusEmbed from './GeniusEmbed';
 import GeniusPrefetch from './GeniusPrefetch';
 import { competitionId, currentGeniusEdition, geniusJuniorCompetitions, juniorCategories } from './geniusConfig';
+import { firstGroup, readGroups, useDefaultGroup } from './geniusGroups';
 
 // Tabela i Top 10 strony głównej w trybie Genius: nasza oprawa i filtry, dane z Genius Sports.
 // Pasek meczów jest w GeniusMatchBar. Tabele i liderów pozostałych lig wczytujemy w tle (GeniusPrefetch),
@@ -29,7 +30,8 @@ const homeCompetitionById = new Map(homeCompetitions.map((c) => [c.value, c]));
 // Z wyprzedzeniem wczytujemy tylko tabele i liderów lig seniorów (po jednym zapytaniu na ligę), żeby nie
 // obciążać serwera Genius — przy zbyt wielu zapytaniach zaczyna odpowiadać wolno albo pustymi stronami.
 // Tabele grup i rozgrywki juniorów wczytują się dopiero po wybraniu (potem są w pamięci).
-const standingsPrefetch = currentCompetitions.map(({ cid }) => ({ page: standingsPage(cid) }));
+// Tabele z grupami: od razu pierwsza grupa (jeśli już ją znamy), jak w widocznej tabeli.
+const standingsPrefetch = () => currentCompetitions.map(({ cid }) => ({ page: standingsPage(cid, firstGroup(cid)) }));
 const leadersPrefetch = currentCompetitions.map(({ cid }) => ({ page: `/competition/${cid}/leaders`, showSubMenus: false }));
 
 function CompetitionSelect({ value, onChange }: { value: string; onChange: (value: string) => void }) {
@@ -60,21 +62,14 @@ function CompetitionSelect({ value, onChange }: { value: string; onChange: (valu
   );
 }
 
-// Grupy (fazy) tabeli odczytane z podmenu Genius, które chowamy (genius.css) na rzecz naszego przełącznika.
-function readGroups(root: HTMLElement) {
-  const links = [...root.querySelectorAll('.selection-scroll a.menuoption')];
-  return {
-    names: links.map((link) => link.textContent?.trim() ?? '').filter(Boolean),
-    current: links.find((link) => link.classList.contains('currentoption'))?.textContent?.trim() ?? '',
-  };
-}
-
 export function GeniusLeagueTable() {
   const [competition, setCompetition] = useState('eks');
   // Grupa wybrana naszym przełącznikiem ("" = domyślna z Genius, czyli pierwsza).
   const [phase, setPhase] = useState('');
   const [groups, setGroups] = useState<{ names: string[]; current: string }>({ names: [], current: '' });
   const cid = homeCompetitionById.get(competition)?.cid;
+  // Bez wybranej grupy — pierwsza (A), a nie domyślna grupa Genius (geniusGroups).
+  const defaultGroup = useDefaultGroup(cid, phase);
 
   const changeCompetition = (value: string) => {
     setCompetition(value);
@@ -83,6 +78,7 @@ export function GeniusLeagueTable() {
   };
 
   const onContent = (root: HTMLElement) => {
+    defaultGroup.onGroups(root);
     const next = readGroups(root);
     setGroups((prev) => (prev.names.join('|') === next.names.join('|') && prev.current === next.current ? prev : next));
   };
@@ -103,8 +99,8 @@ export function GeniusLeagueTable() {
           />
         </div>
       )}
-      {cid && <GeniusEmbed page={standingsPage(cid, phase)} compact onContent={onContent} />}
-      <GeniusPrefetch items={standingsPrefetch} />
+      {cid && <GeniusEmbed page={standingsPage(cid, defaultGroup.phase)} compact onContent={onContent} />}
+      <GeniusPrefetch items={standingsPrefetch()} />
     </section>
   );
 }
