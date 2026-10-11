@@ -15,6 +15,28 @@ const inputClass =
   'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition hover:border-orange-400 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20';
 const buttonClass = 'rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-orange-700 disabled:opacity-50';
 const linkButtonClass = 'text-sm font-medium text-orange-600 hover:text-orange-700';
+// Mniejsze przyciski w listach (Wyświetl, Edytuj, Usuń) — w stylu "Opublikuj".
+const smallButtonClass = 'rounded-lg bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-orange-700 disabled:opacity-40';
+const dangerButtonClass = 'rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-red-700';
+const NEWS_PER_ADMIN_PAGE = 9;
+
+// Przełącznik stron listy w prawym dolnym rogu karty.
+function Pager({ page, pageCount, onChange }: { page: number; pageCount: number; onChange: (page: number) => void }) {
+  if (pageCount <= 1) return null;
+  return (
+    <nav className="mt-4 flex items-center justify-end gap-2" aria-label="Strony listy">
+      <button type="button" className={smallButtonClass} disabled={page <= 1} onClick={() => onChange(page - 1)}>
+        ‹ Poprzednia
+      </button>
+      <span className="text-xs text-slate-500">
+        {page} / {pageCount}
+      </span>
+      <button type="button" className={smallButtonClass} disabled={page >= pageCount} onClick={() => onChange(page + 1)}>
+        Następna ›
+      </button>
+    </nav>
+  );
+}
 
 function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
   return (
@@ -95,6 +117,12 @@ function NewsAdmin() {
   const [busy, setBusy] = useState(false);
   // Edytowany wpis (slug) albo undefined przy dodawaniu nowego.
   const [editing, setEditing] = useState<string>();
+  // Lista dodanych wpisów od najnowszego, po NEWS_PER_ADMIN_PAGE na stronę (po usunięciu numer strony się mieści).
+  const [listPage, setListPage] = useState(1);
+  const sortedNews = [...news].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
+  const listPageCount = Math.max(1, Math.ceil(sortedNews.length / NEWS_PER_ADMIN_PAGE));
+  const currentListPage = Math.min(listPage, listPageCount);
+  const pageNews = sortedNews.slice((currentListPage - 1) * NEWS_PER_ADMIN_PAGE, currentListPage * NEWS_PER_ADMIN_PAGE);
 
   const fillForm = (item?: AddedNewsItem) => {
     setEditing(item?.slug);
@@ -220,26 +248,33 @@ function NewsAdmin() {
         {news.length === 0 ? (
           <p className="text-sm text-slate-500">Brak — na stronie są tylko aktualności przeniesione z dalk.pl.</p>
         ) : (
-          <ul className="divide-y divide-slate-100">
-            {news.map((item) => (
-              <li key={item.slug} className={`flex items-start gap-3 py-2.5 ${editing === item.slug ? 'bg-orange-50' : ''}`}>
-                <div className="min-w-0 flex-1">
-                  <Link to={newsPath(item)} className="block truncate text-sm font-semibold text-slate-900 hover:text-orange-600">
+          <>
+            <ul className="divide-y divide-slate-100">
+              {pageNews.map((item) => (
+                <li key={item.slug} className={`-mx-2 rounded-lg px-2 py-3 ${editing === item.slug ? 'bg-orange-50' : ''}`}>
+                  <p className="truncate text-sm font-semibold text-slate-900" title={item.title}>
                     {item.title}
-                  </Link>
+                  </p>
                   <p className="text-xs text-slate-500">
                     {formatNewsDate(item.date)} · {newsCategory(item).label}
                   </p>
-                </div>
-                <button type="button" className={linkButtonClass} onClick={() => startEdit(item)}>
-                  Edytuj
-                </button>
-                <button type="button" className="text-sm font-medium text-red-600 hover:text-red-700" onClick={() => remove(item.slug, item.title)}>
-                  Usuń
-                </button>
-              </li>
-            ))}
-          </ul>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {/* W nowej karcie — panel z formularzem zostaje otwarty. */}
+                    <Link to={newsPath(item)} target="_blank" className={smallButtonClass}>
+                      Wyświetl
+                    </Link>
+                    <button type="button" className={smallButtonClass} onClick={() => startEdit(item)}>
+                      Edytuj
+                    </button>
+                    <button type="button" className={dangerButtonClass} onClick={() => remove(item.slug, item.title)}>
+                      Usuń
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <Pager page={currentListPage} pageCount={listPageCount} onChange={setListPage} />
+          </>
         )}
       </Card>
     </div>
@@ -302,6 +337,14 @@ function TeamNamesAdmin() {
     setCid(editionCompetitions(value)[0]?.value ?? '');
     setTeam(undefined);
     setName('');
+  };
+
+  // Inne rozgrywki to inna lista drużyn — wybrana drużyna i wpisana nazwa przestają pasować, więc je czyścimy.
+  const changeCompetition = (value: string) => {
+    setCid(value);
+    setTeam(undefined);
+    setName('');
+    setSaved(undefined);
   };
 
   const chooseTeam = (teamId: string) => {
@@ -367,7 +410,7 @@ function TeamNamesAdmin() {
         <form onSubmit={submit} className="flex flex-col gap-4">
           <div className="flex flex-wrap items-end gap-3">
             <FilterSelect label="Edycja" value={editionId} onChange={changeEdition} options={geniusEditions.map((edition) => ({ value: edition.id, label: edition.name }))} />
-            <FilterSelect label="Rozgrywki" value={cid} onChange={setCid} options={editionCompetitions(editionId)} />
+            <FilterSelect label="Rozgrywki" value={cid} onChange={changeCompetition} options={editionCompetitions(editionId)} />
             <FilterSelect label="Drużyna (nazwa w Genius)" value={team?.id ?? ''} onChange={chooseTeam} options={teamOptions} />
           </div>
           <Field label={`Nazwa w edycji ${editionName(editionId)}`}>
@@ -408,10 +451,10 @@ function TeamNamesAdmin() {
                     <td className="py-2 pr-4 font-semibold text-slate-900">{entry.name}</td>
                     <td className="whitespace-nowrap py-2 pr-4 text-xs text-slate-500">{new Date(entry.updatedAt).toLocaleString('pl-PL')}</td>
                     <td className="whitespace-nowrap py-2 text-right">
-                      <button type="button" className={`${linkButtonClass} mr-3`} onClick={() => edit(entry.teamId, entry.editionId)}>
+                      <button type="button" className={`${smallButtonClass} mr-2`} onClick={() => edit(entry.teamId, entry.editionId)}>
                         Edytuj
                       </button>
-                      <button type="button" className="text-sm font-medium text-red-600 hover:text-red-700" onClick={() => remove(entry.teamId, entry.editionId)}>
+                      <button type="button" className={dangerButtonClass} onClick={() => remove(entry.teamId, entry.editionId)}>
                         Usuń
                       </button>
                     </td>
@@ -448,7 +491,7 @@ function AdminPage() {
         icon={icons.rules}
         aside={
           admin && (
-            <button type="button" className={linkButtonClass} onClick={logout}>
+            <button type="button" className={buttonClass} onClick={logout}>
               Wyloguj
             </button>
           )

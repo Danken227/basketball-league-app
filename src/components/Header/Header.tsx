@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
+import { useAdmin } from '../../data/siteContent';
 import ThemeToggle from './ThemeToggle';
 
 interface NavLinkItem {
@@ -101,6 +102,8 @@ function NavDropdown({ item, onNavigate }: { item: NavGroupItem; onNavigate: () 
 
 function Header() {
   const [open, setOpen] = useState(false);
+  // Zalogowany administrator widzi obok logo wejście do panelu — wie, że jest zalogowany.
+  const admin = useAdmin();
 
   return (
     <header className="keep-dark sticky top-0 z-30 bg-slate-950 text-slate-50 shadow-lg shadow-slate-900/20">
@@ -108,12 +111,32 @@ function Header() {
         <NavLink to="/" className="flex shrink-0 items-center gap-3 font-semibold text-white" onClick={() => setOpen(false)}>
           {/* Logo ligi z dalk.pl (public/dalk-logo.png). */}
           <img src="/dalk-logo.png" alt="DALK" width={56} height={56} className="h-14 w-14" />
-          <span className="hidden text-sm leading-tight sm:block">
+          {/* Między 1024 a 1280 px pełne menu nie zmieściłoby się obok nazwy ligi — wtedy samo logo. */}
+          <span className="hidden text-sm leading-tight sm:block lg:hidden xl:block">
             Dolnośląska
             <br />
             <span className="text-slate-400">Liga Koszykówki</span>
           </span>
         </NavLink>
+
+        {admin && (
+          <NavLink
+            to="/admin"
+            onClick={() => setOpen(false)}
+            title="Jesteś zalogowany jako administrator"
+            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-orange-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-orange-500"
+          >
+            <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5" aria-hidden="true">
+              <path
+                fillRule="evenodd"
+                d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z"
+                clipRule="evenodd"
+              />
+            </svg>
+            <span className="hidden sm:inline lg:hidden xl:inline">Panel administratora</span>
+            <span className="sm:hidden lg:inline xl:hidden">Admin</span>
+          </NavLink>
+        )}
 
         <button
           type="button"
@@ -150,19 +173,20 @@ function Header() {
             href={youtubeUrl}
             target="_blank"
             rel="noreferrer"
+            aria-label="YouTube"
             className="flex items-center gap-2 rounded-full px-3 py-2 text-sm text-slate-300 transition hover:bg-white/10 hover:text-white"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
               <path d="M23 7.2a3 3 0 0 0-2.1-2.1C19 4.6 12 4.6 12 4.6s-7 0-8.9.5A3 3 0 0 0 1 7.2 31 31 0 0 0 .5 12a31 31 0 0 0 .5 4.8 3 3 0 0 0 2.1 2.1c1.9.5 8.9.5 8.9.5s7 0 8.9-.5a3 3 0 0 0 2.1-2.1 31 31 0 0 0 .5-4.8 31 31 0 0 0-.5-4.8ZM9.7 15.1V8.9l5.8 3.1-5.8 3.1Z" />
             </svg>
-            YouTube
+            <span className="lg:hidden xl:inline">YouTube</span>
           </a>
           {/* Jak na dalk.pl: przycisk pobiera formularz zgłoszeniowy (plik Word), bez przechodzenia na inną stronę. */}
           <a
             href={registrationFormUrl}
             download
             onClick={() => setOpen(false)}
-            className="mt-2 rounded-full bg-orange-500 px-4 py-2 text-center text-sm font-semibold text-slate-950 transition hover:bg-orange-400 lg:ml-2 lg:mt-0"
+            className="mt-2 whitespace-nowrap rounded-full bg-orange-500 px-4 py-2 text-center text-sm font-semibold text-slate-950 transition hover:bg-orange-400 lg:ml-2 lg:mt-0"
           >
             Zgłoś zespół
           </a>
