@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { FilterRow, FilterSelect } from '../../components/common/Filters';
 import GeniusEmbed from '../../components/genius/GeniusEmbed';
 import GeniusIndexLoader from '../../components/genius/GeniusIndexLoader';
+import GeniusPrefetch from '../../components/genius/GeniusPrefetch';
 import { currentGeniusEdition, findCompetition, geniusEditionById, geniusLeagueName } from '../../components/genius/geniusConfig';
 import { competitionInfo, competitionsWith, pendingCompetitions, readTeamLinks, saveTeamNames, teamName } from '../../components/genius/geniusIndex';
 import { placeholderLogo } from '../../components/genius/geniusLogo';
@@ -115,15 +116,27 @@ function GeniusTeamPage() {
       )}
       {schedulePage && summaryLoaded === page && (
         <div aria-hidden="true" className="pointer-events-none fixed -left-[10000px] top-0 h-0 w-[1200px] overflow-hidden">
+          {/* Z nagłówkiem, jak zakładka "Schedule" — to samo zapytanie, więc zakładka pokazuje się potem od razu. */}
           <GeniusEmbed
             key={schedulePage}
             page={schedulePage}
+            showTitle
             onContent={(root) => {
               const found = readTeamSchedule(root, id!);
               if (found.length > 0 && found.length !== matches.length) setSchedule({ page: schedulePage, matches: found });
             }}
           />
         </div>
+      )}
+      {/* Pozostałe zakładki drużyny (Genius odpowiada na nie nawet kilka sekund) wczytujemy w tle, gdy widoczna
+          zakładka jest już na ekranie — przełączenie pokazuje je od razu. */}
+      {cid && (
+        <GeniusPrefetch
+          key={`${cid}-${id}`}
+          items={['schedule', 'roster', 'statistics', 'home']
+            .filter((other) => other !== section)
+            .map((other) => ({ page: `/competition/${cid}/team/${id}/${other}`, showTitle: true }))}
+        />
       )}
       {/* Indeks list drużyn buduje się w tle, po jednym zapytaniu naraz (raz na dobę). */}
       <GeniusIndexLoader kind="teams" />
