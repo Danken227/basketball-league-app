@@ -1,6 +1,10 @@
 import { icons } from '../components/common/icons';
 import PageHeader from '../components/common/PageHeader';
-import { regulations, withExternalLinks } from '../data/news';
+import regulationsData from '../data/dalkRegulations.json';
+import { withExternalLinks, type RegulationsSection } from '../data/news';
+
+// Treść regulaminu tylko w kodzie tej strony (wczytywanej przy wejściu na nią), nie w kodzie strony głównej.
+const regulations: RegulationsSection[] = regulationsData;
 
 const linkClass = '[&_a]:font-medium [&_a]:break-words [&_a]:text-orange-600 [&_a]:underline [&_a]:underline-offset-2 hover:[&_a]:text-orange-700';
 

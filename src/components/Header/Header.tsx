@@ -109,8 +109,8 @@ function Header() {
     <header className="keep-dark sticky top-0 z-30 bg-slate-950 text-slate-50 shadow-lg shadow-slate-900/20">
       <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-3 sm:px-6 lg:px-8">
         <NavLink to="/" className="flex shrink-0 items-center gap-3 font-semibold text-white" onClick={() => setOpen(false)}>
-          {/* Logo ligi z dalk.pl (public/dalk-logo.png). */}
-          <img src="/dalk-logo.png" alt="DALK" width={56} height={56} className="h-14 w-14" />
+          {/* Logo ligi z dalk.pl, zmniejszone do 112 px (public/dalk-logo.webp; ikona strony to dalk-logo.png). */}
+          <img src="/dalk-logo.webp" alt="DALK" width={56} height={56} className="h-14 w-14" />
           {/* Między 1024 a 1280 px pełne menu nie zmieściłoby się obok nazwy ligi — wtedy samo logo. */}
           <span className="hidden text-sm leading-tight sm:block lg:hidden xl:block">
             Dolnośląska

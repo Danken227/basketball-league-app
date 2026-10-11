@@ -12,19 +12,22 @@ import GeniusListPage from './pages/genius/GeniusListPage';
 import GeniusMatchPage from './pages/genius/GeniusMatchPage';
 import GeniusPlayerPage from './pages/genius/GeniusPlayerPage';
 import GeniusPlayersPage from './pages/genius/GeniusPlayersPage';
-import AdminPage from './pages/AdminPage';
 import Home from './pages/Home';
 import NewsArticlePage from './pages/NewsArticlePage';
 import NewsPage from './pages/NewsPage';
 import Placeholder from './pages/Placeholder';
-import PlayerPage from './pages/PlayerPage';
-import PlayersPage from './pages/PlayersPage';
-import RegulationsPage from './pages/RegulationsPage';
-import SchedulePage from './pages/SchedulePage';
 import StatisticsPage from './pages/StatisticsPage';
-import TablesPage from './pages/TablesPage';
-import TeamPage from './pages/TeamPage';
-import TeamsPage from './pages/TeamsPage';
+
+// Strony rzadko odwiedzane (panel administratora, regulamin) i strony danych testowych (tylko poza domeną ligi)
+// wczytujemy dopiero przy wejściu na nie — nie powiększają kodu pobieranego przy pierwszym wejściu.
+const AdminPage = lazy(() => import('./pages/AdminPage'));
+const RegulationsPage = lazy(() => import('./pages/RegulationsPage'));
+const PlayerPage = lazy(() => import('./pages/PlayerPage'));
+const PlayersPage = lazy(() => import('./pages/PlayersPage'));
+const SchedulePage = lazy(() => import('./pages/SchedulePage'));
+const TablesPage = lazy(() => import('./pages/TablesPage'));
+const TeamPage = lazy(() => import('./pages/TeamPage'));
+const TeamsPage = lazy(() => import('./pages/TeamsPage'));
 
 // Zbieranie migawki danych Genius do wersji demonstracyjnej — tylko na serwerze deweloperskim (poza buildem).
 const SnapshotCrawler = import.meta.env.DEV ? lazy(() => import('./pages/SnapshotCrawler')) : null;
@@ -81,6 +84,7 @@ function App() {
           <DemoBanner />
           <main className="flex-1">
             {/* Na domenie ligi podstrony pokazują dane Genius Sports, poza nią nasze dane testowe. */}
+            <Suspense fallback={<p className="py-16 text-center text-sm text-slate-500">Wczytywanie…</p>}>
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/aktualnosci" element={<NewsPage />} />
@@ -112,6 +116,7 @@ function App() {
               )}
               <Route path="*" element={<Placeholder title="Nie znaleziono strony" />} />
             </Routes>
+            </Suspense>
           </main>
           <Footer />
         </div>
