@@ -60,6 +60,12 @@ export const competitionId = (editionId: string, leagueId: GeniusLeagueId) =>
   isJunior(leagueId) ? geniusJuniorCompetitions[editionId]?.[leagueId] : geniusEditionById.get(editionId)?.competitions[leagueId];
 
 // Odwrotnie: z numeru rozgrywek do edycji i ligi (potrzebne przy przekładaniu linków Genius na nasze filtry).
+// Rozgrywki edycji: ligi seniorów i kategorie juniorów (numery Genius).
+export function editionCompetitionIds(editionId: string): number[] {
+  const edition = geniusEditionById.get(editionId);
+  return edition ? Object.values({ ...edition.competitions, ...geniusJuniorCompetitions[editionId] }).filter((cid) => cid !== undefined) : [];
+}
+
 export function findCompetition(id: number): { editionId: string; leagueId: GeniusLeagueId } | undefined {
   for (const edition of geniusEditions) {
     const all = { ...edition.competitions, ...geniusJuniorCompetitions[edition.id] };

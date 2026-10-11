@@ -4,6 +4,7 @@ import { FilterRow, FilterSelect } from '../../components/common/Filters';
 import PhotoDialog from '../../components/common/PhotoDialog';
 import GeniusEmbed, { type StatsMode } from '../../components/genius/GeniusEmbed';
 import GeniusIndexLoader from '../../components/genius/GeniusIndexLoader';
+import { useForegroundReady } from '../../components/genius/geniusPriority';
 import { currentGeniusEdition, findCompetition, geniusEditionById, geniusEditions, geniusSnapshot } from '../../components/genius/geniusConfig';
 import { competitionsWith, pendingCompetitions, personTeams, playedIn, savePersonTeams, savePlayed, type PersonTeam } from '../../components/genius/geniusIndex';
 import { leagues, type League } from '../../data/league';
@@ -215,9 +216,11 @@ function TeamsFetcher({ personId, cid }: { personId: string; cid: number }) {
 
 // Sprawdza w tle (po jednym zapytaniu) występy zawodnika w rozgrywkach, na których listach figuruje,
 // a jeszcze niesprawdzonych. Wynik trafia do indeksu i zawęża listę edycji w filtrze.
+// Zaczyna dopiero, gdy statystyki wybranej edycji są na ekranie (geniusPriority).
 function PlayedChecker({ personId }: { personId: string }) {
   useGeniusIndex();
-  const next = competitionsWith('players', personId).find((cid) => playedIn(personId, cid) === undefined);
+  const ready = useForegroundReady();
+  const next = ready ? competitionsWith('players', personId).find((cid) => playedIn(personId, cid) === undefined) : undefined;
 
   // Gdy sprawdzenie się nie uda, zostawiamy edycję na liście (lepiej pokazać za dużo niż ukryć występy).
   useEffect(() => {

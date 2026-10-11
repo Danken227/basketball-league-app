@@ -3,7 +3,8 @@ import PageHeader from '../../components/common/PageHeader';
 import GeniusEmbed from '../../components/genius/GeniusEmbed';
 import GeniusFilterBar from '../../components/genius/GeniusFilterBar';
 import GeniusMissing from '../../components/genius/GeniusMissing';
-import { competitionId, type GeniusLeagueId } from '../../components/genius/geniusConfig';
+import GeniusPrefetch from '../../components/genius/GeniusPrefetch';
+import { competitionId, editionCompetitionIds, geniusEditions, type GeniusLeagueId } from '../../components/genius/geniusConfig';
 import { useGeniusFilters } from '../../hooks/useGeniusFilters';
 
 interface GeniusListPageProps {
@@ -15,8 +16,9 @@ interface GeniusListPageProps {
 }
 
 // Wspólny układ podstron Tabele / Terminarz / Drużyny w trybie Genius: nasz nagłówek i filtry,
-// a w środku strona Genius dla rozgrywek wybranych edycją i poziomem.
-// Bez wczytywania z wyprzedzeniem (obciążałoby serwer Genius); raz otwarte dane pokazują się potem z pamięci.
+// a w środku strona Genius dla rozgrywek wybranych edycją i poziomem. Gdy widać już wybrane dane, w tle
+// (po dwie strony naraz) wczytujemy pozostałe ligi tej edycji, a potem tę samą ligę w innych edycjach —
+// przełączenie filtra pokazuje je wtedy od razu.
 function GeniusListPage({ title, icon, path, showMatchFilter }: GeniusListPageProps) {
   const { editionId, leagueId, phase, setEditionId, setLeagueId } = useGeniusFilters<GeniusLeagueId>('eks');
   const cid = competitionId(editionId, leagueId);
@@ -34,6 +36,17 @@ function GeniusListPage({ title, icon, path, showMatchFilter }: GeniusListPagePr
       <div className="mt-6">
         {cid ? <GeniusEmbed page={page} showMatchFilter={showMatchFilter} /> : <GeniusMissing editionId={editionId} leagueId={leagueId} />}
       </div>
+      {cid && (
+        <GeniusPrefetch
+          key={`${path}-${cid}`}
+          items={[
+            ...editionCompetitionIds(editionId).filter((other) => other !== cid),
+            ...geniusEditions.filter((edition) => edition.id !== editionId).map((edition) => competitionId(edition.id, leagueId)),
+          ]
+            .filter((other) => other !== undefined)
+            .map((other) => ({ page: `/competition/${other}/${path}`, showMatchFilter }))}
+        />
+      )}
     </div>
   );
 }
