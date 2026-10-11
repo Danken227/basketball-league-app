@@ -195,19 +195,22 @@ function readSchedule(root: HTMLElement): Map<string, ScheduleInfo> {
   return info;
 }
 
-// Terminarze odczytane w tej wizycie (sessionStorage, 10 min): po przejściu na inną stronę albo odświeżeniu
-// godziny i hale są od razu, zanim przyjdzie świeży terminarz.
-const SCHEDULE_CACHE_PREFIX = 'genius-bar-schedule-v1:';
-const SCHEDULE_CACHE_MS = 10 * 60 * 1000;
+// Terminarze rozgrywek są duże (Genius wysyła je bez kompresji: 0,1–0,75 MB na rozgrywki, razem ok. 3 MB), a pasek
+// potrzebuje z nich tylko godziny, hali i pełnych nazw drużyn, które prawie się nie zmieniają. Odczytane dane
+// trzymamy więc w localStorage (kilka KB na rozgrywki) do 6 godzin i pobieramy terminarz ponownie dopiero, gdy
+// zapis ma ponad 30 minut albo na pasku jest mecz, którego w nim nie ma. Wynik i status meczów dają karty widgetu.
+const SCHEDULE_CACHE_PREFIX = 'genius-bar-schedule-v2:';
+const SCHEDULE_CACHE_MS = 6 * 60 * 60 * 1000;
+const SCHEDULE_REFRESH_MS = 30 * 60 * 1000;
 
-function loadCachedSchedule(cid: number): Map<string, ScheduleInfo> | undefined {
+function loadCachedSchedule(cid: number): { savedAt: number; info: Map<string, ScheduleInfo> } | undefined {
   try {
-    const stored = JSON.parse(sessionStorage.getItem(SCHEDULE_CACHE_PREFIX + cid) ?? 'null') as {
+    const stored = JSON.parse(localStorage.getItem(SCHEDULE_CACHE_PREFIX + cid) ?? 'null') as {
       savedAt: number;
       entries: [string, Omit<ScheduleInfo, 'date'> & { date?: string }][];
     } | null;
     if (!stored || Date.now() - stored.savedAt > SCHEDULE_CACHE_MS) return undefined;
-    return new Map(stored.entries.map(([id, info]) => [id, { ...info, date: info.date ? new Date(info.date) : undefined }]));
+    return { savedAt: stored.savedAt, info: new Map(stored.entries.map(([id, info]) => [id, { ...info, date: info.date ? new Date(info.date) : undefined }])) };
   } catch {
     return undefined;
   }
@@ -215,11 +218,14 @@ function loadCachedSchedule(cid: number): Map<string, ScheduleInfo> | undefined 
 
 function saveCachedSchedule(cid: number, info: Map<string, ScheduleInfo>) {
   try {
-    sessionStorage.setItem(SCHEDULE_CACHE_PREFIX + cid, JSON.stringify({ savedAt: Date.now(), entries: [...info] }));
+    localStorage.setItem(SCHEDULE_CACHE_PREFIX + cid, JSON.stringify({ savedAt: Date.now(), entries: [...info] }));
   } catch {
     // Brak miejsca albo zablokowany storage — terminarz zostaje tylko w stanie paska.
   }
 }
+
+// Terminarze w trakcie pobierania (kolejny odczyt kart w tym czasie nie wysyła drugiego zapytania).
+const schedulesInFlight = new Set<number>();
 
 // Mecz, który w Genius wisi jako trwający, choć dawno się skończył: przy stoliku nie zawsze zamyka się protokół
 // (na dalk.pl taki mecz też zostaje "Live"). Uznajemy go za zakończony, gdy w tej samej hali zaczął się już
@@ -455,8 +461,7 @@ function GeniusMatchBar({ widgetId }: { widgetId: string }) {
 
   // Terminarze rozgrywek z paska: godzina i hala (karta trwającego meczu ma w miejscu daty czas gry), pełne nazwy
   // drużyn (dopasowanie transmisji) i to, czy mecz trwa. Pobierane wprost z Genius, wszystkie naraz, zaraz po
-  // kartach — wcześniej osadzane jedno po drugim z opóźnieniem, więc hala i godzina trwającego meczu długo nie
-  // dochodziły. Zapamiętane w tej wizycie pokazujemy od razu.
+  // kartach; zapamiętane (patrz SCHEDULE_CACHE_MS) pokazujemy od razu.
   const competitionsKey = [...new Set((matches ?? []).map((m) => competitionIdByName(m.competition)).filter((cid) => cid !== undefined))]
     .sort()
     .join(',');
@@ -465,31 +470,38 @@ function GeniusMatchBar({ widgetId }: { widgetId: string }) {
     competitionsKey
       .split(',')
       .filter(Boolean)
-      .forEach((cid) => loadCachedSchedule(Number(cid))?.forEach((info, id) => fromCache.set(id, info)));
+      .forEach((cid) => loadCachedSchedule(Number(cid))?.info.forEach((info, id) => fromCache.set(id, info)));
     return fromCache;
   }, [competitionsKey]);
 
-  // Przy odświeżeniu widgetu (mecze trwają) pobieramy terminarze ponownie — status meczów i hale.
+  // Po każdym odczycie kart (także przy odświeżaniu wyników) sprawdzamy, czy któryś terminarz trzeba pobrać:
+  // brak zapisu, zapis starszy niż 30 minut albo mecz z paska, którego w zapisie nie ma (np. nowa kolejka).
+  // Wynik trafia do stanu paska także wtedy, gdy w międzyczasie przyszły nowe karty (efekt uruchomił się ponownie).
   useEffect(() => {
-    if (!competitionsKey) return;
-    let active = true;
-    for (const cid of competitionsKey.split(',').map(Number)) {
+    const byCompetition = new Map<number, string[]>();
+    for (const match of matches ?? []) {
+      const cid = competitionIdByName(match.competition);
+      if (cid !== undefined) byCompetition.set(cid, [...(byCompetition.get(cid) ?? []), match.id]);
+    }
+    for (const [cid, ids] of byCompetition) {
+      const cached = loadCachedSchedule(cid);
+      const fresh = cached && Date.now() - cached.savedAt < SCHEDULE_REFRESH_MS && ids.every((id) => cached.info.has(id));
+      if (fresh || schedulesInFlight.has(cid)) continue;
+      schedulesInFlight.add(cid);
       fetchGeniusPage(`/competition/${cid}/schedule`)
         .then((root) => {
           const found = root && readSchedule(root);
-          if (!active || !found || found.size === 0) return;
+          if (!found || found.size === 0) return;
           saveCachedSchedule(cid, found);
           setSchedule((prev) => {
             const changed = [...found].some(([id, info]) => JSON.stringify(prev.get(id)) !== JSON.stringify(info));
             return changed ? new Map([...prev, ...found]) : prev;
           });
         })
-        .catch(() => undefined);
+        .catch(() => undefined)
+        .finally(() => schedulesInFlight.delete(cid));
     }
-    return () => {
-      active = false;
-    };
-  }, [competitionsKey, widgetRefresh]);
+  }, [matches]);
 
   // Bieżąca chwila do oceny "wiszących" meczów — co minutę (wystarczy przy progach liczonych w godzinach).
   const [now, setNow] = useState(() => Date.now());
