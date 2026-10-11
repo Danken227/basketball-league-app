@@ -19,6 +19,22 @@ const TEAM_NAMES_KEY = 'dalk:team-names';
 // Logo drużyny w edycji wgrane w panelu (data URL) — osobno od listy nazw, żeby lista (wczytywana przez każdego
 // odwiedzającego) była lekka. Strona pobiera logo z /api/admin?action=team-logo (z długą pamięcią podręczną).
 const teamLogoKey = (teamId, editionId) => `dalk:team-logo:${teamId}:${editionId}`;
+// Rekordy rozgrywek przeliczone w panelu (GeniusRecords czyta je zamiast liczyć w przeglądarce odwiedzającego).
+const recordsKey = (cid) => `dalk:records:${cid}`;
+const RECORD_FIELDS = ['pts', 'reb', 'ast'];
+const MAX_RECORDS_LENGTH = 60000;
+
+// Wiersz rekordu z przeglądarki administratora: tylko znane pola, przycięte teksty i liczby.
+const recordRow = (row) => ({
+  playerId: String(row?.playerId ?? '').replace(/\D/g, '').slice(0, 15),
+  player: text(row?.player, 100),
+  team: text(row?.team, 120),
+  opponent: text(row?.opponent, 120),
+  matchId: String(row?.matchId ?? '').replace(/\D/g, '').slice(0, 15),
+  date: text(row?.date, 40),
+  ...Object.fromEntries(RECORD_FIELDS.map((field) => [field, Math.max(0, Math.min(999, Number(row?.[field]) || 0))])),
+});
+
 const LOGO_DATA_URL = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/;
 const MAX_LOGO_LENGTH = 300000;
 
@@ -132,6 +148,12 @@ const fail = (status, error) => ({ status, body: { error } });
 export async function handleAdmin({ method, action, query = {}, body = {}, cookie: cookieHeader, secure = false, store }) {
   if (action === 'session') return { status: 200, body: { admin: validSession(cookieHeader) } };
 
+  if (action === 'records') {
+    const cid = /^\d+$/.test(query.cid ?? '') ? query.cid : undefined;
+    const records = store && cid ? await store.get(recordsKey(cid)) : undefined;
+    return { status: 200, body: { records: records ?? null } };
+  }
+
   if (action === 'team-logo') {
     const logo = store && /^\d+$/.test(query.team ?? '') && /^[\d-]+$/.test(query.edition ?? '') ? await store.get(teamLogoKey(query.team, query.edition)) : undefined;
     const match = typeof logo === 'string' ? logo.match(/^data:(image\/[a-z+]+);base64,(.+)$/) : null;
@@ -210,6 +232,24 @@ export async function handleAdmin({ method, action, query = {}, body = {}, cooki
       news.filter((item) => item.slug !== body.slug),
     );
     return { status: 200, body: { ok: true } };
+  }
+
+  if (action === 'records-save') {
+    const cid = String(body.cid ?? '');
+    if (!/^\d+$/.test(cid)) return fail(400, 'Nieprawidłowe rozgrywki.');
+    const top = Object.fromEntries(
+      RECORD_FIELDS.map((field) => [field, (Array.isArray(body.top?.[field]) ? body.top[field] : []).slice(0, 20).map(recordRow)]),
+    );
+    const records = {
+      cid: Number(cid),
+      computedAt: new Date().toISOString(),
+      matchCount: Math.max(0, Number(body.matchCount) || 0),
+      failedCount: Math.max(0, Number(body.failedCount) || 0),
+      top,
+    };
+    if (JSON.stringify(records).length > MAX_RECORDS_LENGTH) return fail(400, 'Za dużo danych rekordów.');
+    await store.set(recordsKey(cid), records);
+    return { status: 200, body: { records } };
   }
 
   if (action === 'team-name-save') {

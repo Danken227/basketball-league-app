@@ -37,8 +37,8 @@ function setContent(next: SiteContent) {
   listeners.forEach((listener) => listener());
 }
 
-export async function adminRequest<T>(action: string, body?: unknown): Promise<T> {
-  const response = await fetch(`/api/admin?action=${action}`, {
+export async function adminRequest<T>(action: string, body?: unknown, query?: Record<string, string>): Promise<T> {
+  const response = await fetch(`/api/admin?${new URLSearchParams({ action, ...query })}`, {
     method: body === undefined ? 'GET' : 'POST',
     headers: body === undefined ? undefined : { 'content-type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
