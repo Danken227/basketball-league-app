@@ -1,6 +1,8 @@
+import { useEffect } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import GeniusEmbed from '../../components/genius/GeniusEmbed';
-import { findCompetition } from '../../components/genius/geniusConfig';
+import { findCompetition, geniusSnapshot, isGeniusDomain } from '../../components/genius/geniusConfig';
+import { fetchGeniusJson, prefetchGeniusJson } from '../../components/genius/geniusFetch';
 
 // Strona meczu z Genius pod naszym adresem (/mecze/2900159?rozgrywki=49970&sekcja=summary).
 // Sekcje (Summary, Box Score, Play by play, Shot chart, Team Analysis) to podmenu Genius — jego linki
@@ -21,13 +23,35 @@ function polishMatch(root: HTMLElement) {
   });
 }
 
+// Zakładki meczu (podmenu Genius).
+const MATCH_SECTIONS = ['summary', 'boxscore', 'playbyplay', 'shotchart', 'analysis'];
+
+const matchPage = (id: string | undefined, cid: string | null, section: string) =>
+  cid ? `/competition/${cid}/match/${id}/${section}` : `/match/${id}/${section}`;
+
 function GeniusMatchPage() {
   const { id } = useParams();
   const [params] = useSearchParams();
   const cid = params.get('rozgrywki');
   const section = params.get('sekcja') ?? 'summary';
-  const page = cid ? `/competition/${cid}/match/${id}/${section}` : `/match/${id}/${section}`;
+  const page = matchPage(id, cid, section);
   const found = cid ? findCompetition(Number(cid)) : undefined;
+
+  // Po wczytaniu bieżącej zakładki pobieramy naraz pozostałe (geniusFetch trzyma je przez minutę), żeby przejście
+  // między zakładkami nie czekało na Genius — pierwsza odpowiedź na adres trwa u nich 3–15 s. Bieżąca zakładka
+  // idzie pierwsza, bo zapytania o pozostałe opóźniałyby ją.
+  useEffect(() => {
+    if (geniusSnapshot || !isGeniusDomain()) return;
+    let active = true;
+    fetchGeniusJson(page)
+      .catch(() => undefined)
+      .then(() => {
+        if (active) MATCH_SECTIONS.forEach((other) => prefetchGeniusJson(matchPage(id, cid, other)));
+      });
+    return () => {
+      active = false;
+    };
+  }, [id, cid, page]);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
