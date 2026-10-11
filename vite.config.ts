@@ -56,6 +56,10 @@ function snapshotWriter(): Plugin {
               res.end(result.binary.data)
               return
             }
+            if (result.body === undefined) {
+              res.end()
+              return
+            }
             res.setHeader('content-type', 'application/json')
             res.end(JSON.stringify(result.body))
           } catch (error) {

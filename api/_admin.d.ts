@@ -2,6 +2,8 @@
 export interface AdminStore {
   get(key: string): Promise<unknown>;
   set(key: string, value: unknown): Promise<unknown>;
+  increment?(key: string, field: string): Promise<unknown>;
+  readCounters?(keys: string[]): Promise<Record<string, number>[]>;
 }
 export declare function redisStore(): AdminStore | undefined;
 export declare function fileStore(file: string): AdminStore;
