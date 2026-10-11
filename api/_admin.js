@@ -19,6 +19,12 @@ const TEAM_NAMES_KEY = 'dalk:team-names';
 // Logo drużyny w edycji wgrane w panelu (data URL) — osobno od listy nazw, żeby lista (wczytywana przez każdego
 // odwiedzającego) była lekka. Strona pobiera logo z /api/admin?action=team-logo (z długą pamięcią podręczną).
 const teamLogoKey = (teamId, editionId) => `dalk:team-logo:${teamId}:${editionId}`;
+// Odwiedziny strony: hasz na dzień (czas polski) z polami visits (wejście na stronę — pierwsza podstrona w karcie
+// przeglądarki) i views (każda podstrona). Bez ciasteczek i danych osobowych — same liczniki. Miesiące to sumy dni.
+const visitsKey = (day) => `dalk:visits:${day}`;
+const warsawDay = (date) => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Warsaw' }).format(date);
+const VISIT_DAYS = 400;
+
 // Rekordy rozgrywek przeliczone w panelu (GeniusRecords czyta je zamiast liczyć w przeglądarce odwiedzającego).
 const recordsKey = (cid) => `dalk:records:${cid}`;
 const RECORD_FIELDS = ['pts', 'reb', 'ast'];
@@ -64,18 +70,47 @@ export function redisStore() {
       return value ? JSON.parse(value) : undefined;
     },
     set: (key, value) => command(['SET', key, JSON.stringify(value)]),
+    // Licznik w haszu (odwiedziny dnia: pola visits i views) — jedno polecenie na zdarzenie.
+    increment: (key, field) => command(['HINCRBY', key, field, '1']),
+    // Wiele haszy jednym zapytaniem (pipeline Upstash) → [{ pole: liczba }].
+    readCounters: async (keys) => {
+      if (keys.length === 0) return [];
+      const response = await fetch(`${redisUrl}/pipeline`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${redisToken}`, 'content-type': 'application/json' },
+        body: JSON.stringify(keys.map((key) => ['HGETALL', key])),
+      });
+      if (!response.ok) throw new Error(`Upstash: ${response.status}`);
+      return (await response.json()).map(({ result }) => {
+        const counters = {};
+        for (let i = 0; i + 1 < (result ?? []).length; i += 2) counters[result[i]] = Number(result[i + 1]) || 0;
+        return counters;
+      });
+    },
   };
 }
 
 export function fileStore(file) {
   const read = () => (fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {});
+  const write = (data) => {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(data, null, 1));
+  };
   return {
     get: async (key) => read()[key],
     set: async (key, value) => {
       const data = read();
       data[key] = value;
-      fs.mkdirSync(path.dirname(file), { recursive: true });
-      fs.writeFileSync(file, JSON.stringify(data, null, 1));
+      write(data);
+    },
+    increment: async (key, field) => {
+      const data = read();
+      data[key] = { ...data[key], [field]: (data[key]?.[field] ?? 0) + 1 };
+      write(data);
+    },
+    readCounters: async (keys) => {
+      const data = read();
+      return keys.map((key) => data[key] ?? {});
     },
   };
 }
@@ -148,6 +183,15 @@ const fail = (status, error) => ({ status, body: { error } });
 export async function handleAdmin({ method, action, query = {}, body = {}, cookie: cookieHeader, secure = false, store }) {
   if (action === 'session') return { status: 200, body: { admin: validSession(cookieHeader) } };
 
+  // Licznik odwiedzin (publiczny). Wejścia zalogowanego administratora nie liczymy.
+  if (action === 'hit') {
+    if (method !== 'POST' || !store?.increment || validSession(cookieHeader)) return { status: 204 };
+    const key = visitsKey(warsawDay(new Date()));
+    await store.increment(key, 'views');
+    if (body.visit === true) await store.increment(key, 'visits');
+    return { status: 204 };
+  }
+
   if (action === 'records') {
     const cid = /^\d+$/.test(query.cid ?? '') ? query.cid : undefined;
     const records = store && cid ? await store.get(recordsKey(cid)) : undefined;
@@ -166,6 +210,17 @@ export async function handleAdmin({ method, action, query = {}, body = {}, cooki
     if (!store) return { status: 200, body: { news: [], teamNames: [] } };
     const [news, teamNames] = await Promise.all([store.get(NEWS_KEY), store.get(TEAM_NAMES_KEY)]);
     return { status: 200, body: { news: news ?? [], teamNames: teamNames ?? [] } };
+  }
+
+  if (action === 'visits') {
+    if (!validSession(cookieHeader)) return fail(401, 'Sesja wygasła — zaloguj się ponownie.');
+    if (!store?.readCounters) return fail(503, 'Baza nie obsługuje liczników.');
+    const days = Array.from({ length: VISIT_DAYS }, (_, i) => warsawDay(new Date(Date.now() - i * 24 * 60 * 60 * 1000)));
+    const counters = await store.readCounters(days.map(visitsKey));
+    return {
+      status: 200,
+      body: { today: days[0], days: days.map((day, i) => ({ day, visits: counters[i].visits ?? 0, views: counters[i].views ?? 0 })) },
+    };
   }
 
   if (method !== 'POST') return fail(405, 'Niedozwolona metoda.');

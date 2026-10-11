@@ -670,10 +670,141 @@ function RecordsAdmin() {
   );
 }
 
+interface VisitDay {
+  day: string;
+  visits: number;
+  views: number;
+}
+
+const monthNames = ['styczeń', 'luty', 'marzec', 'kwiecień', 'maj', 'czerwiec', 'lipiec', 'sierpień', 'wrzesień', 'październik', 'listopad', 'grudzień'];
+const monthLabel = (month: string) => `${monthNames[Number(month.slice(5, 7)) - 1]} ${month.slice(0, 4)}`;
+const shortDay = (day: string) => `${day.slice(8, 10)}.${day.slice(5, 7)}`;
+const byMonthTotal = (days: VisitDay[], month: string) => sum(days.filter((d) => d.day.startsWith(month)));
+const sum = (days: VisitDay[]) => days.reduce((total, d) => ({ visits: total.visits + d.visits, views: total.views + d.views }), { visits: 0, views: 0 });
+
+function StatTile({ label, visits, views }: { label: string; visits: number; views: number }) {
+  return (
+    <div className="rounded-xl bg-slate-50 p-4 ring-1 ring-slate-200">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-1 text-2xl font-black tabular-nums text-slate-900">{visits}</p>
+      <p className="text-xs text-slate-500">
+        wizyt · <span className="tabular-nums">{views}</span> wyświetleń
+      </p>
+    </div>
+  );
+}
+
+// Wizyty dzienne z ostatnich 30 dni: słupki od najstarszego dnia, nad wykresem wartość wskazanego dnia.
+function VisitsChart({ days }: { days: VisitDay[] }) {
+  const [hovered, setHovered] = useState<number>();
+  const max = Math.max(1, ...days.map((d) => d.visits));
+  const shown = days[hovered ?? days.length - 1];
+  return (
+    <div>
+      <div className="mb-2 flex items-baseline justify-between gap-3 text-xs text-slate-600">
+        <p aria-live="polite">
+          <span className="font-semibold text-slate-900">{shortDay(shown.day)}</span>: {shown.visits} wizyt · {shown.views} wyświetleń
+        </p>
+        <span className="text-[10px] text-slate-400">najwięcej: {max}</span>
+      </div>
+      <div className="h-40 border-b border-slate-300" onMouseLeave={() => setHovered(undefined)}>
+        <div className="flex h-full items-end gap-[2px]">
+          {days.map((d, index) => (
+            <button
+              key={d.day}
+              type="button"
+              aria-label={`${shortDay(d.day)}: ${d.visits} wizyt, ${d.views} wyświetleń`}
+              onMouseEnter={() => setHovered(index)}
+              onFocus={() => setHovered(index)}
+              className="group flex h-full flex-1 items-end"
+            >
+              <span
+                className={`block w-full rounded-t-[4px] transition-colors ${hovered === index ? 'bg-orange-700 dark:bg-orange-400' : 'bg-orange-600 dark:bg-orange-500'}`}
+                style={{ height: `${Math.max(d.visits ? 2 : 0, (d.visits / max) * 100)}%` }}
+              />
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="mt-1 flex justify-between text-[10px] text-slate-500">
+        <span>{shortDay(days[0].day)}</span>
+        <span>{shortDay(days[Math.floor(days.length / 2)].day)}</span>
+        <span>{shortDay(days[days.length - 1].day)}</span>
+      </div>
+    </div>
+  );
+}
+
+// Licznik odwiedzin strony (bez ciasteczek): wizyta to wejście na stronę, wyświetlenie — każda podstrona.
+function VisitsAdmin() {
+  const [data, setData] = useState<{ today: string; days: VisitDay[] }>();
+  const [error, setError] = useState<string>();
+  useEffect(() => {
+    adminRequest<{ today: string; days: VisitDay[] }>('visits')
+      .then(setData)
+      .catch((e) => setError(errorText(e)));
+  }, []);
+
+  if (error) return <Message error={error} />;
+  if (!data) return <p className="text-sm text-slate-500">Wczytywanie…</p>;
+
+  const thisMonth = data.today.slice(0, 7);
+  // Miesiące od najnowszego, najwyżej 12 — bez miesięcy sprzed uruchomienia licznika (same zera na końcu listy).
+  const allMonths = [...new Set(data.days.map((d) => d.day.slice(0, 7)))].slice(0, 12);
+  const lastWithData = allMonths.findLastIndex((month) => byMonthTotal(data.days, month).views > 0);
+  const months = allMonths.slice(0, Math.max(1, lastWithData + 1));
+  const byMonth = (month: string) => byMonthTotal(data.days, month);
+  const last30 = data.days.slice(0, 30).reverse();
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <StatTile label="Dziś" {...data.days[0]} />
+        <StatTile label="Ostatnie 30 dni" {...sum(last30)} />
+        <StatTile label={`Ten miesiąc (${monthLabel(thisMonth)})`} {...byMonth(thisMonth)} />
+        {allMonths[1] && <StatTile label={`Poprzedni miesiąc (${monthLabel(allMonths[1])})`} {...byMonth(allMonths[1])} />}
+      </div>
+      <Card title="Wizyty dzienne — ostatnie 30 dni">
+        <VisitsChart days={last30} />
+      </Card>
+      <Card title="Miesiące">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="text-[11px] uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="py-2 pr-4 font-semibold">Miesiąc</th>
+                <th className="py-2 pr-4 text-right font-semibold">Wizyty</th>
+                <th className="py-2 text-right font-semibold">Wyświetlenia</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {months.map((month) => {
+                const total = byMonth(month);
+                return (
+                  <tr key={month}>
+                    <td className="py-2 pr-4 text-slate-900">{monthLabel(month)}</td>
+                    <td className="py-2 pr-4 text-right tabular-nums">{total.visits}</td>
+                    <td className="py-2 text-right tabular-nums">{total.views}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-3 text-xs text-slate-500">
+          Wizyta to wejście na stronę (pierwsza podstrona w karcie przeglądarki), wyświetlenie — każda otwarta podstrona. Wejścia zalogowanego administratora nie są
+          liczone. Licznik nie używa ciasteczek ani danych osobowych.
+        </p>
+      </Card>
+    </div>
+  );
+}
+
 const tabs = [
   { id: 'aktualnosci', label: 'Aktualności' },
   { id: 'druzyny', label: 'Nazwy drużyn w edycjach' },
   { id: 'rekordy', label: 'Rekordy' },
+  { id: 'odwiedziny', label: 'Odwiedziny' },
 ] as const;
 type TabId = (typeof tabs)[number]['id'];
 
@@ -722,7 +853,7 @@ function AdminPage() {
               </button>
             ))}
           </div>
-          {tab === 'aktualnosci' ? <NewsAdmin /> : tab === 'druzyny' ? <TeamNamesAdmin /> : <RecordsAdmin />}
+          {tab === 'aktualnosci' ? <NewsAdmin /> : tab === 'druzyny' ? <TeamNamesAdmin /> : tab === 'rekordy' ? <RecordsAdmin /> : <VisitsAdmin />}
         </>
       )}
     </div>

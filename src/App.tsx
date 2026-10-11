@@ -41,6 +41,29 @@ function ScrollToTop() {
   return null;
 }
 
+// Licznik odwiedzin (zakładka "Odwiedziny" w panelu administratora): każda podstrona to wyświetlenie, pierwsza
+// w karcie przeglądarki — także wizyta. Bez ciasteczek; panel administratora i zbieranie migawki nie są liczone.
+function VisitCounter() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    if (pathname.startsWith('/admin') || pathname.startsWith('/__')) return;
+    let visit = false;
+    try {
+      visit = !sessionStorage.getItem('dalk-visit');
+      sessionStorage.setItem('dalk-visit', '1');
+    } catch {
+      // Zablokowany storage — liczymy samo wyświetlenie.
+    }
+    fetch('/api/admin?action=hit', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ visit }),
+      keepalive: true,
+    }).catch(() => undefined);
+  }, [pathname]);
+  return null;
+}
+
 // Błąd strony zamiast białego ekranu pokazuje komunikat; przejście na inny adres próbuje od nowa.
 function PageErrorBoundary({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
@@ -51,6 +74,7 @@ function App() {
   return (
     <BrowserRouter>
       <ScrollToTop />
+      <VisitCounter />
       <PageErrorBoundary>
         <div className="flex min-h-screen flex-col bg-slate-50">
           <Header />
