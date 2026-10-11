@@ -1,8 +1,8 @@
 // Rekordy rozgrywek: najwyższe zdobycze zawodników w jednym meczu (punkty, zbiórki, asysty). Genius nie ma takiej
 // strony, więc liczymy je ze statystyk meczów (box score) wszystkich rozegranych meczów z terminarza. Treści nie
 // osadzamy, tylko pobieramy wprost z serwera Genius (to samo zapytanie, które wysyła skrypt osadzenia) — kilka
-// meczów naraz. Administrator przelicza rekordy w panelu i zapisuje je w bazie (odwiedzający czytają gotowe);
-// bez zapisanych rekordów strona liczy je sama (GeniusRecords).
+// meczów naraz. Liczy je administrator w panelu i zapisuje w bazie; strona rekordów (GeniusRecords) czyta tylko
+// zapisane.
 import { adminRequest } from '../../data/siteContent';
 import { fetchGeniusPage } from './geniusFetch';
 
@@ -95,44 +95,39 @@ export interface RecordsProgress {
   failed: number;
 }
 
-// Box score rozegranych meczów (po PARALLEL naraz). skip — mecze już znane (pamięć przeglądarki); onMatch dostaje
-// każdy odczytany mecz, onProgress stan liczenia. Zwraca odczytane mecze i liczbę niedostępnych.
-export async function loadRecordMatches(
-  cid: number,
-  { skip = {}, isActive = () => true, onMatch, onProgress }: {
-    skip?: Record<string, MatchLines>;
-    isActive?: () => boolean;
-    onMatch?: (id: string, match: MatchLines) => void;
-    onProgress?: (progress: RecordsProgress) => void;
-  } = {},
-) {
+// Rozegrane mecze rozgrywek (numery) z terminarza Genius; undefined, gdy terminarz nie przyszedł (przeciążony serwer).
+export async function playedMatchIds(cid: number): Promise<string[] | undefined> {
   const schedule = await fetchGeniusPage(`/competition/${cid}/schedule`).catch(() => undefined);
-  const matchIds = schedule ? readPlayedMatches(schedule) : [];
+  return schedule?.querySelector('.hs-embed') ? readPlayedMatches(schedule) : undefined;
+}
+
+// Box score rozegranych meczów (po PARALLEL naraz); onProgress dostaje stan liczenia. Zwraca odczytane mecze
+// i liczbę niedostępnych.
+async function loadRecordMatches(cid: number, onProgress?: (progress: RecordsProgress) => void) {
+  const matchIds = await playedMatchIds(cid);
+  // Bez terminarza nie wiadomo, które mecze liczyć — lepiej nic nie zapisać niż zapisać puste rekordy.
+  if (!matchIds) throw new Error('Genius nie zwrócił terminarza — spróbuj przeliczyć za chwilę.');
   const matches: Record<string, MatchLines> = {};
   let failed = 0;
-  const report = () =>
-    onProgress?.({ matchIds, loaded: matchIds.filter((id) => matches[id] || skip[id]).length, failed });
+  const report = () => onProgress?.({ matchIds, loaded: Object.keys(matches).length, failed });
   report();
-  const queue = matchIds.filter((id) => !skip[id]);
+  const queue = [...matchIds];
   const worker = async () => {
-    for (let id = queue.shift(); id && isActive(); id = queue.shift()) {
+    for (let id = queue.shift(); id; id = queue.shift()) {
       const root = await fetchGeniusPage(`/competition/${cid}/match/${id}/boxscore`).catch(() => undefined);
       const found = root && readBoxScore(root);
-      if (!isActive()) return;
-      if (found) {
-        matches[id] = found;
-        onMatch?.(id, found);
-      } else failed++;
+      if (found) matches[id] = found;
+      else failed++;
       report();
     }
   };
   await Promise.all(Array.from({ length: PARALLEL }, worker));
-  return { matchIds, matches: { ...skip, ...matches }, failed };
+  return { matchIds, matches, failed };
 }
 
 // Przeliczenie w panelu administratora i zapis w bazie.
 export async function recomputeRecords(cid: number, onProgress?: (progress: RecordsProgress) => void): Promise<StoredRecords> {
-  const { matchIds, matches, failed } = await loadRecordMatches(cid, { onProgress });
+  const { matchIds, matches, failed } = await loadRecordMatches(cid, onProgress);
   const { records } = await adminRequest<{ records: StoredRecords }>('records-save', {
     cid,
     matchCount: matchIds.length - failed,

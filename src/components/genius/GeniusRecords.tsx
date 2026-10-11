@@ -1,43 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { renameTeam, teamRenames, useSiteContent, type TeamNameEntry } from '../../data/siteContent';
 import { findCompetition } from './geniusConfig';
-import {
-  loadRecordMatches,
-  loadStoredRecords,
-  recordCategories,
-  topRecords,
-  type MatchLines,
-  type RecordField,
-  type RecordRow,
-  type RecordsProgress,
-  type StoredRecords,
-} from './geniusRecordsData';
+import { loadStoredRecords, recordCategories, type RecordField, type RecordRow, type StoredRecords } from './geniusRecordsData';
 
-// Strona rekordów rozgrywek. Rekordy przeliczone przez administratora (zapisane w bazie) pokazujemy od razu; gdy ich
-// nie ma, liczymy je w przeglądarce ze statystyk meczów (geniusRecordsData) i zapamiętujemy mecze na dobę, więc
-// kolejne wejście pobiera tylko nowe.
+// Strona rekordów rozgrywek: tylko rekordy przeliczone przez administratora w panelu (zapisane w bazie) — jedno
+// zapytanie, bez pobierania statystyk meczów z Genius w przeglądarce odwiedzającego.
 
-const STORAGE_PREFIX = 'genius-records-v1:';
-const MAX_AGE_MS = 24 * 60 * 60 * 1000;
+// Na stronie po 5 w kategorii (w bazie jest 10).
 const TOP = 5;
-
-function loadCached(cid: number): Record<string, MatchLines> {
-  try {
-    const stored = JSON.parse(localStorage.getItem(STORAGE_PREFIX + cid) ?? '{}') as Record<string, MatchLines>;
-    return Object.fromEntries(Object.entries(stored).filter(([, match]) => Date.now() - match.savedAt < MAX_AGE_MS));
-  } catch {
-    return {};
-  }
-}
-
-function saveCached(cid: number, matches: Record<string, MatchLines>) {
-  try {
-    localStorage.setItem(STORAGE_PREFIX + cid, JSON.stringify(matches));
-  } catch {
-    // Brak miejsca — rekordy zostają tylko na czas wizyty.
-  }
-}
 
 const dateFormat = new Intl.DateTimeFormat('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric' });
 // Data meczu z nagłówka Genius ("Oct 4, 2026, 8:30 PM" albo po tłumaczeniu "04.10.2026, 20:30").
@@ -112,41 +83,6 @@ function RecordsView({ cid, records, note }: { cid: number; records: Record<Reco
   );
 }
 
-// Bez zapisanych rekordów: liczenie w przeglądarce, z postępem.
-function ComputedRecords({ cid }: { cid: number }) {
-  const [matches, setMatches] = useState<Record<string, MatchLines>>(() => loadCached(cid));
-  const [progress, setProgress] = useState<RecordsProgress>();
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let active = true;
-    loadRecordMatches(cid, {
-      skip: loadCached(cid),
-      isActive: () => active,
-      onMatch: (id, match) =>
-        setMatches((prev) => {
-          const next = { ...prev, [id]: match };
-          saveCached(cid, next);
-          return next;
-        }),
-      onProgress: (next) => active && setProgress(next),
-    }).finally(() => active && setLoading(false));
-    return () => {
-      active = false;
-    };
-  }, [cid]);
-
-  const records = useMemo(() => topRecords(matches, TOP), [matches]);
-  const total = progress?.matchIds.length;
-  const status =
-    total === undefined
-      ? ' Wczytywanie terminarza…'
-      : loading
-        ? ` Wczytywanie meczów: ${progress!.loaded} z ${total}…`
-        : ` Mecze: ${progress!.loaded} z ${total}${progress!.failed ? ` (${progress!.failed} niedostępnych)` : ''}.`;
-  return <RecordsView cid={cid} records={records} note={`Najwyższe zdobycze w jednym meczu, liczone ze statystyk rozegranych meczów.${status}`} />;
-}
-
 const computedAtFormat = new Intl.DateTimeFormat('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
 function GeniusRecords({ cid }: { cid: number }) {
@@ -163,7 +99,12 @@ function GeniusRecords({ cid }: { cid: number }) {
   }, [cid]);
 
   if (stored === undefined) return <p className="mt-5 text-xs text-slate-500">Wczytywanie rekordów…</p>;
-  if (stored === null) return <ComputedRecords cid={cid} />;
+  if (stored === null)
+    return (
+      <p className="mt-5 rounded-xl bg-white px-4 py-6 text-center text-sm text-slate-500 ring-1 ring-slate-200">
+        Rekordy tych rozgrywek nie zostały jeszcze przeliczone.
+      </p>
+    );
   return (
     <RecordsView
       cid={cid}
