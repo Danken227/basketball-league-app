@@ -31,6 +31,12 @@ function snapshotWriter(): Plugin {
           res.end(JSON.stringify({ error: String(error) }))
         }
       })
+      // Zmiana kodu serwera (api/) wymaga restartu — Vite nie zawsze wczytuje ponownie moduły importowane przez
+      // konfigurację, a stary kod panelu odrzucał potem zapisy (np. "Nieprawidłowa data." po zmianie formularza).
+      server.watcher.add(fileURLToPath(new URL('./api', import.meta.url)))
+      server.watcher.on('change', (file) => {
+        if (/[\\/]api[\\/][^\\/]+\.js$/.test(file)) server.restart()
+      })
       // Panel administratora — to samo co funkcja Vercela api/admin.js, z zapisem do pliku data/admin-store.json.
       const adminStore = fileStore(adminStoreFile)
       server.middlewares.use('/api/admin', (req, res) => {
