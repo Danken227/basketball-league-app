@@ -203,8 +203,10 @@ function GeniusEmbed({
   const renames = useMemo(() => teamRenames(teamNames, editionId), [teamNames, editionId]);
 
   // Ponowienie: serwer Genius bywa przeciążony i pod danym adresem potrafi podawać zapamiętaną, pustą odpowiedź.
-  // Gdy poprawna treść nie przyjdzie w 6 s, prosimy jeszcze raz z dodatkowym parametrem "r" (inny adres = świeża
-  // odpowiedź). Stan dotyczy konkretnej treści (klucza), więc zmiana filtra zaczyna od zwykłego zapytania.
+  // Gdy odpowiedź przyjdzie bez poprawnej treści (albo z błędem), prosimy jeszcze raz z dodatkowym parametrem "r"
+  // (inny adres = świeża odpowiedź). Nie ponawiamy po czasie: pierwsza odpowiedź na adres trwa u Genius 3–7 s,
+  // a ponowienie (adres spoza ich pamięci podręcznej) trwałoby drugie tyle. Stan dotyczy konkretnej treści
+  // (klucza), więc zmiana filtra zaczyna od zwykłego zapytania.
   const [retry, setRetry] = useState<{ key: string; token: number }>();
   const retryToken = retry?.key === cacheKey ? retry.token : undefined;
   const requestPage = retryToken ? `${page}${page.includes('?') ? (page.endsWith('&') ? '' : '&') : '?'}r=${retryToken}&` : page;
@@ -245,17 +247,6 @@ function GeniusEmbed({
     // wczytywania go przy każdej treści (oszczędza 0,3–1,4 s na każdej tabeli). Linki Genius prowadzą na /genius,
     // a potem przepisujemy je na nasze adresy (poniżej). Wygląd nadajemy własnym CSS (genius.css) — arkusze Genius
     // tylko na stronie meczu (nativeStyle); skrypty Genius (sortowanie, zakładki, filtry) zawsze.
-    const controller = new AbortController();
-    fetchGeniusJson(requestPage, { showTitle, showSubMenus, showMatchFilter, blockDisplay }, controller.signal)
-      .then(async (json) => {
-        const jQuery = await loadJQuery();
-        if (controller.signal.aborted) return;
-        addGeniusAssets(json, nativeStyle);
-        jQuery(target).append(json.html ?? '');
-      })
-      // Błąd albo przerwane zapytanie: ponowienie i komunikat obsługują liczniki czasu poniżej.
-      .catch(() => undefined);
-
     // Poprawna świeża treść = blok Genius (.hs-embed) spoza zapamiętanej kopii, dla właściwych rozgrywek.
     const hasValidContent = () =>
       [...target.children].some(
@@ -263,19 +254,34 @@ function GeniusEmbed({
           child.classList.contains('hs-embed') && (!expectedCompetition || !child.className.includes('_comp_') || child.classList.contains(`_comp_${expectedCompetition}`)),
       );
 
-    // Pierwsza próba: po 6 s bez poprawnej treści ponawiamy zapytanie (raz).
-    // Po ponowieniu: komunikat o błędzie, ale tylko gdy nie ma czego pokazać (brak zapamiętanej kopii).
-    // Komunikat obejmuje też niezarejestrowaną domenę — wtedy serwer zwraca stronę "invalidreferrer" (404).
-    const timeout = retryToken
-      ? window.setTimeout(() => {
-          if (hasValidContent() || target.querySelector('.genius-cached')) return;
-          target.innerHTML = `<p class="genius-status"><strong>Genius Sports nie zwrócił danych.</strong><br>
-            Serwis jest chwilowo niedostępny albo domena ${window.location.host} nie jest zarejestrowana
-            dla organizacji ${GENIUS_ORGANIZATION} w Genius Sports. Spróbuj odświeżyć stronę za chwilę.</p>`;
-        }, 8000)
-      : window.setTimeout(() => {
-          if (!hasValidContent()) setRetry({ key: cacheKey, token: Date.now() });
-        }, 6000);
+    // Komunikat o błędzie, ale tylko gdy nie ma czego pokazać (brak zapamiętanej kopii). Obejmuje też
+    // niezarejestrowaną domenę — wtedy serwer zwraca stronę "invalidreferrer" (404). Spóźniona poprawna treść
+    // i tak go zastąpi (to też .genius-status).
+    const showError = () => {
+      if (hasValidContent() || target.querySelector('.genius-cached')) return;
+      target.innerHTML = `<p class="genius-status"><strong>Genius Sports nie zwrócił danych.</strong><br>
+        Serwis jest chwilowo niedostępny albo domena ${window.location.host} nie jest zarejestrowana
+        dla organizacji ${GENIUS_ORGANIZATION} w Genius Sports. Spróbuj odświeżyć stronę za chwilę.</p>`;
+    };
+
+    // Odpowiedź bez poprawnej treści albo błąd: przy pierwszej próbie ponawiamy zapytanie (raz), po ponowieniu komunikat.
+    const controller = new AbortController();
+    fetchGeniusJson(requestPage, { showTitle, showSubMenus, showMatchFilter, blockDisplay }, controller.signal)
+      .then(async (json) => {
+        const jQuery = await loadJQuery();
+        if (controller.signal.aborted) return;
+        addGeniusAssets(json, nativeStyle);
+        jQuery(target).append(json.html ?? '');
+        if (!hasValidContent()) throw new Error('Genius: brak poprawnej treści');
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        if (retryToken) showError();
+        else setRetry({ key: cacheKey, token: Date.now() });
+      });
+
+    // Odpowiedź, która nie przychodzi w ogóle (zawieszony serwer): komunikat po 20 s.
+    const timeout = window.setTimeout(showError, 20000);
 
     return () => {
       controller.abort();

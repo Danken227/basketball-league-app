@@ -34,10 +34,49 @@ export function geniusPageUrl(page: string, { showTitle = false, showSubMenus = 
   return url;
 }
 
-export async function fetchGeniusJson(page: string, options?: GeniusPageOptions, signal?: AbortSignal): Promise<GeniusPageJson> {
-  const response = await fetch(geniusPageUrl(page, options), { signal });
-  if (!response.ok) throw new Error(`Genius: ${response.status}`);
-  return (await response.json()) as GeniusPageJson;
+// Odpowiedzi Genius (także jeszcze pobierane) przez minutę na adres: kolejne osadzenie tej samej treści i treść
+// pobrana z wyprzedzeniem (prefetchGeniusJson) nie czekają drugi raz na serwer. Pierwsza odpowiedź na adres trwa
+// u Genius 3–7 s (potem ich CloudFront oddaje ją w 0,15 s), więc zapytania nie przerywamy, gdy osadzenie zniknie —
+// dokończone przyda się przy powrocie. Odpowiedzi bez treści (błąd, pusta strona przy przeciążeniu) nie zostają.
+const RESPONSE_CACHE_MS = 60_000;
+const responses = new Map<string, { at: number; json: Promise<GeniusPageJson> }>();
+
+function requestGeniusJson(url: string): Promise<GeniusPageJson> {
+  const now = Date.now();
+  for (const [key, entry] of responses) if (now - entry.at > RESPONSE_CACHE_MS) responses.delete(key);
+  const cached = responses.get(url);
+  if (cached) return cached.json;
+  const entry = {
+    at: now,
+    json: fetch(url).then(async (response) => {
+      if (!response.ok) throw new Error(`Genius: ${response.status}`);
+      return (await response.json()) as GeniusPageJson;
+    }),
+  };
+  const forget = () => {
+    if (responses.get(url) === entry) responses.delete(url);
+  };
+  entry.json.then((json) => json.html?.includes('hs-embed') || forget(), forget);
+  responses.set(url, entry);
+  return entry.json;
+}
+
+export function fetchGeniusJson(page: string, options?: GeniusPageOptions, signal?: AbortSignal): Promise<GeniusPageJson> {
+  const json = requestGeniusJson(geniusPageUrl(page, options));
+  if (!signal) return json;
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) return reject(signal.reason);
+    signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+    json.then(resolve, reject);
+  });
+}
+
+// Pobranie treści z wyprzedzeniem (np. pozostałych zakładek meczu), żeby przejście do niej nie czekało na Genius.
+export function prefetchGeniusJson(page: string, options?: GeniusPageOptions): Promise<void> {
+  return requestGeniusJson(geniusPageUrl(page, options)).then(
+    () => undefined,
+    () => undefined,
+  );
 }
 
 // Treść strony Genius jako element (poza dokumentem) — do odczytu danych (terminarz, statystyki meczów, listy).
