@@ -5,6 +5,7 @@ import PageHeader from '../components/common/PageHeader';
 import { icons } from '../components/common/icons';
 import { geniusEditionById, geniusEditions, geniusJuniorCompetitions, geniusLeagueName, type GeniusLeagueId } from '../components/genius/geniusConfig';
 import { fetchGeniusPage } from '../components/genius/geniusFetch';
+import { loadStoredRecords, recomputeRecords, type RecordsProgress, type StoredRecords } from '../components/genius/geniusRecordsData';
 import { formatNewsDate, news as dalkNews, newsCategories, newsCategory, newsPath } from '../data/news';
 import { adminRequest, reloadSiteContent, setAdmin, useAdmin, useSiteContent, type AddedNewsItem } from '../data/siteContent';
 
@@ -566,15 +567,120 @@ function TeamNamesAdmin() {
   );
 }
 
+const recordsDateFormat = new Intl.DateTimeFormat('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+// Rekordy (najwyższe zdobycze w meczu) przeliczane tutaj: przeglądarka administratora pobiera statystyki wszystkich
+// rozegranych meczów z Genius i zapisuje wynik w bazie — odwiedzający dostają gotowe rekordy jednym zapytaniem.
+function RecordsAdmin() {
+  const [editionId, setEditionId] = useState(geniusEditions[0].id);
+  const competitions = editionCompetitions(editionId);
+  // Zapisane rekordy rozgrywek: undefined — sprawdzanie, null — nie przeliczone.
+  const [stored, setStored] = useState<Record<string, StoredRecords | null>>({});
+  const [running, setRunning] = useState<{ cid: string; progress?: RecordsProgress }>();
+  const [error, setError] = useState<string>();
+  const cidsKey = competitions.map((c) => c.value).join(',');
+
+  useEffect(() => {
+    let active = true;
+    for (const cid of cidsKey.split(',').filter(Boolean)) {
+      loadStoredRecords(Number(cid))
+        .catch(() => null)
+        .then((records) => active && setStored((prev) => ({ ...prev, [cid]: records })));
+    }
+    return () => {
+      active = false;
+    };
+  }, [cidsKey]);
+
+  const recompute = async (cids: string[]) => {
+    setError(undefined);
+    try {
+      for (const cid of cids) {
+        setRunning({ cid });
+        const records = await recomputeRecords(Number(cid), (progress) => setRunning({ cid, progress }));
+        setStored((prev) => ({ ...prev, [cid]: records }));
+      }
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setRunning(undefined);
+    }
+  };
+
+  return (
+    <Card title="Rekordy rozgrywek">
+      <p className="mb-4 text-sm text-slate-600">
+        Najwyższe zdobycze zawodników w jednym meczu liczymy ze statystyk wszystkich rozegranych meczów. Przelicz po kolejce — odwiedzający zobaczą zapisany
+        wynik od razu. Rozgrywki bez przeliczenia strona liczy w przeglądarce każdego odwiedzającego (wolniej).
+      </p>
+      <div className="mb-4 flex flex-wrap items-end gap-3">
+        <FilterSelect
+          label="Edycja"
+          value={editionId}
+          onChange={(value) => {
+            setEditionId(value);
+            setStored({});
+          }}
+          options={geniusEditions.map((edition) => ({ value: edition.id, label: edition.name }))}
+        />
+        <button type="button" className={buttonClass} disabled={Boolean(running)} onClick={() => recompute(competitions.map((c) => c.value))}>
+          Przelicz wszystkie
+        </button>
+      </div>
+      <Message error={error} />
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm">
+          <thead className="text-[11px] uppercase tracking-wide text-slate-500">
+            <tr>
+              <th className="py-2 pr-4 font-semibold">Rozgrywki</th>
+              <th className="py-2 pr-4 font-semibold">Stan</th>
+              <th className="py-2" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {competitions.map(({ value: cid, label }) => {
+              const records = stored[cid];
+              const progress = running?.cid === cid ? running.progress : undefined;
+              return (
+                <tr key={cid}>
+                  <td className="whitespace-nowrap py-2 pr-4 font-semibold text-slate-900">{label}</td>
+                  <td className="py-2 pr-4 text-xs text-slate-600">
+                    {running?.cid === cid
+                      ? progress
+                        ? `Przeliczanie: ${progress.loaded} z ${progress.matchIds.length} meczów…`
+                        : 'Wczytywanie terminarza…'
+                      : records === undefined
+                        ? 'Sprawdzanie…'
+                        : records === null
+                          ? 'Nie przeliczone'
+                          : `${recordsDateFormat.format(new Date(records.computedAt))} · ${records.matchCount} meczów${records.failedCount ? ` (${records.failedCount} niedostępnych)` : ''}`}
+                  </td>
+                  <td className="whitespace-nowrap py-2 text-right">
+                    <button type="button" className={smallButtonClass} disabled={Boolean(running)} onClick={() => recompute([cid])}>
+                      Przelicz
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
 const tabs = [
   { id: 'aktualnosci', label: 'Aktualności' },
   { id: 'druzyny', label: 'Nazwy drużyn w edycjach' },
+  { id: 'rekordy', label: 'Rekordy' },
 ] as const;
+type TabId = (typeof tabs)[number]['id'];
 
 function AdminPage() {
   const admin = useAdmin();
   const [params, setParams] = useSearchParams();
-  const tab = params.get('zakladka') === 'druzyny' ? 'druzyny' : 'aktualnosci';
+  const tab: TabId = tabs.find((item) => item.id === params.get('zakladka'))?.id ?? 'aktualnosci';
 
   const logout = async () => {
     await adminRequest('logout', {}).catch(() => undefined);
@@ -616,7 +722,7 @@ function AdminPage() {
               </button>
             ))}
           </div>
-          {tab === 'aktualnosci' ? <NewsAdmin /> : <TeamNamesAdmin />}
+          {tab === 'aktualnosci' ? <NewsAdmin /> : tab === 'druzyny' ? <TeamNamesAdmin /> : <RecordsAdmin />}
         </>
       )}
     </div>
