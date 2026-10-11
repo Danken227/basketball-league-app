@@ -5,7 +5,7 @@ import PageHeader from '../components/common/PageHeader';
 import { icons } from '../components/common/icons';
 import { geniusEditionById, geniusEditions, geniusJuniorCompetitions, geniusLeagueName, type GeniusLeagueId } from '../components/genius/geniusConfig';
 import { fetchGeniusPage } from '../components/genius/geniusFetch';
-import { loadStoredRecords, recomputeRecords, type RecordsProgress, type StoredRecords } from '../components/genius/geniusRecordsData';
+import { loadStoredRecords, playedMatchIds, recomputeRecords, type RecordsProgress, type StoredRecords } from '../components/genius/geniusRecordsData';
 import { formatNewsDate, news as dalkNews, newsCategories, newsCategory, newsPath } from '../data/news';
 import { adminRequest, reloadSiteContent, setAdmin, useAdmin, useSiteContent, type AddedNewsItem } from '../data/siteContent';
 
@@ -569,6 +569,20 @@ function TeamNamesAdmin() {
 
 const recordsDateFormat = new Intl.DateTimeFormat('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
+// Mecze rozegrane od ostatniego przeliczenia rekordów (rozegrane teraz minus uwzględnione przy przeliczeniu).
+function NewMatches({ played, records }: { played?: number | null; records?: StoredRecords | null }) {
+  if (played === undefined || records === undefined) return <span className="text-slate-400">…</span>;
+  if (played === null) return <span className="text-slate-400">nie udało się sprawdzić</span>;
+  const fresh = played - (records ? records.matchCount + records.failedCount : 0);
+  if (played === 0) return <span className="text-slate-400">brak meczów</span>;
+  if (fresh <= 0) return <span className="font-semibold text-emerald-700">aktualne</span>;
+  return (
+    <span className="rounded bg-orange-100 px-1.5 py-0.5 font-semibold text-orange-800">
+      {fresh} {fresh === 1 ? 'nowy mecz' : fresh % 10 >= 2 && fresh % 10 <= 4 && (fresh % 100 < 10 || fresh % 100 >= 20) ? 'nowe mecze' : 'nowych meczów'}
+    </span>
+  );
+}
+
 // Rekordy (najwyższe zdobycze w meczu) przeliczane tutaj: przeglądarka administratora pobiera statystyki wszystkich
 // rozegranych meczów z Genius i zapisuje wynik w bazie — odwiedzający dostają gotowe rekordy jednym zapytaniem.
 function RecordsAdmin() {
@@ -576,6 +590,9 @@ function RecordsAdmin() {
   const competitions = editionCompetitions(editionId);
   // Zapisane rekordy rozgrywek: undefined — sprawdzanie, null — nie przeliczone.
   const [stored, setStored] = useState<Record<string, StoredRecords | null>>({});
+  // Liczba rozegranych meczów teraz (terminarz Genius) — porównana z przeliczonymi pokazuje, czy rekordy są aktualne.
+  // null — terminarz nie przyszedł (nie wiadomo).
+  const [played, setPlayed] = useState<Record<string, number | null>>({});
   const [running, setRunning] = useState<{ cid: string; progress?: RecordsProgress }>();
   const [error, setError] = useState<string>();
   const cidsKey = competitions.map((c) => c.value).join(',');
@@ -586,6 +603,7 @@ function RecordsAdmin() {
       loadStoredRecords(Number(cid))
         .catch(() => null)
         .then((records) => active && setStored((prev) => ({ ...prev, [cid]: records })));
+      playedMatchIds(Number(cid)).then((ids) => active && setPlayed((prev) => ({ ...prev, [cid]: ids?.length ?? null })));
     }
     return () => {
       active = false;
@@ -599,6 +617,7 @@ function RecordsAdmin() {
         setRunning({ cid });
         const records = await recomputeRecords(Number(cid), (progress) => setRunning({ cid, progress }));
         setStored((prev) => ({ ...prev, [cid]: records }));
+        setPlayed((prev) => ({ ...prev, [cid]: records.matchCount + records.failedCount }));
       }
     } catch (e) {
       setError(errorText(e));
@@ -610,8 +629,8 @@ function RecordsAdmin() {
   return (
     <Card title="Rekordy rozgrywek">
       <p className="mb-4 text-sm text-slate-600">
-        Najwyższe zdobycze zawodników w jednym meczu liczymy ze statystyk wszystkich rozegranych meczów. Przelicz po kolejce — odwiedzający zobaczą zapisany
-        wynik od razu. Rozgrywki bez przeliczenia strona liczy w przeglądarce każdego odwiedzającego (wolniej).
+        Najwyższe zdobycze zawodników w jednym meczu liczymy ze statystyk wszystkich rozegranych meczów. Strona rekordów pokazuje tylko to, co tu przeliczysz —
+        przelicz po kolejce (kolumna „Nowe mecze” pokazuje, gdzie są mecze rozegrane od ostatniego przeliczenia).
       </p>
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <FilterSelect
@@ -620,6 +639,7 @@ function RecordsAdmin() {
           onChange={(value) => {
             setEditionId(value);
             setStored({});
+            setPlayed({});
           }}
           options={geniusEditions.map((edition) => ({ value: edition.id, label: edition.name }))}
         />
@@ -634,6 +654,7 @@ function RecordsAdmin() {
             <tr>
               <th className="py-2 pr-4 font-semibold">Rozgrywki</th>
               <th className="py-2 pr-4 font-semibold">Stan</th>
+              <th className="py-2 pr-4 font-semibold">Nowe mecze</th>
               <th className="py-2" />
             </tr>
           </thead>
@@ -654,6 +675,9 @@ function RecordsAdmin() {
                         : records === null
                           ? 'Nie przeliczone'
                           : `${recordsDateFormat.format(new Date(records.computedAt))} · ${records.matchCount} meczów${records.failedCount ? ` (${records.failedCount} niedostępnych)` : ''}`}
+                  </td>
+                  <td className="whitespace-nowrap py-2 pr-4 text-xs">
+                    <NewMatches played={played[cid]} records={records} />
                   </td>
                   <td className="whitespace-nowrap py-2 text-right">
                     <button type="button" className={smallButtonClass} disabled={Boolean(running)} onClick={() => recompute([cid])}>
