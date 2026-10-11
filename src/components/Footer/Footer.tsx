@@ -11,9 +11,10 @@ function Footer() {
         <div className="flex flex-col items-center gap-3 sm:flex-row sm:gap-4">
           <span className="text-[11px] font-semibold uppercase tracking-widest text-slate-500">Partner danych</span>
           <a href="https://www.geniussports.com/" target="_blank" rel="noreferrer" className="transition hover:opacity-80">
-            {/* Loga z dalk.pl mają ciemne napisy na przezroczystym tle, więc w trybie ciemnym dostają białe podłoże. */}
+            {/* Loga z dalk.pl (u nas zmniejszone, WebP) mają ciemne napisy na przezroczystym tle, więc w trybie ciemnym
+                dostają białe podłoże. */}
             <img
-              src="https://dalk.pl/images/PARTNERZY/genius-sports-logo2.png"
+              src="/partners/genius-sports.webp"
               alt="Genius Sports"
               width={133}
               height={80}
@@ -32,7 +33,7 @@ function Footer() {
             className="block h-20 w-[106px] overflow-hidden rounded-lg transition hover:opacity-80 dark:bg-[#fff]"
           >
             <img
-              src="https://dalk.pl/images/PARTNERZY/logo-strefabasketu-_pl.png"
+              src="/partners/strefabasketu.webp"
               alt="Strefa Basketu.pl"
               width={110}
               height={110}
