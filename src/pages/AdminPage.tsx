@@ -6,7 +6,7 @@ import { icons } from '../components/common/icons';
 import { geniusEditionById, geniusEditions, geniusJuniorCompetitions, geniusLeagueName, type GeniusLeagueId } from '../components/genius/geniusConfig';
 import { fetchGeniusPage } from '../components/genius/geniusFetch';
 import { loadStoredRecords, playedMatchIds, recomputeRecords, type RecordsProgress, type StoredRecords } from '../components/genius/geniusRecordsData';
-import { formatNewsDate, news as dalkNews, newsCategories, newsCategory, newsPath } from '../data/news';
+import { news as dalkNews, newsCategories, newsCategory, newsDateLabel, newsPath } from '../data/news';
 import { adminRequest, reloadSiteContent, setAdmin, useAdmin, useSiteContent, type AddedNewsItem } from '../data/siteContent';
 
 // Panel administratora (link w stopce): logowanie, dodawanie aktualności i nazwy drużyn w poszczególnych edycjach.
@@ -19,7 +19,8 @@ const linkButtonClass = 'text-sm font-medium text-orange-600 hover:text-orange-7
 // Mniejsze przyciski w listach (Wyświetl, Edytuj, Usuń) — w stylu "Opublikuj".
 const smallButtonClass = 'rounded-lg bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-orange-700 disabled:opacity-40';
 const dangerButtonClass = 'rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-red-700';
-const NEWS_PER_ADMIN_PAGE = 9;
+// Po 5 — lista obok formularza nie wydłuża panelu.
+const NEWS_PER_ADMIN_PAGE = 5;
 
 // Przełącznik stron listy w prawym dolnym rogu karty.
 function Pager({ page, pageCount, onChange }: { page: number; pageCount: number; onChange: (page: number) => void }) {
@@ -102,13 +103,11 @@ function LoginForm() {
 // Okładki do wyboru: banery używane w aktualnościach z dalk.pl, bez okładki (kolor kategorii) albo własny adres.
 const covers = [...new Set(dalkNews.map((item) => item.image))];
 const coverLabel = (url: string) => url.split('/').pop()!;
-const today = () => new Date().toLocaleDateString('sv-SE');
 const emptyNews = { slug: '', title: '', date: '', excerpt: '', html: '', image: '', source: '' };
 
 function NewsAdmin() {
   const { news } = useSiteContent();
   const [title, setTitle] = useState('');
-  const [date, setDate] = useState(today);
   const [cover, setCover] = useState(covers[0] ?? '');
   const [customCover, setCustomCover] = useState('');
   const [body, setBody] = useState('');
@@ -120,7 +119,8 @@ function NewsAdmin() {
   const [editing, setEditing] = useState<string>();
   // Lista dodanych wpisów od najnowszego, po NEWS_PER_ADMIN_PAGE na stronę (po usunięciu numer strony się mieści).
   const [listPage, setListPage] = useState(1);
-  const sortedNews = [...news].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
+  // Jak na stronie aktualności: data wpisu, a tego samego dnia późniejsza godzina wyżej.
+  const sortedNews = [...news].sort((a, b) => b.date.localeCompare(a.date) || (b.publishedAt ?? b.createdAt).localeCompare(a.publishedAt ?? a.createdAt));
   const listPageCount = Math.max(1, Math.ceil(sortedNews.length / NEWS_PER_ADMIN_PAGE));
   const currentListPage = Math.min(listPage, listPageCount);
   const pageNews = sortedNews.slice((currentListPage - 1) * NEWS_PER_ADMIN_PAGE, currentListPage * NEWS_PER_ADMIN_PAGE);
@@ -128,7 +128,6 @@ function NewsAdmin() {
   const fillForm = (item?: AddedNewsItem) => {
     setEditing(item?.slug);
     setTitle(item?.title ?? '');
-    setDate(item?.date ?? today());
     setBody(item?.body ?? '');
     setCategory(item?.category ?? '');
     const image = item ? item.image : (covers[0] ?? '');
@@ -153,7 +152,6 @@ function NewsAdmin() {
       const { item } = await adminRequest<{ item: { slug: string; title: string } }>(editing ? 'news-update' : 'news-add', {
         slug: editing,
         title,
-        date,
         body,
         category,
         image: cover === 'custom' ? customCover : cover,
@@ -187,7 +185,7 @@ function NewsAdmin() {
           <Field label="Tytuł">
             <input className={inputClass} value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} required />
           </Field>
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2">
             <FilterSelect
               label="Temat"
               value={category}
@@ -198,9 +196,6 @@ function NewsAdmin() {
                 ...newsCategories.map(({ label }) => ({ value: label, label })),
               ]}
             />
-            <Field label="Data publikacji">
-              <input className={inputClass} type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
-            </Field>
             <FilterSelect
               label="Okładka"
               value={cover}
@@ -257,7 +252,7 @@ function NewsAdmin() {
                     {item.title}
                   </p>
                   <p className="text-xs text-slate-500">
-                    {formatNewsDate(item.date)} · {newsCategory(item).label}
+                    {newsDateLabel(item)} · {newsCategory(item).label}
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {/* W nowej karcie — panel z formularzem zostaje otwarty. */}

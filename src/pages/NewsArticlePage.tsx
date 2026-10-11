@@ -1,6 +1,6 @@
 import { Link, useParams } from 'react-router-dom';
 import { NewsCover } from '../components/NewsSection/NewsCard';
-import { formatNewsDate, newsCategory, newsPath, withExternalLinks } from '../data/news';
+import { newsCategory, newsDateLabel, newsPath, withExternalLinks } from '../data/news';
 import { useNews, useSiteContent } from '../data/siteContent';
 import Placeholder from './Placeholder';
 
@@ -37,7 +37,7 @@ function NewsArticlePage() {
         <NewsCover item={item} className="aspect-video" />
         <div className="p-5 sm:p-8">
           <p className="text-xs text-slate-500">
-            <time dateTime={item.date}>{formatNewsDate(item.date)}</time> · {newsCategory(item).label}
+            <time dateTime={item.publishedAt ?? item.date}>{newsDateLabel(item)}</time> · {newsCategory(item).label}
           </p>
           <h1 className="mt-2 text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">{item.title}</h1>
           <div className={`mt-5 ${contentClass}`} dangerouslySetInnerHTML={{ __html: withExternalLinks(item.html) }} />
