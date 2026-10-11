@@ -92,6 +92,9 @@ const loadingHtml = '<p class="genius-status">Wczytywanie danych Genius Sports�
 // wczytaniu strony trafia do nazwy konfiguracji, a więc i do adresu skryptu — skrypt jest zawsze świeży.
 const pageLoadTag = Date.now().toString(36);
 
+// Numer zapytania osadzenia (id elementu, do którego Genius wstawia treść).
+let embedRequest = 0;
+
 // Skrypt Genius pobiera jQuery dopiero, gdy sam się wczyta (i tylko gdy strona go nie ma). Pobieramy je od razu,
 // równolegle ze skryptem. Znacznik window._loadingjq sprawia, że skrypt Genius nie dokleja drugiej kopii,
 // tylko czeka na naszą (ta sama wersja, której używa Genius).
@@ -203,12 +206,21 @@ function GeniusEmbed({
     }
 
     preloadJQuery();
+    // Każde zapytanie ma własny element na treść (genius-target, bez wpływu na układ). Skrypt Genius zapamiętuje
+    // element w chwili wykonania, więc przy szybkiej zmianie filtra (grupa, liga) spóźniona odpowiedź na poprzednie
+    // zapytanie trafia do elementu, którego już nie ma na stronie — wcześniej lądowała obok nowej treści
+    // (tabela kilka razy albo tabela innej ligi).
+    const targetId = `${placeholderId}_${++embedRequest}`;
+    const target = document.createElement('div');
+    target.id = targetId;
+    target.className = 'genius-target';
     // Zapamiętana kopia (oznaczona klasą genius-cached) albo komunikat o wczytywaniu.
     const cached = readGeniusCache(cacheKey);
-    placeholder.innerHTML = cached ? `<div class="genius-cached">${cached}</div>` : loadingHtml;
+    target.innerHTML = cached ? `<div class="genius-cached">${cached}</div>` : loadingHtml;
+    placeholder.replaceChildren(target);
 
     window[configName] = {
-      placeHolder: placeholderId,
+      placeHolder: targetId,
       page: requestPage,
       raw: true,
       // Linki Genius kierujemy na /genius, a potem przepisujemy je na nasze adresy (poniżej).
@@ -239,7 +251,7 @@ function GeniusEmbed({
 
     // Poprawna świeża treść = blok Genius (.hs-embed) spoza zapamiętanej kopii, dla właściwych rozgrywek.
     const hasValidContent = () =>
-      [...placeholder.children].some(
+      [...target.children].some(
         (child) =>
           child.classList.contains('hs-embed') && (!expectedCompetition || !child.className.includes('_comp_') || child.classList.contains(`_comp_${expectedCompetition}`)),
       );
@@ -249,8 +261,8 @@ function GeniusEmbed({
     // Komunikat obejmuje też niezarejestrowaną domenę — wtedy serwer zwraca stronę "invalidreferrer" (404).
     const timeout = retryToken
       ? window.setTimeout(() => {
-          if (hasValidContent() || placeholder.querySelector('.genius-cached')) return;
-          placeholder.innerHTML = `<p class="genius-status"><strong>Genius Sports nie zwrócił danych.</strong><br>
+          if (hasValidContent() || target.querySelector('.genius-cached')) return;
+          target.innerHTML = `<p class="genius-status"><strong>Genius Sports nie zwrócił danych.</strong><br>
             Serwis jest chwilowo niedostępny albo domena ${window.location.host} nie jest zarejestrowana
             dla organizacji DALK w Genius Sports. Spróbuj odświeżyć stronę za chwilę.</p>`;
         }, 8000)
@@ -280,14 +292,19 @@ function GeniusEmbed({
       // Świeża treść jest poprawna tylko wtedy, gdy to blok Genius (.hs-embed) dla rozgrywek, o które prosiliśmy
       // (klasa _comp_<numer>). Przy przeciążeniu Genius potrafi zwrócić pustą stronę, a przy kilku osadzeniach naraz
       // wstawić treść w złe miejsce — wtedy zostawiamy komunikat/zapamiętaną kopię i nic nie zapisujemy.
-      const freshRoot = [...placeholder.children].find((child) => child.classList.contains('hs-embed'));
+      // Gdyby mimo to skrypt wstawił treść drugi raz, zostawiamy tylko najnowszą kopię.
+      // Treść bieżącego zapytania (element genius-target), a w migawce sam element osadzenia.
+      const root = placeholder.querySelector<HTMLElement>(':scope > .genius-target') ?? placeholder;
+      const blocks = [...root.children].filter((child) => child.classList.contains('hs-embed'));
+      blocks.slice(0, -1).forEach((block) => block.remove());
+      const freshRoot = blocks.at(-1);
       const compClass = freshRoot && [...freshRoot.classList].find((c) => c.startsWith('_comp_'));
       const valid = Boolean(freshRoot) && (!expectedCompetition || !compClass || compClass === `_comp_${expectedCompetition}`);
       // Genius dokleja treść obok komunikatu o wczytywaniu (albo zapamiętanej kopii), więc po nadejściu
       // poprawnej treści usuwamy komunikat i kopię.
       if (valid) {
-        placeholder.querySelector(':scope > .genius-status')?.remove();
-        placeholder.querySelector(':scope > .genius-cached')?.remove();
+        root.querySelector(':scope > .genius-status')?.remove();
+        root.querySelector(':scope > .genius-cached')?.remove();
       }
       // Razem z HTML Genius wstawia blok kolorów swojego motywu; zastępują go nasze style (genius.css).
       if (!nativeStyle) placeholder.querySelectorAll('style').forEach((style) => style.remove());
@@ -317,7 +334,7 @@ function GeniusEmbed({
       // Poprawną świeżą treść (już po naszych poprawkach) zapamiętujemy, gdy przestanie się zmieniać.
       if (valid) {
         window.clearTimeout(saveTimer);
-        saveTimer = window.setTimeout(() => writeGeniusCache(cacheKey, placeholder.innerHTML), 500);
+        saveTimer = window.setTimeout(() => writeGeniusCache(cacheKey, root.innerHTML), 500);
       }
     };
 
@@ -375,7 +392,6 @@ function GeniusEmbed({
 
   return (
     <div
-      id={placeholderId}
       ref={ref}
       onClick={onClick}
       className={`${nativeStyle ? 'genius-native' : 'genius-embed'} ${compact ? 'genius-compact' : ''} ${className} min-h-24 overflow-x-auto rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200`}
