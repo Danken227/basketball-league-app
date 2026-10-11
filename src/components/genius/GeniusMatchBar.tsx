@@ -259,7 +259,9 @@ function MatchCard({ match, status, schedule, streamUrl }: { match: WidgetMatch;
   const date = schedule?.date ?? match.date;
   const hasDate = Boolean(schedule?.date) || match.hasDate;
   const hasTime = Boolean(schedule?.date) || match.hasTime;
-  const scores = match.teams.map((t) => Number(t.score));
+  // Widget Genius przy 0 punktach zostawia pole wyniku puste — w meczu trwającym i zakończonym to 0.
+  const scoreOf = (team: WidgetTeam) => team.score ?? '0';
+  const scores = match.teams.map((t) => Number(scoreOf(t)));
   const winner = status === 'final' ? Math.max(...scores) : undefined;
   const showScores = status !== 'upcoming';
 
@@ -309,7 +311,7 @@ function MatchCard({ match, status, schedule, streamUrl }: { match: WidgetMatch;
       </div>
       <ul className="space-y-1.5">
         {match.teams.map((team) => {
-          const won = status === 'final' && Number(team.score) === winner;
+          const won = status === 'final' && Number(scoreOf(team)) === winner;
           return (
             <li key={team.id || team.code} className="flex items-center gap-2">
               <span className="grid h-6 w-6 shrink-0 place-items-center overflow-hidden rounded-full bg-white">
@@ -323,7 +325,7 @@ function MatchCard({ match, status, schedule, streamUrl }: { match: WidgetMatch;
                 />
               </span>
               <span className={`min-w-0 flex-1 truncate text-sm ${won ? 'font-bold text-white' : 'text-slate-300'}`}>{team.code}</span>
-              {showScores && <span className={`text-sm tabular-nums ${won ? 'font-bold text-white' : 'text-slate-400'}`}>{team.score}</span>}
+              {showScores && <span className={`text-sm tabular-nums ${won ? 'font-bold text-white' : 'text-slate-400'}`}>{scoreOf(team)}</span>}
             </li>
           );
         })}
