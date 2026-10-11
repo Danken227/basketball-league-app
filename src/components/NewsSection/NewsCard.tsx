@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { formatNewsDate, newsCategory, newsImage, newsPath, type NewsItem } from '../../data/news';
+import { newsCategory, newsDateLabel, newsImage, newsPath, type NewsItem } from '../../data/news';
 
 // Okładka: baner wpisu z dalk.pl (te same tła co tam). Kolor kategorii widać do wczytania obrazka
 // (i zamiast niego, gdy wpis dodany w panelu nie ma okładki).
@@ -26,8 +26,8 @@ function NewsCard({ item, featured = false }: { item: NewsItem; featured?: boole
       <article>
         <NewsCover item={item} className={featured ? 'aspect-[5/2]' : 'aspect-[2/1]'} />
         <div className="p-4">
-          <time dateTime={item.date} className="text-[11px] text-slate-500">
-            {formatNewsDate(item.date)}
+          <time dateTime={item.publishedAt ?? item.date} className="text-[11px] text-slate-500">
+            {newsDateLabel(item)}
           </time>
           <h3 className={`mt-1 font-bold text-slate-900 group-hover:text-orange-600 ${featured ? 'text-lg' : 'text-sm'}`}>{item.title}</h3>
           <p className="mt-1 line-clamp-3 text-sm text-slate-600">{item.excerpt}</p>

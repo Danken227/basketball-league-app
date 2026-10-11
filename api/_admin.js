@@ -247,15 +247,16 @@ export async function handleAdmin({ method, action, query = {}, body = {}, cooki
   if (action === 'news-add' || action === 'news-update') {
     const title = text(body.title, 200);
     const content = text(body.body, 20000);
-    const date = text(body.date, 10);
+    // Data i godzina publikacji — zawsze bieżące (przy dodaniu i przy edycji), nie wybierane w formularzu.
+    const now = new Date();
+    const date = warsawDay(now);
     const image = text(body.image, 500);
     // Temat (etykieta z listy na stronie); pusty = temat ustalany z tytułu.
     const category = text(body.category, 40);
     if (!title || !content) return fail(400, 'Podaj tytuł i treść.');
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return fail(400, 'Nieprawidłowa data.');
     if (image && !/^(https:\/\/|\/)[^\s"'<>]+$/.test(image)) return fail(400, 'Adres okładki musi zaczynać się od https://.');
     const news = (await store.get(NEWS_KEY)) ?? [];
-    const fields = { title, date, category, excerpt: excerptOf(content), html: newsHtml(content), image, body: content };
+    const fields = { title, date, publishedAt: now.toISOString(), category, excerpt: excerptOf(content), html: newsHtml(content), image, body: content };
 
     // Edycja: adres wpisu (slug) zostaje ten sam, żeby udostępnione linki dalej działały.
     if (action === 'news-update') {

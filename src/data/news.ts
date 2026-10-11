@@ -16,6 +16,8 @@ export interface NewsItem {
   source: string;
   // Temat wybrany w panelu administratora (etykieta z newsCategories); bez niego temat wynika z tytułu.
   category?: string;
+  // Chwila publikacji (ISO) — wpisy dodane w panelu mają też godzinę.
+  publishedAt?: string;
 }
 
 export interface NewsCategory {
@@ -68,6 +70,12 @@ export function formatNewsDate(date: string) {
 }
 
 // Listy aktualności (wpisy z dalk.pl i dodane w panelu administratora — useNews w siteContent.ts).
+const timeFormat = new Intl.DateTimeFormat('pl-PL', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Warsaw' });
+
+// Data wpisu do wyświetlenia: "2 października 2026", a przy wpisach z panelu także godzina ("…, 14:05").
+export const newsDateLabel = (item: NewsItem) =>
+  item.publishedAt ? `${formatNewsDate(item.date)}, ${timeFormat.format(new Date(item.publishedAt))}` : formatNewsDate(item.date);
+
 export const newsPageCount = (list: NewsItem[]) => Math.max(1, Math.ceil(list.length / NEWS_PER_PAGE));
 
 // Strona listy aktualności, numerowana od 1.

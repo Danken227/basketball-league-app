@@ -69,7 +69,10 @@ export const useSiteContent = () => useSyncExternalStore(subscribe, () => conten
 // Wszystkie aktualności od najnowszej: dodane w panelu i przeniesione z dalk.pl (tego samego dnia dodane wyżej).
 export function useNews(): NewsItem[] {
   const { news } = useSiteContent();
-  return news.length === 0 ? dalkNews : [...news, ...dalkNews].sort((a, b) => b.date.localeCompare(a.date));
+  // Ten sam dzień: późniejsza godzina wyżej, wpisy z dalk.pl (bez godziny) pod wpisami z panelu.
+  return news.length === 0
+    ? dalkNews
+    : [...news, ...dalkNews].sort((a, b) => b.date.localeCompare(a.date) || (b.publishedAt ?? '').localeCompare(a.publishedAt ?? ''));
 }
 
 // Drużyny wybranej edycji z inną nazwą (nazwa z Genius → nazwa w tej edycji) albo innym logo.
