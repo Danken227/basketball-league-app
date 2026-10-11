@@ -1,12 +1,9 @@
-// Osadzanie oficjalnych statystyk z Genius Sports (FIBA LiveStats) — ten sam mechanizm co na dalk.pl.
-// Skrypt pobiera gotowy HTML z serwera Genius dla organizacji DALK i wstawia go we wskazany element.
+// Oficjalne statystyki z Genius Sports (FIBA LiveStats) — te same dane co na dalk.pl. Gotowy HTML z serwera Genius
+// dla organizacji DALK pobieramy wprost (geniusFetch) i wstawiamy we wskazany element (GeniusEmbed).
 
 import { leagues, type LeagueId } from '../../data/league';
 
 export const GENIUS_ORGANIZATION = 'DALK';
-// dalk.pl używa adresu hosted.wh.geniussports.com, który tylko przekierowuje (308) tutaj — od razu
-// pobieramy z adresu docelowego i oszczędzamy jedno zapytanie przy każdym osadzeniu.
-export const GENIUS_EMBED_URL = `https://hosted.dcd.shared.geniussports.com/embed/?${GENIUS_ORGANIZATION}`;
 export const GENIUS_WIDGET_URL = 'https://widget.wh.geniussports.com/widget/';
 
 // Genius wyświetla dane tylko na domenach zarejestrowanych dla organizacji. Serwer sprawdza domenę strony

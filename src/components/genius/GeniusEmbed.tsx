@@ -2,7 +2,8 @@ import { useEffect, useId, useMemo, useRef, useState, type MouseEvent } from 're
 import { useNavigate } from 'react-router-dom';
 import { geniusCacheKey, readGeniusCache, writeGeniusCache } from './geniusCache';
 import { teamRenames, useSiteContent } from '../../data/siteContent';
-import { findCompetition, GENIUS_EMBED_URL, geniusSnapshot, isGeniusDomain, mapGeniusPath } from './geniusConfig';
+import { findCompetition, geniusSnapshot, isGeniusDomain, mapGeniusPath } from './geniusConfig';
+import { fetchGeniusJson } from './geniusFetch';
 import { installSnapshotScripts, loadSnapshot, SNAPSHOT_DIR, snapshotMissingHtml } from './geniusSnapshot';
 import { translateGenius } from './geniusI18n';
 import { fillMissingLogos, replaceBrokenLogo } from './geniusLogo';
@@ -87,26 +88,49 @@ function geniusLinkPath(href: string): string | undefined {
 
 const loadingHtml = '<p class="genius-status">Wczytywanie danych Genius Sports…</p>';
 
-// Serwer Genius zwraca skrypt osadzenia zależny od domeny strony, a przeglądarka zapamiętuje go po samym adresie.
-// Kopia pobrana kiedyś z innej domeny (np. localhost) blokowałaby wtedy osadzenie. Znacznik zmieniany przy każdym
-// wczytaniu strony trafia do nazwy konfiguracji, a więc i do adresu skryptu — skrypt jest zawsze świeży.
-const pageLoadTag = Date.now().toString(36);
-
-// Numer zapytania osadzenia (id elementu, do którego Genius wstawia treść).
+// Numer zapytania osadzenia (id elementu na treść).
 let embedRequest = 0;
 
-// Skrypt Genius pobiera jQuery dopiero, gdy sam się wczyta (i tylko gdy strona go nie ma). Pobieramy je od razu,
-// równolegle ze skryptem. Znacznik window._loadingjq sprawia, że skrypt Genius nie dokleja drugiej kopii,
-// tylko czeka na naszą (ta sama wersja, której używa Genius).
+// Treść Genius wstawiamy przez jQuery, tak jak skrypt osadzenia Genius — jQuery uruchamia przy tym wstawki skryptów
+// z treści (np. przygotowanie tabel footable). Ta sama wersja, której używa Genius; znacznik window._loadingjq
+// mówi pozostałym skryptom Genius (widget paska meczów), że jQuery już się wczytuje.
 const JQUERY_URL = 'https://code.jquery.com/jquery-3.2.1.min.js';
 
-function preloadJQuery() {
-  if (window.jQuery || window._loadingjq) return;
-  window._loadingjq = 1;
-  const script = document.createElement('script');
-  script.async = true;
-  script.src = JQUERY_URL;
-  document.head.appendChild(script);
+type JQueryAppend = (element: Element) => { append: (html: string) => void };
+let jQueryReady: Promise<JQueryAppend> | undefined;
+
+function loadJQuery(): Promise<JQueryAppend> {
+  jQueryReady ??= new Promise((resolve) => {
+    if (!window.jQuery && !window._loadingjq) {
+      window._loadingjq = 1;
+      const script = document.createElement('script');
+      script.async = true;
+      script.src = JQUERY_URL;
+      document.head.appendChild(script);
+    }
+    const wait = () => (window.jQuery ? resolve(window.jQuery as JQueryAppend) : window.setTimeout(wait, 50));
+    wait();
+  });
+  return jQueryReady;
+}
+
+// Skrypty i arkusze, których używa treść Genius (sortowanie tabel, filtry relacji meczu, wygląd strony meczu) —
+// każdy dodawany raz, jak w skrypcie osadzenia.
+function addGeniusAssets(json: { css?: string[]; js?: string[] }, withCss: boolean) {
+  if (withCss)
+    for (const href of json.css ?? []) {
+      if ([...document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')].some((link) => link.getAttribute('href') === href)) continue;
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = href;
+      document.head.appendChild(link);
+    }
+  for (const src of json.js ?? []) {
+    if ([...document.scripts].some((script) => script.getAttribute('src') === src)) continue;
+    const script = document.createElement('script');
+    script.src = src;
+    document.head.appendChild(script);
+  }
 }
 
 // Rodzaj kolumny tabeli statystyk Genius po nagłówku: średnia ("Average ..." w opisie albo skrót kończący się na PG,
@@ -167,7 +191,6 @@ function GeniusEmbed({
   // Każde osadzenie ma własną zmienną konfiguracji i element, więc kilka może działać na jednej stronie.
   const instance = useId().replace(/[^a-zA-Z0-9]/g, '');
   const placeholderId = `spil_w_h_${instance}`;
-  const configName = `spilWHH_${instance}${pageLoadTag}` as const;
   const filterSelector = textFilter?.selector;
   const filterQuery = textFilter?.query ?? '';
   const filterLetter = textFilter?.letter ?? '';
@@ -205,11 +228,9 @@ function GeniusEmbed({
       };
     }
 
-    preloadJQuery();
-    // Każde zapytanie ma własny element na treść (genius-target, bez wpływu na układ). Skrypt Genius zapamiętuje
-    // element w chwili wykonania, więc przy szybkiej zmianie filtra (grupa, liga) spóźniona odpowiedź na poprzednie
-    // zapytanie trafia do elementu, którego już nie ma na stronie — wcześniej lądowała obok nowej treści
-    // (tabela kilka razy albo tabela innej ligi).
+    // Każde zapytanie ma własny element na treść (genius-target, bez wpływu na układ), a przy zmianie filtra (grupa,
+    // liga) zapytanie jest przerywane. Wcześniej spóźniona odpowiedź na poprzednie zapytanie lądowała obok nowej
+    // treści (tabela kilka razy albo tabela innej ligi).
     const targetId = `${placeholderId}_${++embedRequest}`;
     const target = document.createElement('div');
     target.id = targetId;
@@ -219,35 +240,20 @@ function GeniusEmbed({
     target.innerHTML = cached ? `<div class="genius-cached">${cached}</div>` : loadingHtml;
     placeholder.replaceChildren(target);
 
-    window[configName] = {
-      placeHolder: targetId,
-      page: requestPage,
-      raw: true,
-      // Linki Genius kierujemy na /genius, a potem przepisujemy je na nasze adresy (poniżej).
-      internalURL: `${window.location.origin}/genius`,
-      showNavBar: false,
-      showLinks: true,
-      showTitle,
-      showSubMenus,
-      showLanguageChooser: false,
-      // Rozgrywki wybieramy naszymi filtrami.
-      showCompetitionChooser: false,
-      showMatchFilter,
-      // Wygląd nadajemy własnym CSS (genius.css), zostawiamy skrypty Genius (sortowanie, zakładki).
-      rawEnableCSS: nativeStyle,
-      rawEnableJS: true,
-      blockDisplay: blockDisplay ?? '',
-      language: 'en',
-    };
-
-    // Skrypt czyta konfigurację w chwili wykonania, więc przy każdej zmianie wstawiamy go ponownie
-    // (przeglądarka bierze go z pamięci podręcznej). Nazwa zmiennej idzie po "|", jak na dalk.pl.
-    const script = document.createElement('script');
-    script.async = true;
-    script.src = `${GENIUS_EMBED_URL}|${configName}`;
-    // Wstawiamy z opóźnieniem: React w trybie deweloperskim uruchamia efekt dwa razy, a pierwsze uruchomienie
-    // jest od razu sprzątane — wtedy jego skrypt nie trafia na stronę i treść nie wstawia się podwójnie.
-    const insert = window.setTimeout(() => document.body.appendChild(script), 0);
+    // Treść pobieramy wprost z serwera Genius (geniusFetch) — to samo, co robi skrypt osadzenia Genius, bez
+    // wczytywania go przy każdej treści (oszczędza 0,3–1,4 s na każdej tabeli). Linki Genius prowadzą na /genius,
+    // a potem przepisujemy je na nasze adresy (poniżej). Wygląd nadajemy własnym CSS (genius.css) — arkusze Genius
+    // tylko na stronie meczu (nativeStyle); skrypty Genius (sortowanie, zakładki, filtry) zawsze.
+    const controller = new AbortController();
+    fetchGeniusJson(requestPage, { showTitle, showSubMenus, showMatchFilter, blockDisplay }, controller.signal)
+      .then(async (json) => {
+        const jQuery = await loadJQuery();
+        if (controller.signal.aborted) return;
+        addGeniusAssets(json, nativeStyle);
+        jQuery(target).append(json.html ?? '');
+      })
+      // Błąd albo przerwane zapytanie: ponowienie i komunikat obsługują liczniki czasu poniżej.
+      .catch(() => undefined);
 
     // Poprawna świeża treść = blok Genius (.hs-embed) spoza zapamiętanej kopii, dla właściwych rozgrywek.
     const hasValidContent = () =>
@@ -271,14 +277,12 @@ function GeniusEmbed({
         }, 6000);
 
     return () => {
-      window.clearTimeout(insert);
+      controller.abort();
       window.clearTimeout(timeout);
-      script.remove();
-      delete window[configName];
       placeholder.innerHTML = '';
       if (nativeStyle) removeGeniusStylesheets();
     };
-  }, [allowed, requestPage, retryToken, blockDisplay, showSubMenus, showMatchFilter, showTitle, nativeStyle, placeholderId, configName, cacheKey, expectedCompetition]);
+  }, [allowed, requestPage, retryToken, blockDisplay, showSubMenus, showMatchFilter, showTitle, nativeStyle, placeholderId, cacheKey, expectedCompetition]);
 
   // Przepisuje linki Genius (".../genius?&WHurl=/competition/..") na nasze adresy i stosuje filtr tekstowy.
   // Treść dochodzi asynchronicznie, więc obserwujemy zmiany w elemencie.

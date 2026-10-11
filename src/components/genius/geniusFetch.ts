@@ -2,17 +2,48 @@ import { geniusCacheKey } from './geniusCache';
 import { GENIUS_ORGANIZATION, geniusSnapshot } from './geniusConfig';
 import { loadSnapshot } from './geniusSnapshot';
 
-// Treść strony Genius jako element (poza dokumentem), bez osadzania: to samo zapytanie, które wysyła skrypt
-// osadzenia, ale bez wczytywania skryptu (szybciej i kilka stron naraz). Serwer odpowiada JSON-em z gotowym HTML-em
-// w polu "html" — linki prowadzą wtedy do stron Genius (".../team/123"), nie naszych. W wersji demonstracyjnej
+// Treści stron Genius pobieramy wprost z serwera Genius — tak samo, jak robi to jego skrypt osadzenia
+// (hosted.dcd.shared.geniussports.com/embed/?DALK), tylko bez wczytywania tego skryptu przy każdej treści.
+// Serwer odpowiada JSON-em: gotowy HTML w polu "html" oraz arkusze (css) i skrypty (js), których treść używa.
+
+export interface GeniusPageOptions {
+  // Nagłówek strony Genius (np. nazwa i logo drużyny).
+  showTitle?: boolean;
+  showSubMenus?: boolean;
+  showMatchFilter?: boolean;
+  // Tylko jeden blok strony (np. jedna kategoria liderów).
+  blockDisplay?: string;
+}
+
+export interface GeniusPageJson {
+  html?: string;
+  css?: string[];
+  js?: string[];
+}
+
+// Adres treści z tymi samymi parametrami co w skrypcie osadzenia: iurl — adres, na który Genius kieruje linki
+// (przepisujemy je potem na nasze), _ht — bez nagłówka, _hsm — bez podmenu, _mf — filtr meczów, _bl — jeden blok.
+export function geniusPageUrl(page: string, { showTitle = false, showSubMenus = true, showMatchFilter = true, blockDisplay }: GeniusPageOptions = {}) {
+  let url = `https://hosted.dcd.shared.geniussports.com/embednf/${GENIUS_ORGANIZATION}/en${page.startsWith('/') ? page : `/${page}`}`;
+  if (!url.includes('?')) url += '?';
+  url += `&iurl=${encodeURIComponent(`${window.location.origin}/genius`)}`;
+  if (blockDisplay) url += `&_bl=${blockDisplay}`;
+  if (!showTitle) url += '&_ht=1';
+  if (!showSubMenus) url += '&_hsm=1';
+  if (showMatchFilter) url += '&_mf=1';
+  return url;
+}
+
+export async function fetchGeniusJson(page: string, options?: GeniusPageOptions, signal?: AbortSignal): Promise<GeniusPageJson> {
+  const response = await fetch(geniusPageUrl(page, options), { signal });
+  if (!response.ok) throw new Error(`Genius: ${response.status}`);
+  return (await response.json()) as GeniusPageJson;
+}
+
+// Treść strony Genius jako element (poza dokumentem) — do odczytu danych (terminarz, statystyki meczów, listy).
+// Linki prowadzą wtedy na stronę Genius ("…/genius?&WHurl=/competition/…"), nie nasze. W wersji demonstracyjnej
 // treść z migawki (z linkami już przepisanymi na nasze adresy); undefined, gdy strony w niej nie ma.
 export async function fetchGeniusPage(page: string): Promise<HTMLElement | undefined> {
-  const html = geniusSnapshot
-    ? await loadSnapshot(geniusCacheKey({ page }))
-    : await fetch(
-        `https://hosted.dcd.shared.geniussports.com/embednf/${GENIUS_ORGANIZATION}/en${page}?&iurl=${encodeURIComponent(`${window.location.origin}/genius`)}&_ht=1&_mf=1`,
-      )
-        .then((response) => (response.ok ? (response.json() as Promise<{ html?: string }>) : undefined))
-        .then((data) => data?.html);
+  const html = geniusSnapshot ? await loadSnapshot(geniusCacheKey({ page })) : (await fetchGeniusJson(page).catch(() => undefined))?.html;
   return html ? new DOMParser().parseFromString(html, 'text/html').body : undefined;
 }
