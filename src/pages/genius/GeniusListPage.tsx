@@ -5,6 +5,7 @@ import GeniusFilterBar from '../../components/genius/GeniusFilterBar';
 import GeniusMissing from '../../components/genius/GeniusMissing';
 import GeniusPrefetch from '../../components/genius/GeniusPrefetch';
 import { competitionId, editionCompetitionIds, geniusEditions, type GeniusLeagueId } from '../../components/genius/geniusConfig';
+import { firstGroup, useDefaultGroup } from '../../components/genius/geniusGroups';
 import { useGeniusFilters } from '../../hooks/useGeniusFilters';
 
 interface GeniusListPageProps {
@@ -22,8 +23,12 @@ interface GeniusListPageProps {
 function GeniusListPage({ title, icon, path, showMatchFilter }: GeniusListPageProps) {
   const { editionId, leagueId, phase, setEditionId, setLeagueId } = useGeniusFilters<GeniusLeagueId>('eks');
   const cid = competitionId(editionId, leagueId);
-  // Skrypt Genius przyjmuje w ścieżce tylko litery, cyfry i kilka znaków (bez "%"), więc spacje zapisujemy jako "+", jak dalk.pl.
-  const page = `/competition/${cid}/${path}${phase ? `?phaseName=${phase.replace(/ /g, '+')}&` : ''}`;
+  // Tabele bez wybranej grupy pokazują pierwszą (A), a nie domyślną grupę Genius (geniusGroups).
+  const standings = path === 'standings';
+  const defaultGroup = useDefaultGroup(standings ? cid : undefined, phase);
+  // Genius przyjmuje w ścieżce tylko litery, cyfry i kilka znaków (bez "%"), więc spacje zapisujemy jako "+", jak dalk.pl.
+  const pageOf = (competition: number, group: string) => `/competition/${competition}/${path}${group ? `?phaseName=${group.replace(/ /g, '+')}&` : ''}`;
+  const page = pageOf(cid ?? 0, standings ? defaultGroup.phase : phase);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -34,7 +39,11 @@ function GeniusListPage({ title, icon, path, showMatchFilter }: GeniusListPagePr
       />
       <GeniusFilterBar editionId={editionId} onEditionChange={setEditionId} leagueId={leagueId} onLeagueChange={setLeagueId} />
       <div className="mt-6">
-        {cid ? <GeniusEmbed page={page} showMatchFilter={showMatchFilter} /> : <GeniusMissing editionId={editionId} leagueId={leagueId} />}
+        {cid ? (
+          <GeniusEmbed page={page} showMatchFilter={showMatchFilter} onContent={standings ? defaultGroup.onGroups : undefined} />
+        ) : (
+          <GeniusMissing editionId={editionId} leagueId={leagueId} />
+        )}
       </div>
       {cid && (
         <GeniusPrefetch
@@ -44,7 +53,7 @@ function GeniusListPage({ title, icon, path, showMatchFilter }: GeniusListPagePr
             ...geniusEditions.filter((edition) => edition.id !== editionId).map((edition) => competitionId(edition.id, leagueId)),
           ]
             .filter((other) => other !== undefined)
-            .map((other) => ({ page: `/competition/${other}/${path}`, showMatchFilter }))}
+            .map((other) => ({ page: pageOf(other, standings ? (firstGroup(other) ?? '') : ''), showMatchFilter }))}
         />
       )}
     </div>
