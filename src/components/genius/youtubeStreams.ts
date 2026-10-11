@@ -44,7 +44,11 @@ function similarity(a: string, b: string) {
   return x.filter((word) => y.has(word)).length / Math.min(x.length, y.size);
 }
 
-const MAX_DAYS_APART = 3;
+// Transmisję można zaplanować na YouTube kilka dni przed spotkaniem (np. w środę
+// na sobotni mecz), dlatego nie ograniczamy dopasowania do zaledwie trzech dni.
+// Tytuł nadal musi jednoznacznie zawierać obie drużyny, a data wybiera najlepszą
+// transmisję, gdy takich materiałów jest więcej.
+const MAX_DAYS_APART = 7;
 
 // Transmisja meczu: tytuł z obiema drużynami (w dowolnej kolejności), opublikowana najbliżej daty meczu.
 export function findStream(videos: YoutubeVideo[], home: string, away: string, date: Date): string | undefined {
