@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useGeniusIndex } from '../../hooks/useGeniusIndex';
 import GeniusEmbed from './GeniusEmbed';
 import { markFailed, pendingCompetitions, readTeamLinks, saveList, saveTeamNames, type IndexKind } from './geniusIndex';
+import { useForegroundReady } from './geniusPriority';
 
 const pageOf = (kind: IndexKind, cid: number) => `/competition/${cid}/${kind === 'teams' ? 'teams' : 'players'}`;
 // Linki na listach Genius są już przepisane na nasze adresy (/druzyny/<id>, /zawodnicy/<id>).
@@ -9,9 +10,11 @@ const linkPattern: Record<IndexKind, RegExp> = { teams: /^\/druzyny\/(\d+)/, pla
 
 // Uzupełnia indeks rozgrywek (geniusIndex) w tle: osadza poza ekranem listę drużyn albo zawodników
 // kolejnych rozgrywek, po jednej naraz, i zapisuje numery z linków. Gdy indeks jest pełny, nic nie robi.
+// Zaczyna dopiero, gdy widoczna treść strony jest wczytana (geniusPriority) — nie spowalnia jej.
 function GeniusIndexLoader({ kind }: { kind: IndexKind }) {
   useGeniusIndex();
-  const next = pendingCompetitions(kind)[0];
+  const ready = useForegroundReady();
+  const next = ready ? pendingCompetitions(kind)[0] : undefined;
 
   // Lista, która nie wczyta się w 25 s, jest pomijana w tej wizycie, żeby indeks nie stanął.
   useEffect(() => {

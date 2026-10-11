@@ -4,9 +4,10 @@ import { icons } from '../components/common/icons';
 import GeniusEmbed, { type StatsMode } from '../components/genius/GeniusEmbed';
 import GeniusFilterBar from '../components/genius/GeniusFilterBar';
 import GeniusMissing from '../components/genius/GeniusMissing';
+import GeniusPrefetch from '../components/genius/GeniusPrefetch';
 import GeniusRecords from '../components/genius/GeniusRecords';
 import StatsModeToggle from '../components/genius/StatsModeToggle';
-import { competitionId, geniusStatsSections, type GeniusLeagueId } from '../components/genius/geniusConfig';
+import { competitionId, editionCompetitionIds, geniusStatsSections, type GeniusLeagueId } from '../components/genius/geniusConfig';
 import { useGeniusFilters } from '../hooks/useGeniusFilters';
 
 // Nazwy tabel tłumaczy GeniusEmbed (geniusI18n: "Averages" → "Średnie"). U zawodników ta tabela ma też sumy
@@ -74,6 +75,15 @@ function StatisticsPage() {
         />
       ) : (
         <GeniusMissing editionId={editionId} leagueId={leagueId} />
+      )}
+      {/* W tle (gdy statystyki są już na ekranie) ta sama sekcja dla pozostałych lig edycji. */}
+      {cid && !records && (
+        <GeniusPrefetch
+          key={`${cid}-${section.slug}`}
+          items={editionCompetitionIds(editionId)
+            .filter((other) => other !== cid)
+            .map((other) => ({ page: `/competition/${other}/${section.path}`, showSubMenus: false }))}
+        />
       )}
     </div>
   );
