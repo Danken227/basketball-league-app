@@ -161,6 +161,34 @@ function snapshotCompressor(): Plugin {
   }
 }
 
+// Lista aktualności bez treści wpisów: import "…/news.json?summary" daje wpisy bez pola html. Listy i strona
+// główna potrzebują tylko tytułu, zajawki i okładki, a pełny plik (ok. 130 KB) wczytuje dopiero strona wpisu.
+function newsSummary(): Plugin {
+  const suffix = '?summary'
+  return {
+    name: 'news-summary',
+    enforce: 'pre',
+    // Filtry: hooki działają tylko dla tych importów, a nie dla każdego modułu strony.
+    resolveId: {
+      filter: { id: /\?summary$/ },
+      async handler(id, importer) {
+        const resolved = await this.resolve(id.slice(0, -suffix.length), importer)
+        return resolved && `\0${resolved.id}${suffix}`
+      },
+    },
+    load: {
+      filter: { id: /^\0.*\?summary$/ },
+      handler(id) {
+        const file = id.slice(1, -suffix.length)
+        this.addWatchFile(file)
+        const items = JSON.parse(fs.readFileSync(file, 'utf8')) as { html?: string }[]
+        for (const item of items) delete item.html
+        return `export default ${JSON.stringify(items)}`
+      },
+    },
+  }
+}
+
 export default defineConfig(({ mode }) => {
   // Dane logowania administratora (ADMIN_LOGIN, ADMIN_PASSWORD) z .env.local dla api/_admin.js — Vite domyślnie
   // udostępnia zmienne z plików .env tylko stronie (i tylko z przedrostkiem VITE_).
@@ -172,6 +200,7 @@ export default defineConfig(({ mode }) => {
       snapshotWriter(),
       snapshotCompressor(),
       clientHtml(),
+      newsSummary(),
     ],
     publicDir: path.join(clientDir, 'public'),
     resolve: { alias: { '@client': clientDir } },

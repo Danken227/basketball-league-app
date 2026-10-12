@@ -2,14 +2,15 @@ import { useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { icons } from '../components/common/icons';
 import PageHeader from '../components/common/PageHeader';
-import NewsCard from '../components/NewsSection/NewsCard';
-import { newsPage, newsPageCount } from '../data/news';
-import { useNews } from '../data/siteContent';
+import NewsCard, { NewsCardSkeleton } from '../components/NewsSection/NewsCard';
+import { NEWS_PER_PAGE, newsPage, newsPageCount } from '../data/news';
+import { useNews, useSiteContent } from '../data/siteContent';
 
 // Lista aktualności po 10 na stronę; numer strony w adresie (?strona=2), żeby dało się do niej wrócić.
 function NewsPage() {
   const [params] = useSearchParams();
   const news = useNews();
+  const { loaded } = useSiteContent();
   const pageCount = newsPageCount(news);
   const page = Math.min(Math.max(Number(params.get('strona')) || 1, 1), pageCount);
   const pageLink = (target: number) => (target === 1 ? '/aktualnosci' : `/aktualnosci?strona=${target}`);
@@ -23,9 +24,9 @@ function NewsPage() {
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       <PageHeader title="Aktualności" icon={icons.news} />
       <div className="grid gap-4 sm:grid-cols-2">
-        {newsPage(news, page).map((item) => (
-          <NewsCard key={item.slug} item={item} />
-        ))}
+        {loaded
+          ? newsPage(news, page).map((item, index) => <NewsCard key={item.slug} item={item} priority={index < 2} />)
+          : Array.from({ length: NEWS_PER_PAGE }, (_, index) => <NewsCardSkeleton key={index} />)}
       </div>
       <nav className="mt-8 flex items-center justify-between gap-3" aria-label="Strony aktualności">
         {page > 1 ? (
