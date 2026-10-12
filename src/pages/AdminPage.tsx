@@ -1296,7 +1296,7 @@ const DEFAULT_PHASE = 'PLAY OFF';
 const emptyBracket = (seeds: (PlayoffSeed | null)[], phases: string[]): PlayoffBracketData => ({
   enabled: false,
   title: 'Play-off',
-  phase: phases.find((phase) => /play/i.test(phase)) ?? DEFAULT_PHASE,
+  phase: phases[0] ?? DEFAULT_PHASE,
   formats: [],
   thirdPlace: false,
   seeds,
@@ -1339,7 +1339,13 @@ function PlayoffAdmin() {
       ? bracket.value
       : groups
         ? stored
-          ? { ...stored, phase: stored.phase || DEFAULT_PHASE, formats: stored.formats ?? [], seeds: stored.seeds.map((seed) => seed && (allRows.find((row) => seedKey(row) === seedKey(seed)) ?? seed)) }
+          ? {
+              ...stored,
+              // Zapisana faza, a gdy Genius jej nie ma — faza play-off, którą ma (albo domyślna nazwa).
+              phase: phases.includes(stored.phase) ? stored.phase : (phases[0] ?? (stored.phase || DEFAULT_PHASE)),
+              formats: stored.formats ?? [],
+              seeds: stored.seeds.map((seed) => seed && (allRows.find((row) => seedKey(row) === seedKey(seed)) ?? seed)),
+            }
           : emptyBracket(autoSeeds(qualified, PLAYOFF_SIZES.find((size) => size >= qualified.length) ?? 32, groupNames), phases)
         : undefined;
   // Mecze fazy play-off z Genius — z nich wyniki par (podgląd i lista niżej).
@@ -1523,27 +1529,22 @@ function PlayoffAdmin() {
                 Ułóż pary automatycznie
               </button>
             </div>
+            {/* Faza Genius z wynikami: wybierana sama (zwykle „PLAY OFF”); wybór tylko przy kilku fazach play-off. */}
             <div className="flex flex-wrap items-end gap-3">
-              {phases.length > 0 ? (
+              {phases.length > 1 && (
                 <FilterSelect
                   label="Faza play-off w Genius"
                   value={draft.phase}
                   onChange={(value) => update({ phase: value })}
-                  options={[...new Set([...phases, draft.phase])].map((phase) => ({ value: phase, label: phase }))}
+                  options={phases.map((phase) => ({ value: phase, label: phase }))}
                 />
-              ) : (
-                <Field label="Faza play-off w Genius">
-                  <input className={inputClass.replace('w-full', 'w-56')} value={draft.phase} onChange={(e) => update({ phase: e.target.value })} maxLength={60} />
-                </Field>
               )}
-              <p className="pb-2 text-xs text-slate-500">
-                {games === undefined
-                  ? 'Wczytywanie meczów…'
-                  : games.length > 0
-                    ? `Mecze w tej fazie Genius: ${games.length}.`
-                    : phases.includes(draft.phase)
-                      ? 'Ta faza nie ma jeszcze meczów.'
-                      : 'Genius nie ma jeszcze tej fazy — wyniki pojawią się, gdy liga doda fazę play-off (pod tą nazwą).'}
+              <p className="text-xs text-slate-500">
+                {!phases.includes(draft.phase)
+                  ? 'Genius nie ma jeszcze fazy play-off — wyniki pojawią się w drabince, gdy liga ją doda.'
+                  : games === undefined
+                    ? `Wyniki z fazy Genius „${draft.phase}”: wczytywanie meczów…`
+                    : `Wyniki z fazy Genius „${draft.phase}”: ${games.length > 0 ? `${games.length} ${games.length === 1 ? 'mecz' : games.length % 10 >= 2 && games.length % 10 <= 4 && (games.length % 100 < 10 || games.length % 100 >= 20) ? 'mecze' : 'meczów'}` : 'jeszcze bez meczów'}.`}
               </p>
             </div>
             <div className="flex flex-wrap gap-x-6 gap-y-2">
