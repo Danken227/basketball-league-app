@@ -173,29 +173,32 @@ function Header() {
               </NavLink>
             ),
           )}
-          <a
-            href={youtubeUrl}
-            target="_blank"
-            rel="noreferrer"
-            aria-label="YouTube"
-            className="flex items-center gap-2 rounded-full px-3 py-2 text-sm text-slate-300 transition hover:bg-white/10 hover:text-white"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M23 7.2a3 3 0 0 0-2.1-2.1C19 4.6 12 4.6 12 4.6s-7 0-8.9.5A3 3 0 0 0 1 7.2 31 31 0 0 0 .5 12a31 31 0 0 0 .5 4.8 3 3 0 0 0 2.1 2.1c1.9.5 8.9.5 8.9.5s7 0 8.9-.5a3 3 0 0 0 2.1-2.1 31 31 0 0 0 .5-4.8 31 31 0 0 0-.5-4.8ZM9.7 15.1V8.9l5.8 3.1-5.8 3.1Z" />
-            </svg>
-            <span className="lg:hidden xl:inline">YouTube</span>
-          </a>
-          {/* Przycisk pobiera formularz zgłoszeniowy klienta (np. plik Word), bez przechodzenia na inną stronę. */}
-          {registrationFormUrl && (
+          {/* YouTube i formularz zgłoszenia jako dwa małe przyciski (czerwony i pomarańczowy); w menu mobilnym obok siebie. */}
+          <div className="mt-2 flex items-center gap-2 lg:ml-2 lg:mt-0">
             <a
-              href={registrationFormUrl}
-              download
-              onClick={() => setOpen(false)}
-              className="mt-2 whitespace-nowrap rounded-full bg-orange-500 px-4 py-2 text-center text-sm font-semibold text-slate-950 transition hover:bg-orange-400 lg:ml-2 lg:mt-0"
+              href={youtubeUrl}
+              target="_blank"
+              rel="noreferrer"
+              aria-label="YouTube"
+              className="flex items-center gap-1.5 whitespace-nowrap rounded-full bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-500 lg:px-4 lg:py-2 lg:text-sm"
             >
-              Zgłoś zespół
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M23 7.2a3 3 0 0 0-2.1-2.1C19 4.6 12 4.6 12 4.6s-7 0-8.9.5A3 3 0 0 0 1 7.2 31 31 0 0 0 .5 12a31 31 0 0 0 .5 4.8 3 3 0 0 0 2.1 2.1c1.9.5 8.9.5 8.9.5s7 0 8.9-.5a3 3 0 0 0 2.1-2.1 31 31 0 0 0 .5-4.8 31 31 0 0 0-.5-4.8ZM9.7 15.1V8.9l5.8 3.1-5.8 3.1Z" />
+              </svg>
+              <span className="lg:hidden xl:inline">YouTube</span>
             </a>
-          )}
+            {/* Przycisk pobiera formularz zgłoszeniowy klienta (np. plik Word), bez przechodzenia na inną stronę. */}
+            {registrationFormUrl && (
+              <a
+                href={registrationFormUrl}
+                download
+                onClick={() => setOpen(false)}
+                className="whitespace-nowrap rounded-full bg-orange-500 px-3 py-1.5 text-center text-xs font-semibold text-slate-950 transition hover:bg-orange-400 lg:px-4 lg:py-2 lg:text-sm"
+              >
+                Zgłoś zespół
+              </a>
+            )}
+          </div>
         </nav>
         {/* Na telefonie obok przycisku menu, na komputerze na końcu menu (prawy górny róg). */}
         <ThemeToggle />

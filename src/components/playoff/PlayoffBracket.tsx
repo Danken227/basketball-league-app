@@ -120,16 +120,17 @@ function PlayoffBracket({ bracket, cid, renames }: { bracket: Bracket; cid: numb
                   <MatchCard key={match.key} match={match} cid={cid} renames={renames} showSeed={round === 0} />
                 ))}
               </div>
+              {/* Mecz o 3. miejsce w kolumnie finału, pod finałem. */}
+              {third && round === rounds.length - 1 && (
+                <div className="mt-6">
+                  <h3 className="mb-2 text-center text-[11px] font-semibold uppercase tracking-wide text-slate-500">Mecz o 3. miejsce</h3>
+                  <MatchCard match={third} cid={cid} renames={renames} showSeed={false} />
+                </div>
+              )}
             </div>
           ))}
         </div>
       </div>
-      {third && (
-        <div className="mt-4">
-          <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Mecz o 3. miejsce</h3>
-          <MatchCard match={third} cid={cid} renames={renames} showSeed={false} />
-        </div>
-      )}
     </section>
   );
 }
