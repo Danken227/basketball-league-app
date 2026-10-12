@@ -6,10 +6,14 @@ const dateFormat = new Intl.DateTimeFormat('pl-PL', { day: 'numeric', month: 'lo
 
 // Pasek wersji demonstracyjnej. Z danymi testowymi (wymyślone drużyny i wyniki) uprzedzamy, żeby nikt nie wziął
 // ich za prawdziwe; z migawką danych Genius — że to zapis z danego dnia, bez aktualizacji na żywo.
+// Data zapisu migawki: w buildzie wpisana przez vite.config.ts (pasek od razu ma docelowy tekst), na serwerze
+// deweloperskim — z manifestu.
+const builtSnapshotDate: string = import.meta.env.VITE_SNAPSHOT_CREATED_AT;
+
 function DemoBanner() {
-  const [snapshotDate, setSnapshotDate] = useState<string>();
+  const [snapshotDate, setSnapshotDate] = useState(builtSnapshotDate ? dateFormat.format(new Date(builtSnapshotDate)) : undefined);
   useEffect(() => {
-    if (dataSource !== 'snapshot') return;
+    if (dataSource !== 'snapshot' || builtSnapshotDate) return;
     loadManifest().then((manifest) => {
       if (manifest) setSnapshotDate(dateFormat.format(new Date(manifest.createdAt)));
     });

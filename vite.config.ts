@@ -161,6 +161,26 @@ function snapshotCompressor(): Plugin {
   }
 }
 
+// Wersja demonstracyjna (VITE_DATA_SOURCE=snapshot): manifest migawki pobieramy od razu z HTML-em, równolegle z kodem
+// strony, a nie dopiero po jego wykonaniu — od niego zależy wczytanie wszystkich danych Genius na stronie.
+function snapshotPreload(): Plugin {
+  return {
+    name: 'genius-snapshot-preload',
+    transformIndexHtml: () => [
+      { tag: 'link', attrs: { rel: 'preload', href: '/snapshot/index.json', as: 'fetch', crossorigin: '' }, injectTo: 'head' },
+    ],
+  }
+}
+
+// Data zapisu migawki (pasek wersji demonstracyjnej) — wpisana w build, żeby pasek od razu miał docelowy tekst.
+function snapshotCreatedAt() {
+  try {
+    return (JSON.parse(fs.readFileSync(path.join(snapshotDir, 'index.json'), 'utf8')) as { createdAt?: string }).createdAt ?? ''
+  } catch {
+    return ''
+  }
+}
+
 // Lista aktualności bez treści wpisów: import "…/news.json?summary" daje wpisy bez pola html. Listy i strona
 // główna potrzebują tylko tytułu, zajawki i okładki, a pełny plik (ok. 130 KB) wczytuje dopiero strona wpisu.
 function newsSummary(): Plugin {
@@ -193,6 +213,7 @@ export default defineConfig(({ mode }) => {
   // Dane logowania administratora (ADMIN_LOGIN, ADMIN_PASSWORD) z .env.local dla api/_admin.js — Vite domyślnie
   // udostępnia zmienne z plików .env tylko stronie (i tylko z przedrostkiem VITE_).
   for (const [key, value] of Object.entries(loadEnv(mode, process.cwd(), 'ADMIN_'))) process.env[key] ??= value
+  const snapshot = loadEnv(mode, process.cwd(), 'VITE_').VITE_DATA_SOURCE === 'snapshot'
   return {
     plugins: [
       react(),
@@ -201,7 +222,9 @@ export default defineConfig(({ mode }) => {
       snapshotCompressor(),
       clientHtml(),
       newsSummary(),
+      snapshot && snapshotPreload(),
     ],
+    define: { 'import.meta.env.VITE_SNAPSHOT_CREATED_AT': JSON.stringify(snapshot ? snapshotCreatedAt() : '') },
     publicDir: path.join(clientDir, 'public'),
     resolve: { alias: { '@client': clientDir } },
     server: {
