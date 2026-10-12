@@ -247,11 +247,11 @@ function GeniusEmbed({
     // wczytywania go przy każdej treści (oszczędza 0,3–1,4 s na każdej tabeli). Linki Genius prowadzą na /genius,
     // a potem przepisujemy je na nasze adresy (poniżej). Wygląd nadajemy własnym CSS (genius.css) — arkusze Genius
     // tylko na stronie meczu (nativeStyle); skrypty Genius (sortowanie, zakładki, filtry) zawsze.
-    // Poprawna świeża treść = blok Genius (.hs-embed) spoza zapamiętanej kopii, dla właściwych rozgrywek.
+    // Poprawna świeża treść = blok Genius (.hs-embed) spoza zapamiętanej kopii, dla właściwych rozgrywek. Pusta strona,
+    // którą Genius potrafi trzymać pod danym adresem, też jest blokiem .hs-embed, ale bez klasy _comp_<numer>.
     const hasValidContent = () =>
       [...target.children].some(
-        (child) =>
-          child.classList.contains('hs-embed') && (!expectedCompetition || !child.className.includes('_comp_') || child.classList.contains(`_comp_${expectedCompetition}`)),
+        (child) => child.classList.contains('hs-embed') && (!expectedCompetition || child.classList.contains(`_comp_${expectedCompetition}`)),
       );
 
     // Komunikat o błędzie, ale tylko gdy nie ma czego pokazać (brak zapamiętanej kopii). Obejmuje też
@@ -309,8 +309,7 @@ function GeniusEmbed({
       const blocks = [...root.children].filter((child) => child.classList.contains('hs-embed'));
       blocks.slice(0, -1).forEach((block) => block.remove());
       const freshRoot = blocks.at(-1);
-      const compClass = freshRoot && [...freshRoot.classList].find((c) => c.startsWith('_comp_'));
-      const valid = Boolean(freshRoot) && (!expectedCompetition || !compClass || compClass === `_comp_${expectedCompetition}`);
+      const valid = Boolean(freshRoot) && (!expectedCompetition || freshRoot!.classList.contains(`_comp_${expectedCompetition}`));
       // Genius dokleja treść obok komunikatu o wczytywaniu (albo zapamiętanej kopii), więc po nadejściu
       // poprawnej treści usuwamy komunikat i kopię.
       if (valid) {
@@ -342,10 +341,15 @@ function GeniusEmbed({
       if (pageSize) applyPagination(placeholder, pageSize);
       markSortedColumns(placeholder);
       if (placeholder.querySelector('.hs-embed')) onContentRef.current?.(placeholder);
-      // Poprawną świeżą treść (już po naszych poprawkach) zapamiętujemy, gdy przestanie się zmieniać.
+      // Poprawną świeżą treść (już po naszych poprawkach) zapamiętujemy, gdy przestanie się zmieniać. Nie w trakcie
+      // przygotowania tabel przez footable (skrypt Genius ukrywa wtedy tabelę i odpina jej wiersze, a dokłada je
+      // dopiero po chwili) — zapamiętana kopia miała tabele bez wierszy i pokazywała się przy kolejnych wejściach.
       if (valid) {
         window.clearTimeout(saveTimer);
-        saveTimer = window.setTimeout(() => writeGeniusCache(cacheKey, root.innerHTML), 500);
+        saveTimer = window.setTimeout(() => {
+          if (root.querySelector('table.footable[style*="display: none"]')) return;
+          writeGeniusCache(cacheKey, root.innerHTML);
+        }, 500);
       }
     };
 

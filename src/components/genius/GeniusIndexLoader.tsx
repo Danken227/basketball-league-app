@@ -26,9 +26,8 @@ function GeniusIndexLoader({ kind }: { kind: IndexKind }) {
   if (next === undefined) return null;
 
   const onContent = (root: HTMLElement) => {
-    const content = root.querySelector('.hs-embed');
-    const compClass = content && [...content.classList].find((c) => c.startsWith('_comp_'));
-    if (!content || (compClass && compClass !== `_comp_${next}`)) return;
+    // Pusta strona Genius (przy przeciążeniu) nie ma klasy rozgrywek — nie zapisujemy z niej pustej listy.
+    if (!root.querySelector(`.hs-embed._comp_${next}`)) return;
     const ids = [...root.querySelectorAll('a[href]')].map((a) => a.getAttribute('href')!.match(linkPattern[kind])?.[1]).filter((id) => id !== undefined);
     saveList(kind, next, [...new Set(ids)]);
     if (kind === 'teams') saveTeamNames(readTeamLinks(root));

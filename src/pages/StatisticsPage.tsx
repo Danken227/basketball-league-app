@@ -79,7 +79,7 @@ function StatisticsPage() {
       {/* W tle (gdy statystyki są już na ekranie) ta sama sekcja dla pozostałych lig edycji. */}
       {cid && !records && (
         <GeniusPrefetch
-          key={`${cid}-${section.slug}`}
+          key={`prefetch-${cid}-${section.slug}`}
           items={editionCompetitionIds(editionId)
             .filter((other) => other !== cid)
             .map((other) => ({ page: `/competition/${other}/${section.path}`, showSubMenus: false }))}
