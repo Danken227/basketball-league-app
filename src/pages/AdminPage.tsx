@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { FilterSelect } from '../components/common/Filters';
 import PageHeader from '../components/common/PageHeader';
 import { icons } from '../components/common/icons';
-import { geniusEditionById, geniusEditions, geniusJuniorCompetitions, geniusLeagueName, type GeniusLeagueId } from '../components/genius/geniusConfig';
+import { competitionId, geniusEditionById, geniusEditions, geniusLeagueOptions } from '../components/genius/geniusConfig';
 import { fetchGeniusPage } from '../components/genius/geniusFetch';
 import { loadStoredRecords, playedMatchIds, recomputeRecords, type RecordsProgress, type StoredRecords } from '../components/genius/geniusRecordsData';
 import client from '@client/client';
@@ -279,14 +279,12 @@ function NewsAdmin() {
 }
 
 // Rozgrywki edycji (ligi seniorów i kategorie juniorów) do wyboru drużyny.
-const editionCompetitions = (editionId: string) => {
-  const edition = geniusEditionById.get(editionId);
-  if (!edition) return [];
-  return (Object.entries({ ...edition.competitions, ...geniusJuniorCompetitions[editionId] }) as [GeniusLeagueId, number][]).map(([leagueId, cid]) => ({
-    value: String(cid),
-    label: geniusLeagueName(leagueId),
-  }));
-};
+// Kolejność jak na liście lig w tabelach: ligi seniorskie od najwyższej, potem juniorzy od U19 w dół.
+const editionCompetitions = (editionId: string) =>
+  geniusLeagueOptions.flatMap(({ value, label }) => {
+    const cid = competitionId(editionId, value);
+    return cid === undefined ? [] : [{ value: String(cid), label }];
+  });
 
 interface GeniusTeam {
   id: string;

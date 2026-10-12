@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState, type MouseEvent } from 're
 import { useNavigate } from 'react-router-dom';
 import { geniusCacheKey, readGeniusCache, writeGeniusCache } from './geniusCache';
 import { teamRenames, useSiteContent } from '../../data/siteContent';
+import { useGeniusIndex } from '../../hooks/useGeniusIndex';
 import client from '@client/client';
 import { findCompetition, GENIUS_ORGANIZATION, geniusSnapshot, isGeniusDomain, mapGeniusPath } from './geniusConfig';
 import { fetchGeniusJson } from './geniusFetch';
@@ -200,7 +201,10 @@ function GeniusEmbed({
   // Nazwy drużyn z edycji tych rozgrywek (panel administratora) zamiast najnowszych nazw z Genius.
   const { teamNames } = useSiteContent();
   const editionId = expectedCompetition ? findCompetition(Number(expectedCompetition))?.editionId : undefined;
-  const renames = useMemo(() => teamRenames(teamNames, editionId), [teamNames, editionId]);
+  // Obecne nazwy drużyn z indeksu — po jego odświeżeniu zamiany liczymy od nowa.
+  const indexVersion = useGeniusIndex();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- indexVersion: teamRenames czyta indeks
+  const renames = useMemo(() => teamRenames(teamNames, editionId), [teamNames, editionId, indexVersion]);
 
   // Ponowienie: serwer Genius bywa przeciążony i pod danym adresem potrafi podawać zapamiętaną, pustą odpowiedź.
   // Gdy odpowiedź przyjdzie bez poprawnej treści (albo z błędem), prosimy jeszcze raz z dodatkowym parametrem "r"
@@ -323,6 +327,12 @@ function GeniusEmbed({
       const teamLogo = placeholder.querySelector<HTMLImageElement>('.team-header img');
       if (teamTitle && !teamTitle.textContent?.trim() && teamLogo?.alt) teamTitle.textContent = teamLogo.alt;
       fillMissingLogos(placeholder);
+      // Hala bez linku: strona hali w Genius nic nie wnosi (sam adres), więc zostaje zwykły tekst.
+      placeholder.querySelectorAll('.match-venue a').forEach((link) => {
+        const text = document.createElement('span');
+        text.append(...link.childNodes);
+        link.replaceWith(text);
+      });
       placeholder.querySelectorAll<HTMLAnchorElement>('a[href]').forEach((link) => {
         const target = geniusLinkPath(link.getAttribute('href')!);
         if (target !== undefined) link.setAttribute('href', mapGeniusPath(target));

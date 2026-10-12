@@ -226,7 +226,8 @@
   color: var(--color-slate-900);
 }
 
-.genius-embed .match-venue a {
+.genius-embed .match-venue a,
+.genius-embed .match-venue span {
   font-weight: 400;
   color: var(--color-slate-500);
 }
@@ -1320,7 +1321,7 @@
 
 /* Mecze: data | logo i rywal w jednej linii | wynik jako znaczek W/L. */
 .genius-embed .page-team .summary td.matchTime {
-  width: 6.5rem;
+  width: 8.5rem;
   white-space: nowrap;
   font-size: 0.8125rem;
   color: var(--color-slate-500);
