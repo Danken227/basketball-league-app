@@ -24,6 +24,17 @@ const known: Record<string, string> = { ...FIRST_GROUPS, ...load() };
 
 export const firstGroup = (cid: number): string | undefined => known[cid];
 
+// Grupa sezonu zasadniczego ("Grupa A"); inne fazy to np. "PLAY OFF" w zakończonych edycjach.
+export const isGroupName = (name: string) => /^grupa\b/i.test(name);
+
+// Fazy spoza grup (np. "PLAY OFF") chowamy w menu tabel: tabela tej fazy w Genius jest pusta, a drabinkę play-off
+// pokazuje nasz przełącznik Tabela / Play-off. Rozgrywki bez grup zostają bez zmian.
+export function hideNonGroupPhases(root: HTMLElement) {
+  const links = [...root.querySelectorAll<HTMLElement>('.selection-scroll a.menuoption')];
+  const hasGroups = links.some((link) => isGroupName(link.textContent?.trim() ?? ''));
+  links.forEach((link) => link.classList.toggle('genius-phase-hidden', hasGroups && !isGroupName(link.textContent?.trim() ?? '')));
+}
+
 // Menu grup w treści tabeli Genius (chowamy je w genius.css na stronie głównej, na rzecz naszego przełącznika).
 export function readGroups(root: HTMLElement) {
   const links = [...root.querySelectorAll('.selection-scroll a.menuoption')];

@@ -5,10 +5,28 @@ import PageHeader from '../components/common/PageHeader';
 import { icons } from '../components/common/icons';
 import { competitionId, geniusEditionById, geniusEditions, geniusLeagueOptions } from '../components/genius/geniusConfig';
 import { fetchGeniusPage } from '../components/genius/geniusFetch';
+import { readGroups } from '../components/genius/geniusGroups';
 import { loadStoredRecords, playedMatchIds, recomputeRecords, type RecordsProgress, type StoredRecords } from '../components/genius/geniusRecordsData';
 import client from '@client/client';
 import { news as dalkNews, newsCategories, newsCategory, newsDateLabel, newsPath } from '../data/news';
-import { adminRequest, reloadSiteContent, setAdmin, useAdmin, useSiteContent, type AddedNewsItem } from '../data/siteContent';
+import PlayoffBracket from '../components/playoff/PlayoffBracket';
+import {
+  PLAYOFF_SIZES,
+  playoffRounds,
+  roundName,
+  seedLabel,
+  seedOrder,
+  thirdPlaceMatch,
+  type PlayoffBracket as PlayoffBracketData,
+  type PlayoffMatch,
+  type PlayoffResult,
+  type PlayoffSeed,
+  type SeriesFormat,
+  seriesFormats,
+  type StandingsZone,
+} from '../data/playoff';
+import { usePlayoffGames } from '../components/playoff/playoffGames';
+import { adminRequest, reloadSiteContent, setAdmin, teamRenames, useAdmin, useSiteContent, type AddedNewsItem } from '../data/siteContent';
 import { saveNewsDraft } from './newsDraft';
 
 // Panel administratora (link w stopce): logowanie, dodawanie aktualności i nazwy drużyn w poszczególnych edycjach.
@@ -1065,6 +1083,532 @@ function VisitsAdmin() {
   );
 }
 
+// Strefy tabel (zakładka „Awanse/spadki”): ile miejsc od góry awansuje do play-off, a ile od dołu spada — osobno
+// dla każdych rozgrywek (edycja × poziom). Tabele na stronie oznaczają je kolorem (geniusZones.ts).
+const zoneInputClass = `${inputClass.replace('w-full', 'w-20')} text-center tabular-nums`;
+
+const editionLeagues = (editionId: string) =>
+  geniusLeagueOptions.flatMap(({ value, label }) => {
+    const cid = competitionId(editionId, value);
+    return cid === undefined ? [] : [{ leagueId: value, cid: String(cid), label }];
+  });
+
+function ZonesAdmin() {
+  const { zones } = useSiteContent();
+  const [editionId, setEditionId] = useState(geniusEditions[0].id);
+  // Wpisane w formularzu (numer rozgrywek → strefy); bez wpisu — zapisane.
+  const [draft, setDraft] = useState<Record<string, StandingsZone>>({});
+  const [error, setError] = useState<string>();
+  const [saved, setSaved] = useState<string>();
+  const [busy, setBusy] = useState(false);
+  const leagues = editionLeagues(editionId);
+  const zoneOf = (cid: string): StandingsZone => draft[cid] ?? zones[cid] ?? { playoff: 0, relegation: 0 };
+  const previousEdition = geniusEditions[editionOrder(editionId) + 1];
+
+  const change = (cid: string, field: 'playoff' | 'relegation', value: string) => {
+    setSaved(undefined);
+    setDraft((prev) => ({ ...prev, [cid]: { ...zoneOf(cid), [field]: Math.max(0, Math.min(30, Math.floor(Number(value) || 0))) } }));
+  };
+
+  const changeShow = (cid: string, show: boolean) => {
+    setSaved(undefined);
+    setDraft((prev) => ({ ...prev, [cid]: { ...zoneOf(cid), show } }));
+  };
+
+  const changeEdition = (value: string) => {
+    setEditionId(value);
+    setDraft({});
+    setSaved(undefined);
+    setError(undefined);
+  };
+
+  // Te same strefy co w poprzedniej edycji (po poziomie rozgrywek) — do zapisania albo poprawienia.
+  const copyPrevious = () => {
+    if (!previousEdition) return;
+    const previous = new Map(editionLeagues(previousEdition.id).map((league) => [league.leagueId, zones[league.cid]]));
+    setDraft(Object.fromEntries(leagues.map((league) => [league.cid, previous.get(league.leagueId) ?? { playoff: 0, relegation: 0 }])));
+    setSaved(undefined);
+  };
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setError(undefined);
+    setSaved(undefined);
+    try {
+      await adminRequest('zones-save', { zones: Object.fromEntries(leagues.map((league) => [league.cid, zoneOf(league.cid)])) });
+      await reloadSiteContent();
+      setDraft({});
+      setSaved(`Zapisano strefy tabel edycji ${editionName(editionId)}.`);
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card title="Awanse i spadki w tabelach">
+      <p className="mb-4 text-sm text-slate-600">
+        Ustaw, ile miejsc od góry każdej tabeli (w każdej grupie) daje awans do play-off, a ile od dołu oznacza spadek. Pozostałe miejsca są neutralne. Z zaznaczonym
+        „Pokazuj w tabelach” tabele na stronie oznaczą strefy kolorem z legendą. Zakładka „Play-off” bierze ze strefy drużyny do drabinki (także gdy strefy są ukryte).
+      </p>
+      <form onSubmit={submit} className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <FilterSelect label="Edycja" value={editionId} onChange={changeEdition} options={geniusEditions.map((edition) => ({ value: edition.id, label: edition.name }))} />
+          {previousEdition && (
+            <button type="button" className={linkButtonClass} onClick={copyPrevious}>
+              Skopiuj z edycji {previousEdition.name}
+            </button>
+          )}
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full max-w-2xl text-left text-sm">
+            <thead className="text-[11px] uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="py-2 pr-4 font-semibold">Poziom rozgrywek</th>
+                <th className="py-2 pr-4 text-center font-semibold">
+                  <span className="mr-1.5 inline-block h-2.5 w-2.5 rounded-sm bg-emerald-500" aria-hidden="true" />
+                  Awans do play-off (od góry)
+                </th>
+                <th className="py-2 pr-4 text-center font-semibold">
+                  <span className="mr-1.5 inline-block h-2.5 w-2.5 rounded-sm bg-red-500" aria-hidden="true" />
+                  Spadek (od dołu)
+                </th>
+                <th className="py-2 text-center font-semibold">Pokazuj w tabelach</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {leagues.map((league) => {
+                const zone = zoneOf(league.cid);
+                return (
+                  <tr key={league.cid}>
+                    <td className="py-2 pr-4 font-semibold text-slate-900">{league.label}</td>
+                    <td className="py-2 pr-4 text-center">
+                      <input
+                        className={zoneInputClass}
+                        type="number"
+                        min={0}
+                        max={30}
+                        value={zone.playoff}
+                        onChange={(e) => change(league.cid, 'playoff', e.target.value)}
+                        aria-label={`${league.label}: miejsca do play-off`}
+                      />
+                    </td>
+                    <td className="py-2 pr-4 text-center">
+                      <input
+                        className={zoneInputClass}
+                        type="number"
+                        min={0}
+                        max={30}
+                        value={zone.relegation}
+                        onChange={(e) => change(league.cid, 'relegation', e.target.value)}
+                        aria-label={`${league.label}: miejsca spadkowe`}
+                      />
+                    </td>
+                    <td className="py-2 text-center">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-orange-600"
+                        checked={Boolean(zone.show)}
+                        onChange={(e) => changeShow(league.cid, e.target.checked)}
+                        aria-label={`${league.label}: pokazuj strefy w tabelach`}
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <Message error={error} success={saved} />
+        <div>
+          <button type="submit" className={buttonClass} disabled={busy}>
+            {busy ? 'Zapisywanie…' : 'Zapisz'}
+          </button>
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+// Tabele grup rozgrywek z Genius: miejsce, drużyna (numer, nazwa, logo). Rozgrywki bez grup — jedna tabela ("").
+interface GroupStandings {
+  group: string;
+  rows: PlayoffSeed[];
+}
+
+const teamIdOf = (href: string) => {
+  let path = href;
+  try {
+    path = decodeURIComponent(href);
+  } catch {
+    // Niepoprawne kodowanie — sprawdzamy adres bez dekodowania.
+  }
+  return path.match(/(?:\/team\/|\/druzyny\/)(\d+)/)?.[1] ?? '';
+};
+
+function readStandings(root: HTMLElement | undefined, group: string): PlayoffSeed[] {
+  return [...(root?.querySelectorAll<HTMLTableRowElement>('table.standings tbody tr') ?? [])].flatMap((row) => {
+    const position = Number(row.cells[0]?.textContent?.trim());
+    const link = row.querySelector<HTMLAnchorElement>('td.team-name a');
+    const name = (row.querySelector('.team-name-full') ?? link)?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+    if (!position || !name) return [];
+    const logo = row.querySelector('img')?.getAttribute('src') ?? '';
+    return [{ group, position, teamId: teamIdOf(link?.getAttribute('href') ?? ''), name, logo: logo.startsWith('https://') ? logo : '' }];
+  });
+}
+
+// Tabele grup i pozostałe fazy rozgrywek w Genius (np. „PLAY OFF” — z niej drabinka bierze wyniki meczów).
+async function loadGroupStandings(cid: string): Promise<{ groups: GroupStandings[]; phases: string[] }> {
+  const root = await fetchGeniusPage(`/competition/${cid}/standings`);
+  if (!root) throw new Error('Nie udało się wczytać tabel z Genius — spróbuj ponownie.');
+  // Grupy sezonu zasadniczego (bez faz typu „PLAY OFF”); bez grup — tabela z pierwszej strony.
+  const names = readGroups(root).names;
+  const groupNames = names.filter((name) => /^grupa\b/i.test(name));
+  const phases = names.filter((name) => !/^grupa\b/i.test(name));
+  if (groupNames.length === 0) return { groups: [{ group: '', rows: readStandings(root, '') }], phases };
+  const groups = await Promise.all(
+    groupNames.map(async (group) => ({
+      group,
+      rows: readStandings(await fetchGeniusPage(`/competition/${cid}/standings?phaseName=${group.replace(/ /g, '+')}&`), group),
+    })),
+  );
+  return { groups, phases };
+}
+
+const seedKey = (seed: Pick<PlayoffSeed, 'group' | 'position'>) => `${seed.group}|${seed.position}`;
+
+// Zakwalifikowani (strefa play-off z każdej grupy) uszeregowani: najpierw zwycięzcy grup, potem drugie miejsca itd.,
+// rozstawieni tak, żeby najwyżej uszeregowani spotkali się najpóźniej; brakujące miejsca to wolne losy.
+function autoSeeds(qualified: PlayoffSeed[], size: number, groups: string[]) {
+  const ranking = [...qualified].sort((a, b) => a.position - b.position || groups.indexOf(a.group) - groups.indexOf(b.group));
+  return seedOrder(size).map((rank) => ranking[rank - 1] ?? null);
+}
+
+const DEFAULT_PHASE = 'PLAY OFF';
+
+const emptyBracket = (seeds: (PlayoffSeed | null)[], phases: string[]): PlayoffBracketData => ({
+  enabled: false,
+  title: 'Play-off',
+  phase: phases.find((phase) => /play/i.test(phase)) ?? DEFAULT_PHASE,
+  formats: [],
+  thirdPlace: false,
+  seeds,
+  results: {},
+  updatedAt: '',
+});
+
+function PlayoffAdmin() {
+  const { zones, playoffs, teamNames } = useSiteContent();
+  const [editionId, setEditionId] = useState(geniusEditions[0].id);
+  const [cid, setCid] = useState(() => editionCompetitions(geniusEditions[0].id)[0]?.value ?? '');
+  const [standings, setStandings] = useState<{ cid: string; groups?: GroupStandings[]; phases?: string[]; error?: string }>();
+  // Edytowana drabinka (undefined — jeszcze nie przygotowana dla tych rozgrywek).
+  const [bracket, setBracket] = useState<{ cid: string; value: PlayoffBracketData }>();
+  const [error, setError] = useState<string>();
+  const [saved, setSaved] = useState<string>();
+  const [busy, setBusy] = useState(false);
+  const zone = zones[cid];
+
+  useEffect(() => {
+    let active = true;
+    loadGroupStandings(cid)
+      .then(({ groups, phases }) => active && setStandings({ cid, groups, phases }))
+      .catch((e: unknown) => active && setStandings({ cid, error: errorText(e) }));
+    return () => {
+      active = false;
+    };
+  }, [cid]);
+
+  const groups = standings?.cid === cid ? standings.groups : undefined;
+  const allRows = groups?.flatMap((group) => group.rows) ?? [];
+  const qualified = groups && zone ? groups.flatMap((group) => group.rows.filter((row) => row.position <= zone.playoff)) : [];
+  const groupNames = groups?.map((group) => group.group) ?? [];
+  const phases = (standings?.cid === cid ? standings.phases : undefined) ?? [];
+
+  // Drabinka do edycji: zapisana (z drużynami odświeżonymi z obecnych tabel) albo nowa, rozstawiona automatycznie.
+  const stored = playoffs[cid];
+  const draft =
+    bracket?.cid === cid
+      ? bracket.value
+      : groups
+        ? stored
+          ? { ...stored, phase: stored.phase || DEFAULT_PHASE, formats: stored.formats ?? [], seeds: stored.seeds.map((seed) => seed && (allRows.find((row) => seedKey(row) === seedKey(seed)) ?? seed)) }
+          : emptyBracket(autoSeeds(qualified, PLAYOFF_SIZES.find((size) => size >= qualified.length) ?? 32, groupNames), phases)
+        : undefined;
+  // Mecze fazy play-off z Genius — z nich wyniki par (podgląd i lista niżej).
+  const games = usePlayoffGames(Number(cid), draft?.phase ?? DEFAULT_PHASE);
+  const update = (change: Partial<PlayoffBracketData>) => {
+    if (!draft) return;
+    setSaved(undefined);
+    setBracket({ cid, value: { ...draft, ...change } });
+  };
+
+  const changeEdition = (value: string) => {
+    setEditionId(value);
+    setCid(editionCompetitions(value)[0]?.value ?? '');
+    setBracket(undefined);
+    setSaved(undefined);
+    setError(undefined);
+  };
+
+  const changeCompetition = (value: string) => {
+    setCid(value);
+    setBracket(undefined);
+    setSaved(undefined);
+    setError(undefined);
+  };
+
+  const changeSize = (size: number) => update({ seeds: autoSeeds(qualified, size, groupNames), results: {}, thirdPlace: size >= 4 && Boolean(draft?.thirdPlace) });
+
+  const changeFormat = (round: number, format: SeriesFormat) => {
+    if (!draft) return;
+    const formats = [...draft.formats];
+    while (formats.length < round) formats.push('single');
+    formats[round] = format;
+    update({ formats });
+  };
+
+  const changeSeed = (index: number, value: string) => {
+    if (!draft) return;
+    const seeds = [...draft.seeds];
+    seeds[index] = value ? (allRows.find((row) => seedKey(row) === value) ?? null) : null;
+    // Wynik tej pary przestaje pasować do nowych drużyn.
+    const results = { ...draft.results };
+    delete results[`r0m${Math.floor(index / 2)}`];
+    update({ seeds, results });
+  };
+
+  // Ręczny wyjątek pary (np. walkower): zwycięzca i opis; pusty — wynik z meczów w Genius.
+  const changeResult = (key: string, change: PlayoffResult) => {
+    if (!draft) return;
+    const result: PlayoffResult = { ...draft.results[key], ...change };
+    if (result.winner === undefined) delete result.winner;
+    if (!result.score) delete result.score;
+    const results = { ...draft.results, [key]: result };
+    if (result.winner === undefined && !result.score) delete results[key];
+    update({ results });
+  };
+
+  const save = async () => {
+    if (!draft) return;
+    setBusy(true);
+    setError(undefined);
+    setSaved(undefined);
+    try {
+      await adminRequest('playoff-save', { cid, bracket: draft });
+      await reloadSiteContent();
+      setBracket(undefined);
+      setSaved(draft.enabled ? 'Zapisano — drabinka jest widoczna na stronie Tabele.' : 'Zapisano — drabinka jest ukryta na stronie (włącz „Pokazuj na stronie Tabele”).');
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    if (!window.confirm('Usunąć drabinkę play-off tych rozgrywek?')) return;
+    try {
+      await adminRequest('playoff-delete', { cid });
+      await reloadSiteContent();
+      setBracket(undefined);
+      setSaved('Usunięto drabinkę.');
+    } catch (e) {
+      setError(errorText(e));
+    }
+  };
+
+  const seedOptions = [
+    { value: '', label: 'Wolny los' },
+    ...allRows.map((row) => ({ value: seedKey(row), label: `${seedLabel(row)} · ${row.name}${zone && row.position <= zone.playoff ? '' : ' (poza strefą)'}` })),
+  ];
+  const rounds = draft ? playoffRounds(draft, games) : [];
+  const third = draft ? thirdPlaceMatch(draft, rounds, games) : undefined;
+  const matchName = (seed: PlayoffSeed | null | undefined) => (seed === null ? 'wolny los' : seed ? `${seedLabel(seed)} ${seed.name}` : 'zwycięzca pary');
+
+  // Wynik pary z Genius: rozegrane mecze (wynik z punktu widzenia pierwszej drużyny) i podsumowanie serii.
+  const geniusResult = (match: PlayoffMatch) => {
+    if (games === undefined) return 'wczytywanie meczów z Genius…';
+    if (match.games.length === 0) return 'brak meczów tej pary w fazie Genius';
+    const scores = match.games.map((game) => (game.complete && game.score ? `${game.score[0]}:${game.score[1]}` : 'mecz zaplanowany')).join(', ');
+    return match.summary ? `${scores} (${match.format === 'twoLeg' ? `suma ${match.summary}` : match.summary})` : scores;
+  };
+
+  const resultEditor = (match: PlayoffMatch) => {
+    const [a, b] = match.teams;
+    const known = Boolean(a && b);
+    return (
+      <div key={match.key} className="flex flex-col gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm ring-1 ring-slate-200">
+        <p className="font-medium text-slate-900">
+          {matchName(a)} <span className="text-slate-400">vs</span> {matchName(b)}
+        </p>
+        {known && (
+          <>
+            <p className="text-xs text-slate-600">
+              Genius: {geniusResult(match)}
+              {match.winner && <span className="font-semibold text-emerald-700"> → dalej: {match.winner.name}</span>}
+            </p>
+            <div className="flex flex-wrap items-end gap-2">
+              <FilterSelect
+                label="Zwycięzca"
+                value={match.manual?.winner === undefined ? '' : String(match.manual.winner)}
+                onChange={(value) => changeResult(match.key, { winner: value === '' ? undefined : (Number(value) as 0 | 1) })}
+                options={[
+                  { value: '', label: 'Z wyników Genius' },
+                  { value: '0', label: `Ręcznie: ${a!.name}` },
+                  { value: '1', label: `Ręcznie: ${b!.name}` },
+                ]}
+              />
+              <Field label="Opis zamiast wyniku">
+                <input
+                  className={inputClass.replace('w-full', 'w-48')}
+                  placeholder="np. walkower"
+                  value={match.manual?.score ?? ''}
+                  onChange={(e) => changeResult(match.key, { score: e.target.value })}
+                  maxLength={40}
+                />
+              </Field>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="flex flex-col gap-5">
+      <Card title="Drabinka play-off">
+        <p className="mb-4 text-sm text-slate-600">
+          Drużyny do drabinki to miejsca ze strefy „Awans do play-off” w tabelach grup (zakładka „Awanse/spadki”). Ułóż pary i ustaw format serii w rundach — wyniki
+          i zwycięzców strona bierze z meczów fazy play-off w Genius, a kolejne rundy uzupełniają się same. Zwycięzcę możesz ustawić ręcznie tylko jako wyjątek (np.
+          walkower). Po włączeniu „Pokazuj na stronie Tabele” tabela tych rozgrywek dostaje przełącznik Tabela / Play-off.
+        </p>
+        <div className="mb-4 flex flex-wrap items-end gap-3">
+          <FilterSelect label="Edycja" value={editionId} onChange={changeEdition} options={geniusEditions.map((edition) => ({ value: edition.id, label: edition.name }))} />
+          <FilterSelect label="Rozgrywki" value={cid} onChange={changeCompetition} options={editionCompetitions(editionId)} />
+        </div>
+        {standings?.cid === cid && standings.error ? (
+          <Message error={standings.error} />
+        ) : !groups || !draft ? (
+          <p className="text-sm text-slate-500">Wczytywanie tabel z Genius…</p>
+        ) : (
+          <div className="flex flex-col gap-5">
+            <p className="text-sm text-slate-600">
+              {zone?.playoff
+                ? `Strefa play-off: ${zone.playoff} ${zone.playoff === 1 ? 'miejsce' : 'miejsca'} z każdej ${groups.length > 1 ? `z ${groups.length} grup` : 'tabeli'} — ${qualified.length} drużyn.`
+                : 'Te rozgrywki nie mają strefy play-off — ustaw ją w zakładce „Awanse/spadki” (do drabinki możesz też wybrać drużyny ręcznie).'}
+              {stored && ' Nazwy drużyn odświeżone z obecnych tabel — zapisz, żeby je utrwalić.'}
+            </p>
+            <div className="flex flex-wrap items-end gap-4">
+              <Field label="Nazwa">
+                <input className={inputClass.replace('w-full', 'w-56')} value={draft.title} onChange={(e) => update({ title: e.target.value })} maxLength={80} />
+              </Field>
+              <FilterSelect
+                label="Miejsc w drabince"
+                value={String(draft.seeds.length)}
+                onChange={(value) => changeSize(Number(value))}
+                options={PLAYOFF_SIZES.map((size) => ({ value: String(size), label: `${size} (${roundName(size)})` }))}
+              />
+              <button type="button" className={smallButtonClass} onClick={() => changeSize(draft.seeds.length)}>
+                Ułóż pary automatycznie
+              </button>
+            </div>
+            <div className="flex flex-wrap items-end gap-3">
+              {phases.length > 0 ? (
+                <FilterSelect
+                  label="Faza play-off w Genius"
+                  value={draft.phase}
+                  onChange={(value) => update({ phase: value })}
+                  options={[...new Set([...phases, draft.phase])].map((phase) => ({ value: phase, label: phase }))}
+                />
+              ) : (
+                <Field label="Faza play-off w Genius">
+                  <input className={inputClass.replace('w-full', 'w-56')} value={draft.phase} onChange={(e) => update({ phase: e.target.value })} maxLength={60} />
+                </Field>
+              )}
+              <p className="pb-2 text-xs text-slate-500">
+                {games === undefined
+                  ? 'Wczytywanie meczów…'
+                  : games.length > 0
+                    ? `Mecze w tej fazie Genius: ${games.length}.`
+                    : phases.includes(draft.phase)
+                      ? 'Ta faza nie ma jeszcze meczów.'
+                      : 'Genius nie ma jeszcze tej fazy — wyniki pojawią się, gdy liga doda fazę play-off (pod tą nazwą).'}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-x-6 gap-y-2">
+              <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700">
+                <input type="checkbox" className="h-4 w-4 accent-orange-600" checked={draft.enabled} onChange={(e) => update({ enabled: e.target.checked })} />
+                Pokazuj na stronie Tabele (przełącznik Tabela / Play-off)
+              </label>
+              {draft.seeds.length >= 4 && (
+                <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700">
+                  <input type="checkbox" className="h-4 w-4 accent-orange-600" checked={draft.thirdPlace} onChange={(e) => update({ thirdPlace: e.target.checked })} />
+                  Mecz o 3. miejsce
+                </label>
+              )}
+            </div>
+            <div>
+              <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Pary: {roundName(draft.seeds.length)}</h3>
+              <div className="grid gap-2 md:grid-cols-2">
+                {Array.from({ length: draft.seeds.length / 2 }, (_, pair) => (
+                  <div key={pair} className="flex flex-wrap items-end gap-2 rounded-lg bg-slate-50 p-2 ring-1 ring-slate-200">
+                    {[pair * 2, pair * 2 + 1].map((index) => (
+                      <FilterSelect key={index} label={index % 2 ? 'Gość' : 'Gospodarz'} value={draft.seeds[index] ? seedKey(draft.seeds[index]) : ''} onChange={(value) => changeSeed(index, value)} options={seedOptions} />
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex flex-col gap-3">
+              <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Rundy i wyniki</h3>
+              {rounds.map((matches, round) => (
+                <div key={round} className="flex flex-col gap-2">
+                  <div className="flex flex-wrap items-end gap-3">
+                    <p className="pb-2 text-xs font-semibold text-slate-700">{roundName(matches.length * 2)}</p>
+                    <FilterSelect
+                      label="Format serii"
+                      value={draft.formats[round] ?? 'single'}
+                      onChange={(value) => changeFormat(round, value as SeriesFormat)}
+                      options={seriesFormats}
+                    />
+                  </div>
+                  {matches.filter((match) => match.teams[0] !== null && match.teams[1] !== null).map(resultEditor)}
+                </div>
+              ))}
+              {third && (
+                <div className="flex flex-col gap-2">
+                  <p className="text-xs font-semibold text-slate-700">Mecz o 3. miejsce</p>
+                  {resultEditor(third)}
+                </div>
+              )}
+            </div>
+            <Message error={error} success={saved} />
+            <div className="flex flex-wrap items-center gap-3">
+              <button type="button" className={buttonClass} disabled={busy} onClick={save}>
+                {busy ? 'Zapisywanie…' : 'Zapisz drabinkę'}
+              </button>
+              {stored && (
+                <button type="button" className={dangerButtonClass} onClick={remove}>
+                  Usuń drabinkę
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </Card>
+      {draft && groups && (
+        <div>
+          <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Podgląd</h2>
+          <PlayoffBracket bracket={draft} cid={Number(cid)} renames={teamRenames(teamNames, editionId)} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Formularz zgłoszenia drużyny pobierany przyciskiem „Zgłoś zespół” w nagłówku. Bez wgranego pliku przycisk
 // pobiera plik z konfiguracji klienta (ten sam co na stronie ligi).
 const MAX_FORM_BYTES = 700 * 1024;
@@ -1176,6 +1720,8 @@ const tabs = [
   { id: 'aktualnosci', label: 'Aktualności' },
   { id: 'druzyny', label: 'Nazwy drużyn w edycjach' },
   { id: 'rekordy', label: 'Rekordy' },
+  { id: 'strefy', label: 'Awanse/spadki' },
+  { id: 'playoff', label: 'Play-off' },
   { id: 'formularz', label: 'Formularz zgłoszenia' },
   { id: 'odwiedziny', label: 'Odwiedziny' },
 ] as const;
@@ -1210,7 +1756,7 @@ function AdminPage() {
         <LoginForm />
       ) : (
         <>
-          <div className="mb-5 flex gap-2 overflow-x-auto border-b border-slate-200" role="tablist">
+          <div className="mb-5 flex gap-2 overflow-x-auto overflow-y-hidden border-b border-slate-200" role="tablist">
             {tabs.map((item) => (
               <button
                 key={item.id}
@@ -1232,6 +1778,10 @@ function AdminPage() {
             <TeamNamesAdmin />
           ) : tab === 'rekordy' ? (
             <RecordsAdmin />
+          ) : tab === 'strefy' ? (
+            <ZonesAdmin />
+          ) : tab === 'playoff' ? (
+            <PlayoffAdmin />
           ) : tab === 'formularz' ? (
             <RegistrationFormAdmin />
           ) : (

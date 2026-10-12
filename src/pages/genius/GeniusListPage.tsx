@@ -1,11 +1,15 @@
 import type { ReactNode } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import PageHeader from '../../components/common/PageHeader';
+import SegmentedControl from '../../components/common/SegmentedControl';
 import GeniusEmbed from '../../components/genius/GeniusEmbed';
 import GeniusFilterBar from '../../components/genius/GeniusFilterBar';
 import GeniusMissing from '../../components/genius/GeniusMissing';
 import GeniusPrefetch from '../../components/genius/GeniusPrefetch';
 import { competitionId, editionCompetitionIds, geniusEditions, type GeniusLeagueId } from '../../components/genius/geniusConfig';
 import { firstGroup, useDefaultGroup } from '../../components/genius/geniusGroups';
+import PlayoffBracket from '../../components/playoff/PlayoffBracket';
+import { teamRenames, useSiteContent } from '../../data/siteContent';
 import { useGeniusFilters } from '../../hooks/useGeniusFilters';
 
 interface GeniusListPageProps {
@@ -29,6 +33,21 @@ function GeniusListPage({ title, icon, path, showMatchFilter }: GeniusListPagePr
   // Genius przyjmuje w ścieżce tylko litery, cyfry i kilka znaków (bez "%"), więc spacje zapisujemy jako "+", jak dalk.pl.
   const pageOf = (competition: number, group: string) => `/competition/${competition}/${path}${group ? `?phaseName=${group.replace(/ /g, '+')}&` : ''}`;
   const page = pageOf(cid ?? 0, standings ? defaultGroup.phase : phase);
+  // Drabinka play-off z panelu administratora: gdy jest włączona, tabele mają przełącznik Tabela / Play-off (?widok=playoff).
+  const { playoffs, teamNames } = useSiteContent();
+  const bracket = standings && cid ? playoffs[cid] : undefined;
+  const [params, setParams] = useSearchParams();
+  const showBracket = Boolean(bracket?.enabled) && params.get('widok') === 'playoff';
+  const setView = (view: string) =>
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (view === 'playoff') next.set('widok', 'playoff');
+        else next.delete('widok');
+        return next;
+      },
+      { replace: true },
+    );
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -38,8 +57,23 @@ function GeniusListPage({ title, icon, path, showMatchFilter }: GeniusListPagePr
         aside={<p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Oficjalne dane · Genius Sports</p>}
       />
       <GeniusFilterBar editionId={editionId} onEditionChange={setEditionId} leagueId={leagueId} onLeagueChange={setLeagueId} />
+      {bracket?.enabled && (
+        <div className="mt-6">
+          <SegmentedControl
+            label="Widok"
+            options={[
+              { value: 'tabela', label: 'Tabela' },
+              { value: 'playoff', label: bracket.title },
+            ]}
+            value={showBracket ? 'playoff' : 'tabela'}
+            onChange={setView}
+          />
+        </div>
+      )}
       <div className="mt-6">
-        {cid ? (
+        {cid && showBracket && bracket ? (
+          <PlayoffBracket bracket={bracket} cid={cid} renames={teamRenames(teamNames, editionId)} />
+        ) : cid ? (
           <GeniusEmbed page={page} showMatchFilter={showMatchFilter} onContent={standings ? defaultGroup.onGroups : undefined} />
         ) : (
           <GeniusMissing editionId={editionId} leagueId={leagueId} />
