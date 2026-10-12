@@ -4,7 +4,7 @@ import SegmentedControl from '../common/SegmentedControl';
 import GeniusEmbed from './GeniusEmbed';
 import GeniusPrefetch from './GeniusPrefetch';
 import { competitionId, currentGeniusEdition, geniusJuniorCompetitions, juniorCategories } from './geniusConfig';
-import { firstGroup, readGroups, useDefaultGroup } from './geniusGroups';
+import { firstGroup, isGroupName, readGroups, useDefaultGroup } from './geniusGroups';
 
 // Tabela i Top 10 strony głównej w trybie Genius: nasza oprawa i filtry, dane z Genius Sports.
 // Pasek meczów jest w GeniusMatchBar. Tabele i liderów pozostałych lig wczytujemy w tle (GeniusPrefetch),
@@ -79,7 +79,9 @@ export function GeniusLeagueTable() {
 
   const onContent = (root: HTMLElement) => {
     defaultGroup.onGroups(root);
-    const next = readGroups(root);
+    // Bez faz spoza grup (np. "PLAY OFF"), jak w menu tabel (hideNonGroupPhases).
+    const read = readGroups(root);
+    const next = read.names.some(isGroupName) ? { ...read, names: read.names.filter(isGroupName) } : read;
     setGroups((prev) => (prev.names.join('|') === next.names.join('|') && prev.current === next.current ? prev : next));
   };
 

@@ -1589,3 +1589,47 @@
 .genius-target {
   display: contents;
 }
+
+/* Strefy tabeli z panelu administratora (geniusZones.ts): lekkie tło wiersza. */
+.genius-embed table.standings tr.zone-playoff td {
+  background-color: color-mix(in srgb, var(--color-emerald-500) 10%, transparent);
+}
+
+.genius-embed table.standings tr.zone-relegation td {
+  background-color: color-mix(in srgb, var(--color-red-500) 10%, transparent);
+}
+
+.genius-embed .genius-zone-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  margin-top: 0.75rem;
+  font-size: 0.75rem;
+  color: var(--color-slate-500);
+}
+
+.genius-embed .zone-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.genius-embed .zone-key::before {
+  content: '';
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 0.1875rem;
+}
+
+.genius-embed .zone-key--playoff::before {
+  background: var(--color-emerald-500);
+}
+
+.genius-embed .zone-key--relegation::before {
+  background: var(--color-red-500);
+}
+
+/* Fazy spoza grup (np. "PLAY OFF") w menu tabel — geniusGroups.hideNonGroupPhases. */
+.genius-embed .selection-scroll a.menuoption.genius-phase-hidden {
+  display: none;
+}

@@ -11,6 +11,8 @@ import { translateGenius } from './geniusI18n';
 import { fillMissingLogos, replaceBrokenLogo } from './geniusLogo';
 import { handleSortClick, markSortedColumns } from './geniusTableSort';
 import { applyTeamRenames } from './geniusTeamNames';
+import { applyStandingsZones } from './geniusZones';
+import { hideNonGroupPhases } from './geniusGroups';
 import { applyPagination, handlePagerEvent } from './geniusTablePager';
 import './genius.css';
 
@@ -199,7 +201,9 @@ function GeniusEmbed({
   const cacheKey = geniusCacheKey({ page, blockDisplay, showSubMenus, showMatchFilter, showTitle });
   const expectedCompetition = page.match(/^\/competition\/(\d+)\//)?.[1];
   // Nazwy drużyn z edycji tych rozgrywek (panel administratora) zamiast najnowszych nazw z Genius.
-  const { teamNames } = useSiteContent();
+  const { teamNames, zones } = useSiteContent();
+  // Strefy tabeli tych rozgrywek (panel administratora) — jako tekst, żeby nowy obiekt z serwera nie restartował treści.
+  const zoneKey = expectedCompetition && zones[expectedCompetition] ? JSON.stringify(zones[expectedCompetition]) : '';
   const editionId = expectedCompetition ? findCompetition(Number(expectedCompetition))?.editionId : undefined;
   // Obecne nazwy drużyn z indeksu — po jego odświeżeniu zamiany liczymy od nowa.
   const indexVersion = useGeniusIndex();
@@ -347,6 +351,8 @@ function GeniusEmbed({
       }
       translateGenius(placeholder);
       applyTeamRenames(placeholder, renames);
+      applyStandingsZones(placeholder, zoneKey ? JSON.parse(zoneKey) : undefined);
+      hideNonGroupPhases(placeholder);
       if (statsMode || placeholder.querySelector('.genius-col-hidden')) applyStatsMode(placeholder, statsMode);
       if (pageSize) applyPagination(placeholder, pageSize);
       markSortedColumns(placeholder);
@@ -390,7 +396,7 @@ function GeniusEmbed({
       placeholder.removeEventListener('click', onSortClick, true);
       placeholder.removeEventListener('error', replaceBrokenLogo, true);
     };
-  }, [allowed, filterSelector, filterQuery, filterLetter, nativeStyle, statsMode, pageSize, cacheKey, expectedCompetition, renames]);
+  }, [allowed, filterSelector, filterQuery, filterLetter, nativeStyle, statsMode, pageSize, cacheKey, expectedCompetition, renames, zoneKey]);
 
   // Kliknięcia w przepisane linki obsługuje router, bez przeładowania strony.
   const onClick = (e: MouseEvent<HTMLDivElement>) => {

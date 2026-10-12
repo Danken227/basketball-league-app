@@ -4,6 +4,7 @@
 import { useSyncExternalStore } from 'react';
 import { news as dalkNews, type NewsItem } from './news';
 import { teamName } from '../components/genius/geniusIndex';
+import type { PlayoffBracket, StandingsZone } from './playoff';
 
 export interface AddedNewsItem extends NewsItem {
   // Treść wpisana przez administratora (z niej serwer zbudował html).
@@ -36,9 +37,12 @@ interface SiteContent {
   news: AddedNewsItem[];
   teamNames: TeamNameEntry[];
   registrationForm?: RegistrationForm;
+  // Numer rozgrywek → strefy tabeli i drabinka play-off (zakładki „Awanse/spadki” i „Play-off” w panelu).
+  zones: Record<string, StandingsZone>;
+  playoffs: Record<string, PlayoffBracket>;
 }
 
-let content: SiteContent = { loaded: false, news: [], teamNames: [] };
+let content: SiteContent = { loaded: false, news: [], teamNames: [], zones: {}, playoffs: {} };
 const listeners = new Set<() => void>();
 let request: Promise<void> | undefined;
 
@@ -62,9 +66,22 @@ export async function adminRequest<T>(action: string, body?: unknown, query?: Re
 
 // Wczytanie (albo ponowne, po zmianie w panelu). Bez serwera (np. podgląd builda) zostają same treści z dalk.pl.
 export function reloadSiteContent() {
-  request = adminRequest<{ news: AddedNewsItem[]; teamNames: TeamNameEntry[]; registrationForm?: RegistrationForm | null }>('content')
+  request = adminRequest<{
+    news: AddedNewsItem[];
+    teamNames: TeamNameEntry[];
+    registrationForm?: RegistrationForm | null;
+    zones?: Record<string, StandingsZone>;
+    playoffs?: Record<string, PlayoffBracket>;
+  }>('content')
     .then((data) =>
-      setContent({ loaded: true, news: data.news ?? [], teamNames: data.teamNames ?? [], registrationForm: data.registrationForm ?? undefined }),
+      setContent({
+        loaded: true,
+        news: data.news ?? [],
+        teamNames: data.teamNames ?? [],
+        registrationForm: data.registrationForm ?? undefined,
+        zones: data.zones ?? {},
+        playoffs: data.playoffs ?? {},
+      }),
     )
     .catch(() => setContent({ ...content, loaded: true }));
   return request;

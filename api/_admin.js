@@ -19,6 +19,52 @@ const REMEMBER_SECONDS = 30 * 24 * 60 * 60;
 
 const NEWS_KEY = `${client.storagePrefix}:news`;
 const TEAM_NAMES_KEY = `${client.storagePrefix}:team-names`;
+// Strefy tabel (numer rozgrywek → miejsca do play-off od góry i spadkowe od dołu) i drabinki play-off
+// (numer rozgrywek → drabinka). Małe, więc w treści wczytywanej przez każdego odwiedzającego.
+const ZONES_KEY = `${client.storagePrefix}:zones`;
+const PLAYOFFS_KEY = `${client.storagePrefix}:playoffs`;
+const PLAYOFF_SIZES = [2, 4, 8, 16, 32];
+
+const count = (value, max) => Math.max(0, Math.min(max, Math.floor(Number(value) || 0)));
+
+const SERIES_FORMATS = ['single', 'twoLeg', 'bestOf3'];
+
+// Drabinka z przeglądarki administratora: tylko znane pola. Rozstawienie (seeds) to miejsca z tabel grup
+// z zapamiętaną drużyną (null — wolny los). Wyniki liczy strona z meczów fazy play-off w Genius (phase), według
+// formatu serii w każdej rundzie (formats); results to tylko ręczne wyjątki (np. walkower) po kluczu
+// "r<runda>m<mecz>" (albo "third").
+function playoffBracket(input) {
+  const seeds = Array.isArray(input?.seeds) ? input.seeds : [];
+  if (!PLAYOFF_SIZES.includes(seeds.length)) return undefined;
+  const results = {};
+  for (const [key, result] of Object.entries(input?.results ?? {})) {
+    if (!/^(r\d{1,2}m\d{1,2}|third)$/.test(key)) continue;
+    const winner = result?.winner === 0 || result?.winner === 1 ? result.winner : undefined;
+    const score = text(result?.score, 40);
+    if (winner !== undefined || score) results[key] = { ...(winner !== undefined ? { winner } : {}), ...(score ? { score } : {}) };
+  }
+  return {
+    enabled: input?.enabled === true,
+    title: text(input?.title, 80) || 'Play-off',
+    phase: text(input?.phase, 60) || 'PLAY OFF',
+    formats: (Array.isArray(input?.formats) ? input.formats : []).slice(0, 6).map((format) => (SERIES_FORMATS.includes(format) ? format : 'single')),
+    thirdPlace: input?.thirdPlace === true,
+    seeds: seeds.map((seed) =>
+      seed && typeof seed === 'object'
+        ? {
+            group: text(seed.group, 60),
+            position: count(seed.position, 99) || 1,
+            teamId: String(seed.teamId ?? '').replace(/\D/g, '').slice(0, 15),
+            name: text(seed.name, 120),
+            logo: /^https:\/\/[^\s"'<>]+$/.test(String(seed.logo ?? '')) ? String(seed.logo).slice(0, 500) : '',
+          }
+        : null,
+    ),
+    results,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 // Formularz zgłoszenia drużyny wgrany w panelu (przycisk „Zgłoś zespół”): plik (data URL) osobno od opisu (nazwa,
 // rozmiar, adres), który trafia do treści wczytywanej przez każdego odwiedzającego.
 const FORM_KEY = `${client.storagePrefix}:registration-form`;
@@ -239,8 +285,17 @@ export async function handleAdmin({ method, action, query = {}, body = {}, cooki
 
   if (action === 'content') {
     if (!store) return { status: 200, body: { news: [], teamNames: [] } };
-    const [news, teamNames, registrationForm] = await Promise.all([store.get(NEWS_KEY), store.get(TEAM_NAMES_KEY), store.get(FORM_META_KEY)]);
-    return { status: 200, body: { news: news ?? [], teamNames: teamNames ?? [], registrationForm: registrationForm ?? null } };
+    const [news, teamNames, registrationForm, zones, playoffs] = await Promise.all([
+      store.get(NEWS_KEY),
+      store.get(TEAM_NAMES_KEY),
+      store.get(FORM_META_KEY),
+      store.get(ZONES_KEY),
+      store.get(PLAYOFFS_KEY),
+    ]);
+    return {
+      status: 200,
+      body: { news: news ?? [], teamNames: teamNames ?? [], registrationForm: registrationForm ?? null, zones: zones ?? {}, playoffs: playoffs ?? {} },
+    };
   }
 
   if (action === 'visits') {
@@ -373,6 +428,39 @@ export async function handleAdmin({ method, action, query = {}, body = {}, cooki
   if (action === 'registration-form-delete') {
     await store.set(FORM_META_KEY, null);
     await store.set(FORM_KEY, null);
+    return { status: 200, body: { ok: true } };
+  }
+
+  // Strefy kilku rozgrywek naraz (cała edycja z formularza); 0 i 0 usuwa wpis.
+  if (action === 'zones-save') {
+    const zones = (await store.get(ZONES_KEY)) ?? {};
+    for (const [cid, zone] of Object.entries(body.zones ?? {})) {
+      if (!/^\d+$/.test(cid)) continue;
+      const playoff = count(zone?.playoff, 30);
+      const relegation = count(zone?.relegation, 30);
+      // show — oznaczać strefy w tabelach na stronie (strefa play-off służy też drabince, gdy jest ukryta).
+      if (playoff || relegation) zones[cid] = { playoff, relegation, show: zone?.show === true };
+      else delete zones[cid];
+    }
+    await store.set(ZONES_KEY, zones);
+    return { status: 200, body: { zones } };
+  }
+
+  if (action === 'playoff-save') {
+    const cid = String(body.cid ?? '');
+    if (!/^\d+$/.test(cid)) return fail(400, 'Nieprawidłowe rozgrywki.');
+    const bracket = playoffBracket(body.bracket);
+    if (!bracket) return fail(400, 'Drabinka musi mieć 2, 4, 8, 16 albo 32 miejsca.');
+    const playoffs = (await store.get(PLAYOFFS_KEY)) ?? {};
+    playoffs[cid] = bracket;
+    await store.set(PLAYOFFS_KEY, playoffs);
+    return { status: 200, body: { bracket } };
+  }
+
+  if (action === 'playoff-delete') {
+    const playoffs = (await store.get(PLAYOFFS_KEY)) ?? {};
+    delete playoffs[String(body.cid ?? '')];
+    await store.set(PLAYOFFS_KEY, playoffs);
     return { status: 200, body: { ok: true } };
   }
 
