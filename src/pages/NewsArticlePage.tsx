@@ -42,7 +42,8 @@ export function NewsArticle({ item }: { item: NewsItem }) {
         </p>
         <h1 className="mt-2 text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">{item.title}</h1>
         {html === undefined ? (
-          <p className="mt-5 text-sm text-slate-500">Wczytywanie…</p>
+          // Wysokość ekranu: nawigacja pod wpisem nie zjeżdża w dół, gdy treść się wczyta.
+          <p className="mt-5 min-h-screen text-sm text-slate-500">Wczytywanie…</p>
         ) : (
           <div className={`mt-5 ${contentClass}`} dangerouslySetInnerHTML={{ __html: withExternalLinks(html) }} />
         )}
