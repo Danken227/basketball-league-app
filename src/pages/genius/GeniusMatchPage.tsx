@@ -2,7 +2,9 @@ import { useEffect } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import GeniusEmbed from '../../components/genius/GeniusEmbed';
 import { findCompetition, geniusSnapshot, isGeniusDomain } from '../../components/genius/geniusConfig';
+import { geniusCacheKey } from '../../components/genius/geniusCache';
 import { fetchGeniusJson, prefetchGeniusJson } from '../../components/genius/geniusFetch';
+import { inSnapshot } from '../../components/genius/geniusSnapshot';
 
 // Strona meczu z Genius pod naszym adresem (/mecze/2900159?rozgrywki=49970&sekcja=summary).
 // Sekcje (Summary, Box Score, Play by play, Shot chart, Team Analysis) to podmenu Genius — jego linki
@@ -11,7 +13,16 @@ import { fetchGeniusJson, prefetchGeniusJson } from '../../components/genius/gen
 
 // Poprawki treści Genius: po zakończonym meczu przygaszamy wynik przegranego (klasa is-loser, styl w genius.css),
 // a czas akcji w play by play skracamy z "09:59:00" (setne części sekundy zawsze zerowe) do "09:59".
+// W migawce chowamy zakładki, których w niej nie ma (z poprzedniej edycji są tylko Summary i Box Score).
 function polishMatch(root: HTMLElement) {
+  if (geniusSnapshot) {
+    root.querySelectorAll<HTMLAnchorElement>('a.menuoption[href*="sekcja="]').forEach((link) => {
+      const url = new URL(link.href, window.location.origin);
+      const id = url.pathname.match(/^\/mecze\/(\d+)/)?.[1];
+      const section = url.searchParams.get('sekcja');
+      if (id && section && !inSnapshot(geniusCacheKey({ page: matchPage(id, url.searchParams.get('rozgrywki'), section) }))) link.style.display = 'none';
+    });
+  }
   const boxes = [...root.querySelectorAll<HTMLElement>('.match-header .team-box')];
   const scores = boxes.map((box) => Number(box.querySelector('.score')?.textContent?.trim()));
   const finished = Boolean(root.querySelector('.match-header .status.notlive'));
