@@ -577,7 +577,8 @@ function GeniusMatchBar({ widgetId }: { widgetId: string }) {
         {failed ? (
           <GeniusWidget widgetId={widgetId} refreshKey={widgetRefresh} />
         ) : !matches ? (
-          <p className="py-8 text-sm text-slate-400">Wczytywanie meczów…</p>
+          // Wysokość rzędu kart meczów — treść strony nie zjeżdża w dół, gdy karty się wczytają.
+          <p className="flex h-[148px] items-center text-sm text-slate-400">Wczytywanie meczów…</p>
         ) : (
           <div className="flex items-stretch gap-3">
             <SourceLogos />
