@@ -56,7 +56,10 @@ function requestGeniusJson(url: string): Promise<GeniusPageJson> {
   const forget = () => {
     if (responses.get(url) === entry) responses.delete(url);
   };
-  entry.json.then((json) => json.html?.includes('hs-embed') || forget(), forget);
+  // Pusta strona rozgrywek nie ma klasy _comp_<numer> (poprawna treść zawsze ją ma).
+  const competition = url.match(/\/competition\/(\d+)\//)?.[1];
+  const hasContent = (html = '') => html.includes('hs-embed') && (!competition || html.includes(`_comp_${competition}`));
+  entry.json.then((json) => hasContent(json.html) || forget(), forget);
   responses.set(url, entry);
   return entry.json;
 }
