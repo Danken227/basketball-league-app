@@ -12,7 +12,7 @@ import { fillMissingLogos, replaceBrokenLogo } from './geniusLogo';
 import { handleSortClick, markSortedColumns } from './geniusTableSort';
 import { applyTeamRenames } from './geniusTeamNames';
 import { applyStandingsZones } from './geniusZones';
-import { hideNonGroupPhases } from './geniusGroups';
+import { hidePlayoffPhases } from './geniusGroups';
 import { applyPagination, handlePagerEvent } from './geniusTablePager';
 import './genius.css';
 
@@ -352,7 +352,7 @@ function GeniusEmbed({
       translateGenius(placeholder);
       applyTeamRenames(placeholder, renames);
       applyStandingsZones(placeholder, zoneKey ? JSON.parse(zoneKey) : undefined);
-      hideNonGroupPhases(placeholder);
+      hidePlayoffPhases(placeholder);
       if (statsMode || placeholder.querySelector('.genius-col-hidden')) applyStatsMode(placeholder, statsMode);
       if (pageSize) applyPagination(placeholder, pageSize);
       markSortedColumns(placeholder);

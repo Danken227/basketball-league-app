@@ -4,6 +4,7 @@ import GeniusEmbed from '../components/genius/GeniusEmbed';
 import GeniusWidget from '../components/genius/GeniusWidget';
 import { geniusCacheKey, type GeniusEmbedOptions } from '../components/genius/geniusCache';
 import { geniusJuniorCompetitions, geniusResultsWidgets, isGeniusDomain, snapshotEditions } from '../components/genius/geniusConfig';
+import { isPlayoffPhase } from '../components/genius/geniusGroups';
 import { SNAPSHOT_DIR, snapshotFile, snapshotKey, widgetSnapshotKey, type SnapshotManifest } from '../components/genius/geniusSnapshot';
 
 // Zbieranie migawki danych Genius do wersji demonstracyjnej (tylko serwer deweloperski, adres /__snapshot na dev.dalk.pl).
@@ -81,7 +82,14 @@ function deriveItems(derive: Derive, cid: number, html: string): Item[] {
 
   if (derive === 'groups') {
     const groups = [...root.querySelectorAll('.selection-scroll a.menuoption')].map((a) => a.textContent?.trim() ?? '').filter(Boolean);
-    return groups.length > 1 ? groups.map((name) => embed({ page: `/competition/${cid}/standings?phaseName=${name.replace(/ /g, '+')}&` })) : [];
+    const phase = (name: string) => name.replace(/ /g, '+');
+    return groups.length > 1
+      ? [
+          ...groups.map((name) => embed({ page: `/competition/${cid}/standings?phaseName=${phase(name)}&` })),
+          // Terminarz fazy play-off — z niego drabinka bierze wyniki (playoffGames.ts).
+          ...groups.filter(isPlayoffPhase).map((name) => embed({ page: `/competition/${cid}/schedule?phaseName=${phase(name)}&` })),
+        ]
+      : [];
   }
   if (derive === 'teams') {
     return ids('a[href]', /^\/druzyny\/(\d+)/).flatMap((id) => [

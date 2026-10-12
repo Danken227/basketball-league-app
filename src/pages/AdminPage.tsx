@@ -5,7 +5,7 @@ import PageHeader from '../components/common/PageHeader';
 import { icons } from '../components/common/icons';
 import { competitionId, geniusEditionById, geniusEditions, geniusLeagueOptions } from '../components/genius/geniusConfig';
 import { fetchGeniusPage } from '../components/genius/geniusFetch';
-import { readGroups } from '../components/genius/geniusGroups';
+import { isGroupName, isPlayoffPhase, readGroups } from '../components/genius/geniusGroups';
 import { loadStoredRecords, playedMatchIds, recomputeRecords, type RecordsProgress, type StoredRecords } from '../components/genius/geniusRecordsData';
 import client from '@client/client';
 import { news as dalkNews, newsCategories, newsCategory, newsDateLabel, newsPath } from '../data/news';
@@ -1263,11 +1263,15 @@ function readStandings(root: HTMLElement | undefined, group: string): PlayoffSee
 async function loadGroupStandings(cid: string): Promise<{ groups: GroupStandings[]; phases: string[] }> {
   const root = await fetchGeniusPage(`/competition/${cid}/standings`);
   if (!root) throw new Error('Nie udało się wczytać tabel z Genius — spróbuj ponownie.');
-  // Grupy sezonu zasadniczego (bez faz typu „PLAY OFF”); bez grup — tabela z pierwszej strony.
+  // Grupy sezonu zasadniczego; bez grup — jedna tabela sezonu (np. „Ekstraliga 2026”, gdy obok jest „PLAY OFF”).
   const names = readGroups(root).names;
-  const groupNames = names.filter((name) => /^grupa\b/i.test(name));
-  const phases = names.filter((name) => !/^grupa\b/i.test(name));
-  if (groupNames.length === 0) return { groups: [{ group: '', rows: readStandings(root, '') }], phases };
+  const regular = names.filter((name) => !isPlayoffPhase(name));
+  const phases = names.filter(isPlayoffPhase);
+  const groupNames = regular.filter(isGroupName);
+  if (groupNames.length === 0) {
+    const page = regular.length > 0 && phases.length > 0 ? await fetchGeniusPage(`/competition/${cid}/standings?phaseName=${regular[0].replace(/ /g, '+')}&`) : root;
+    return { groups: [{ group: '', rows: readStandings(page, '') }], phases };
+  }
   const groups = await Promise.all(
     groupNames.map(async (group) => ({
       group,
