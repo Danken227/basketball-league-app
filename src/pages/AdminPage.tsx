@@ -9,6 +9,7 @@ import { loadStoredRecords, playedMatchIds, recomputeRecords, type RecordsProgre
 import client from '@client/client';
 import { news as dalkNews, newsCategories, newsCategory, newsDateLabel, newsPath } from '../data/news';
 import { adminRequest, reloadSiteContent, setAdmin, useAdmin, useSiteContent, type AddedNewsItem } from '../data/siteContent';
+import { saveNewsDraft } from './newsDraft';
 
 // Panel administratora (link w stopce): logowanie, dodawanie aktualności i nazwy drużyn w poszczególnych edycjach.
 // Uprawnienia sprawdza serwer (/api/admin) — ta strona tylko pokazuje formularze.
@@ -22,6 +23,8 @@ const smallButtonClass = 'rounded-lg bg-orange-600 px-3 py-1.5 text-xs font-semi
 const dangerButtonClass = 'rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-red-700';
 // Po 5 — lista obok formularza nie wydłuża panelu.
 const NEWS_PER_ADMIN_PAGE = 5;
+// Zapisane nazwy drużyn — wiersze tabeli są niskie, więc po 10.
+const TEAM_NAMES_PER_ADMIN_PAGE = 10;
 
 // Przełącznik stron listy w prawym dolnym rogu karty.
 function Pager({ page, pageCount, onChange }: { page: number; pageCount: number; onChange: (page: number) => void }) {
@@ -65,9 +68,46 @@ const Message = ({ error, success }: { error?: string; success?: ReactNode }) =>
 
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
+// Zapamiętany login (przy „Zapamiętaj mnie”) — samo hasło zapamiętuje przeglądarka (autocomplete).
+const LOGIN_STORAGE_KEY = `${client.storagePrefix}-admin-login`;
+
+function readStoredLogin() {
+  try {
+    return localStorage.getItem(LOGIN_STORAGE_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function storeLogin(login: string | undefined) {
+  try {
+    if (login) localStorage.setItem(LOGIN_STORAGE_KEY, login);
+    else localStorage.removeItem(LOGIN_STORAGE_KEY);
+  } catch {
+    // Brak dostępu do localStorage — login nie zostanie zapamiętany.
+  }
+}
+
+const eyeIcon = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+);
+const eyeOffIcon = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M10.6 5.1A10.4 10.4 0 0 1 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-2.4 3.4M6.6 6.6A17.4 17.4 0 0 0 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.4-1.6" />
+    <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2M2 2l20 20" />
+  </svg>
+);
+
 function LoginForm() {
-  const [login, setLogin] = useState('');
+  const [login, setLogin] = useState(readStoredLogin);
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  // Zaznaczone, gdy login był zapamiętany przy poprzednim logowaniu.
+  const [remember, setRemember] = useState(() => readStoredLogin() !== '');
+  const [forgotOpen, setForgotOpen] = useState(false);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
 
@@ -76,7 +116,8 @@ function LoginForm() {
     setBusy(true);
     setError(undefined);
     try {
-      await adminRequest('login', { login, password });
+      await adminRequest('login', { login, password, remember });
+      storeLogin(remember ? login : undefined);
       setAdmin(true);
     } catch (e) {
       setError(errorText(e));
@@ -91,12 +132,48 @@ function LoginForm() {
         <input className={inputClass} value={login} onChange={(e) => setLogin(e.target.value)} autoComplete="username" required />
       </Field>
       <Field label="Hasło">
-        <input className={inputClass} type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
+        <span className="relative block">
+          <input
+            className={`${inputClass} pr-10`}
+            type={showPassword ? 'text' : 'password'}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
+            required
+          />
+          <button
+            type="button"
+            className="absolute inset-y-0 right-0 grid w-10 place-items-center text-slate-400 transition hover:text-orange-600"
+            onClick={() => setShowPassword((value) => !value)}
+            aria-label={showPassword ? 'Ukryj hasło' : 'Pokaż hasło'}
+            aria-pressed={showPassword}
+            title={showPassword ? 'Ukryj hasło' : 'Pokaż hasło'}
+          >
+            {showPassword ? eyeOffIcon : eyeIcon}
+          </button>
+        </span>
       </Field>
+      <div className="flex items-center justify-between gap-3">
+        <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" className="h-4 w-4 accent-orange-600" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+          Zapamiętaj mnie
+        </label>
+        <button type="button" className={linkButtonClass} onClick={() => setForgotOpen((value) => !value)} aria-expanded={forgotOpen}>
+          Nie pamiętasz hasła?
+        </button>
+      </div>
+      {forgotOpen && (
+        <p className="rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-600 ring-1 ring-slate-200">
+          Hasło administratora nie jest zapisane na stronie — ustawia je osoba zarządzająca serwisem w konfiguracji serwera. Poproś ją o nowe hasło; po jego zmianie zaloguj się ponownie.
+        </p>
+      )}
       <Message error={error} />
       <button type="submit" className={buttonClass} disabled={busy}>
         {busy ? 'Logowanie…' : 'Zaloguj'}
       </button>
+      <p className="text-center text-xs text-slate-500">
+        {remember ? 'Sesja zostanie zapamiętana na tym urządzeniu przez 30 dni.' : 'Sesja kończy się po zamknięciu przeglądarki (najpóźniej po 12 godzinach).'}
+      </p>
     </form>
   );
 }
@@ -168,6 +245,16 @@ function NewsAdmin() {
     }
   };
 
+  // Podgląd w osobnym oknie (zawsze tym samym — kolejne kliknięcie odświeża otwarty podgląd).
+  const preview = () => {
+    setError(undefined);
+    if (!saveNewsDraft({ title, body, category, image: cover === 'custom' ? customCover : cover, previewAt: Date.now() })) {
+      setError('Przeglądarka nie pozwala zapisać podglądu (zablokowany localStorage).');
+      return;
+    }
+    window.open('/admin/podglad', 'news-preview');
+  };
+
   const remove = async (slug: string, itemTitle: string) => {
     if (!window.confirm(`Usunąć aktualność „${itemTitle}”?`)) return;
     try {
@@ -232,6 +319,9 @@ function NewsAdmin() {
           <div className="flex items-center gap-4">
             <button type="submit" className={buttonClass} disabled={busy}>
               {busy ? 'Zapisywanie…' : editing ? 'Zapisz zmiany' : 'Opublikuj'}
+            </button>
+            <button type="button" className={buttonClass} onClick={preview} disabled={!title.trim() && !body.trim()}>
+              Podgląd
             </button>
             {editing && (
               <button type="button" className={linkButtonClass} onClick={() => fillForm()}>
@@ -307,6 +397,56 @@ async function loadTeams(cid: string): Promise<GeniusTeam[]> {
   return [...teams.values()].sort((a, b) => a.name.localeCompare(b.name, 'pl'));
 }
 
+const editionName = (editionId: string) => geniusEditionById.get(editionId)?.name ?? editionId;
+const editionOrder = (editionId: string) => geniusEditions.findIndex((edition) => edition.id === editionId);
+
+const readDataUrl = (file: Blob) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error('Nie udało się odczytać pliku.'));
+    reader.readAsDataURL(file);
+  });
+
+// Listy drużyn rozgrywek zapamiętane na czas pracy w panelu (zakres edycji sprawdza wszystkie rozgrywki edycji).
+const teamLists = new Map<string, Promise<GeniusTeam[]>>();
+const cachedTeams = (cid: string) => {
+  let list = teamLists.get(cid);
+  if (!list) {
+    list = loadTeams(cid);
+    teamLists.set(cid, list);
+    // Nieudane wczytanie nie zostaje w pamięci — kolejna próba pyta Genius ponownie.
+    list.catch(() => teamLists.delete(cid));
+  }
+  return list;
+};
+
+// Edycje od "from" do "to" (w dowolnej kolejności), od najnowszej.
+const editionRange = (from: string, to: string) => {
+  const [start, end] = [editionOrder(from), editionOrder(to)].sort((a, b) => a - b);
+  return geniusEditions.slice(start, end + 1).map((edition) => edition.id);
+};
+
+// Gdzie drużyna grała w edycji: we wszystkich rozgrywkach edycji (drużyna mogła zmienić ligę) → nazwa z Genius
+// i nazwy lig; undefined — nie grała. Rozgrywki, których listy nie udało się wczytać, zgłaszamy osobno.
+interface TeamInEdition {
+  editionId: string;
+  geniusName?: string;
+  leagues: string[];
+  failed: boolean;
+}
+
+async function findTeamInEdition(teamId: string, editionId: string): Promise<TeamInEdition> {
+  const lists = await Promise.all(
+    editionCompetitions(editionId).map(async ({ value, label }) => ({ label, list: await cachedTeams(value).catch(() => undefined) })),
+  );
+  const found = lists.flatMap(({ label, list }) => {
+    const entry = list?.find((item) => item.id === teamId);
+    return entry ? [{ label, name: entry.name }] : [];
+  });
+  return { editionId, geniusName: found[0]?.name, leagues: found.map((item) => item.label), failed: lists.some(({ list }) => !list) };
+}
+
 // Wgrane logo zmniejszamy w przeglądarce do 160 px (WebP, a gdy przeglądarka go nie zapisze — PNG): mały plik
 // w bazie i szybkie wczytywanie na stronie.
 const LOGO_SIZE = 160;
@@ -333,8 +473,6 @@ function LogoPreview({ src, label }: { src?: string; label: string }) {
   );
 }
 
-const editionName = (editionId: string) => geniusEditionById.get(editionId)?.name ?? editionId;
-const editionOrder = (editionId: string) => geniusEditions.findIndex((edition) => edition.id === editionId);
 
 function TeamNamesAdmin() {
   const { teamNames } = useSiteContent();
@@ -348,11 +486,31 @@ function TeamNamesAdmin() {
   const [savedLogo, setSavedLogo] = useState<string>();
   const [error, setError] = useState<string>();
   const [saved, setSaved] = useState<string>();
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<string | boolean>(false);
+  // Zakres edycji: ta sama nazwa i logo od wybranej edycji do edycji rangeEnd (undefined — tylko wybrana edycja).
+  const [rangeEnd, setRangeEnd] = useState<string>();
+  const [listPage, setListPage] = useState(1);
+  // Gdzie drużyna grała w edycjach zakresu (sprawdzane po wybraniu drużyny i zakresu).
+  const [rangeTeams, setRangeTeams] = useState<{ key: string; editions: TeamInEdition[] }>();
+  const rangeKey = team && rangeEnd ? `${team.id}:${editionRange(editionId, rangeEnd).join(',')}` : '';
+
+  useEffect(() => {
+    if (!rangeKey) return;
+    const [teamId, editions] = rangeKey.split(':');
+    let active = true;
+    Promise.all(editions.split(',').map((edition) => findTeamInEdition(teamId, edition))).then((found) => {
+      if (active) setRangeTeams({ key: rangeKey, editions: found });
+    });
+    return () => {
+      active = false;
+    };
+  }, [rangeKey]);
+
+  const rangeResult = rangeKey && rangeTeams?.key === rangeKey ? rangeTeams.editions : undefined;
 
   useEffect(() => {
     let active = true;
-    loadTeams(cid)
+    cachedTeams(cid)
       .catch(() => [])
       .then((list) => {
         if (active) setTeams({ cid, list });
@@ -374,6 +532,7 @@ function TeamNamesAdmin() {
 
   const changeEdition = (value: string) => {
     setEditionId(value);
+    setRangeEnd((end) => (end === value ? undefined : end));
     setCid(editionCompetitions(value)[0]?.value ?? '');
     resetTeam();
   };
@@ -410,6 +569,15 @@ function TeamNamesAdmin() {
     setSaved(undefined);
   };
 
+  // Logo dla kilku edycji: zapisane wcześniej logo z panelu (adres /api/) wysyłamy jako obrazek — serwer
+  // trzyma osobny plik dla każdej edycji.
+  const logoForRange = async () => {
+    if (logo !== 'keep' || !savedLogo) return logo;
+    const response = await fetch(savedLogo);
+    if (!response.ok) throw new Error('Nie udało się wczytać zapisanego logo — wgraj je ponownie.');
+    return readDataUrl(await response.blob());
+  };
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!team) return;
@@ -417,10 +585,36 @@ function TeamNamesAdmin() {
     setError(undefined);
     setSaved(undefined);
     try {
-      const { entry } = await adminRequest<{ entry: { logo?: string } }>('team-name-save', { teamId: team.id, editionId, name, geniusName: team.geniusName, logo });
+      if (!rangeEnd) {
+        const { entry } = await adminRequest<{ entry: { logo?: string } }>('team-name-save', { teamId: team.id, editionId, name, geniusName: team.geniusName, logo });
+        await reloadSiteContent();
+        applySavedLogo(entry.logo);
+        setSaved(`Zapisano: ${team.geniusName} → ${name}${entry.logo ? ' (z logo)' : ''} (edycja ${editionName(editionId)}).`);
+        return;
+      }
+      if (!rangeResult) throw new Error('Poczekaj, aż sprawdzimy, w których edycjach grała drużyna.');
+      const targets = rangeResult.filter((item) => item.geniusName);
+      if (targets.length === 0) throw new Error('Drużyna nie grała w żadnej edycji z zakresu.');
+      const rangeLogo = await logoForRange();
+      let withLogo = false;
+      for (const [index, target] of targets.entries()) {
+        setBusy(`Zapisywanie ${index + 1}/${targets.length}…`);
+        const { entry } = await adminRequest<{ entry: { logo?: string } }>('team-name-save', {
+          teamId: team.id,
+          editionId: target.editionId,
+          name,
+          geniusName: target.geniusName,
+          logo: rangeLogo,
+        });
+        withLogo ||= Boolean(entry.logo);
+        if (target.editionId === editionId) applySavedLogo(entry.logo);
+      }
       await reloadSiteContent();
-      applySavedLogo(entry.logo);
-      setSaved(`Zapisano: ${team.geniusName} → ${name}${entry.logo ? ' (z logo)' : ''} (edycja ${editionName(editionId)}).`);
+      const skipped = rangeResult.filter((item) => !item.geniusName);
+      setSaved(
+        `Zapisano: ${team.geniusName} → ${name}${withLogo ? ' (z logo)' : ''} w edycjach ${targets.map((item) => editionName(item.editionId)).join(', ')}.` +
+          (skipped.length ? ` Pominięto (drużyna nie grała): ${skipped.map((item) => editionName(item.editionId)).join(', ')}.` : ''),
+      );
     } catch (e) {
       setError(errorText(e));
     } finally {
@@ -451,6 +645,10 @@ function TeamNamesAdmin() {
   };
 
   const sorted = [...teamNames].sort((a, b) => editionOrder(a.editionId) - editionOrder(b.editionId) || a.geniusName.localeCompare(b.geniusName, 'pl'));
+  // Jak lista aktualności: po usunięciu wpisu numer strony mieści się w liczbie stron.
+  const listPageCount = Math.max(1, Math.ceil(sorted.length / TEAM_NAMES_PER_ADMIN_PAGE));
+  const currentListPage = Math.min(listPage, listPageCount);
+  const pageEntries = sorted.slice((currentListPage - 1) * TEAM_NAMES_PER_ADMIN_PAGE, currentListPage * TEAM_NAMES_PER_ADMIN_PAGE);
   // Drużyna wybrana z tabeli (Edytuj) może nie być na liście wybranych rozgrywek — dopisujemy ją do wyboru.
   const teamOptions = [
     { value: '', label: teamList === undefined ? 'Wczytywanie drużyn…' : teamList.length === 0 ? 'Brak listy drużyn' : 'Wybierz drużynę' },
@@ -471,12 +669,60 @@ function TeamNamesAdmin() {
             <FilterSelect label="Rozgrywki" value={cid} onChange={changeCompetition} options={editionCompetitions(editionId)} />
             <FilterSelect label="Drużyna (nazwa w Genius)" value={team?.id ?? ''} onChange={chooseTeam} options={teamOptions} />
           </div>
-          <Field label={`Nazwa w edycji ${editionName(editionId)}`}>
+          {team && (
+            <div className="flex flex-col gap-3 rounded-lg bg-slate-50 p-3 ring-1 ring-slate-200">
+              <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-orange-600"
+                  checked={rangeEnd !== undefined}
+                  onChange={(e) => setRangeEnd(e.target.checked ? (geniusEditions.find((edition) => edition.id !== editionId)?.id ?? editionId) : undefined)}
+                />
+                Ta sama nazwa i logo w kilku edycjach (zakres)
+              </label>
+              {rangeEnd !== undefined && (
+                <>
+                  <div className="flex flex-wrap items-end gap-3">
+                    <Field label="Od edycji">
+                      <span className="py-2 text-sm font-semibold text-slate-900">{editionName(editionId)}</span>
+                    </Field>
+                    <FilterSelect
+                      label="Do edycji"
+                      value={rangeEnd}
+                      onChange={setRangeEnd}
+                      options={geniusEditions.map((edition) => ({ value: edition.id, label: edition.name }))}
+                    />
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Drużynę szukamy we wszystkich ligach każdej edycji (mogła zmieniać poziom rozgrywek). Edycje, w których nie grała, zostaną pominięte.
+                  </p>
+                  {!rangeResult ? (
+                    <p className="text-xs text-slate-500">Sprawdzanie edycji…</p>
+                  ) : (
+                    <ul className="flex flex-col gap-1 text-xs">
+                      {rangeResult.map((item) => (
+                        <li key={item.editionId} className={item.geniusName ? 'text-slate-700' : 'text-slate-400'}>
+                          <span className="font-semibold">{editionName(item.editionId)}:</span>{' '}
+                          {item.geniusName
+                            ? `${item.leagues.join(', ')}${existing(team.id, item.editionId) ? ' (nadpisze zapisaną nazwę)' : ''}`
+                            : 'nie grała, pominięta'}
+                          {item.failed && <span className="text-orange-700"> (nie wszystkie listy drużyn się wczytały)</span>}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+          <Field label={rangeEnd !== undefined ? 'Nazwa w edycjach z zakresu' : `Nazwa w edycji ${editionName(editionId)}`}>
             <input className={`${inputClass} max-w-md`} value={name} onChange={(e) => setName(e.target.value)} maxLength={120} disabled={!team} required />
           </Field>
           {team && (
             <div className="flex flex-col gap-2">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Logo w edycji {editionName(editionId)}</span>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                {rangeEnd !== undefined ? 'Logo w edycjach z zakresu' : `Logo w edycji ${editionName(editionId)}`}
+              </span>
               <div className="flex flex-wrap items-center gap-4">
                 <LogoPreview src={team.geniusLogo} label="w Genius" />
                 <span className="text-slate-400" aria-hidden="true">
@@ -506,8 +752,8 @@ function TeamNamesAdmin() {
           )}
           <Message error={error} success={saved} />
           <div>
-            <button type="submit" className={buttonClass} disabled={busy || !team}>
-              {busy ? 'Zapisywanie…' : 'Zapisz'}
+            <button type="submit" className={buttonClass} disabled={Boolean(busy) || !team || (rangeEnd !== undefined && !rangeResult)}>
+              {typeof busy === 'string' ? busy : busy ? 'Zapisywanie…' : rangeEnd !== undefined ? 'Zapisz w zakresie' : 'Zapisz'}
             </button>
           </div>
         </form>
@@ -529,7 +775,7 @@ function TeamNamesAdmin() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {sorted.map((entry) => (
+                {pageEntries.map((entry) => (
                   <tr key={`${entry.teamId}-${entry.editionId}`}>
                     <td className="whitespace-nowrap py-2 pr-4 text-slate-600">{editionName(entry.editionId)}</td>
                     <td className="py-2 pr-4">
@@ -556,6 +802,7 @@ function TeamNamesAdmin() {
             </table>
           </div>
         )}
+        <Pager page={currentListPage} pageCount={listPageCount} onChange={setListPage} />
       </Card>
     </div>
   );
@@ -818,10 +1065,118 @@ function VisitsAdmin() {
   );
 }
 
+// Formularz zgłoszenia drużyny pobierany przyciskiem „Zgłoś zespół” w nagłówku. Bez wgranego pliku przycisk
+// pobiera plik z konfiguracji klienta (ten sam co na stronie ligi).
+const MAX_FORM_BYTES = 700 * 1024;
+const formAccept = '.pdf,.doc,.docx,.odt,.rtf';
+const fileSize = (bytes: number) => (bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1).replace('.', ',')} MB`);
+
+function RegistrationFormAdmin() {
+  const { registrationForm } = useSiteContent();
+  const [file, setFile] = useState<File>();
+  const [error, setError] = useState<string>();
+  const [saved, setSaved] = useState<string>();
+  const [busy, setBusy] = useState(false);
+  const defaultUrl = client.links.registrationForm;
+
+  const choose = (chosen?: File) => {
+    setSaved(undefined);
+    setError(chosen && chosen.size > MAX_FORM_BYTES ? `Plik ma ${fileSize(chosen.size)} — maksymalnie ${fileSize(MAX_FORM_BYTES)}.` : undefined);
+    setFile(chosen && chosen.size <= MAX_FORM_BYTES ? chosen : undefined);
+  };
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!file) return;
+    setBusy(true);
+    setError(undefined);
+    setSaved(undefined);
+    try {
+      await adminRequest('registration-form-save', { name: file.name, data: await readDataUrl(file) });
+      await reloadSiteContent();
+      setSaved(`Zapisano: ${file.name}. Przycisk „Zgłoś zespół” pobiera teraz ten plik.`);
+      setFile(undefined);
+      (event.target as HTMLFormElement).reset();
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    if (!window.confirm(defaultUrl ? 'Usunąć wgrany formularz? Przycisk wróci do pliku domyślnego.' : 'Usunąć wgrany formularz? Przycisk „Zgłoś zespół” zniknie.')) return;
+    try {
+      await adminRequest('registration-form-delete', {});
+      await reloadSiteContent();
+      setSaved('Usunięto wgrany formularz.');
+    } catch (e) {
+      setError(errorText(e));
+    }
+  };
+
+  return (
+    <div className="grid gap-5 lg:grid-cols-[3fr_2fr]">
+      <Card title="Nowy formularz zgłoszenia">
+        <p className="mb-4 text-sm text-slate-600">
+          Plik pobierany przyciskiem „Zgłoś zespół” w nagłówku strony. Nowy plik zastępuje poprzedni — np. formularz na kolejną edycję.
+        </p>
+        <form onSubmit={submit} className="flex flex-col gap-4">
+          <Field label="Plik formularza" hint={`PDF, DOC, DOCX, ODT albo RTF, maksymalnie ${fileSize(MAX_FORM_BYTES)}.`}>
+            <input
+              type="file"
+              accept={formAccept}
+              className="text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-orange-600 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white hover:file:bg-orange-700"
+              onChange={(e) => choose(e.target.files?.[0])}
+            />
+          </Field>
+          <Message error={error} success={saved} />
+          <div>
+            <button type="submit" className={buttonClass} disabled={busy || !file}>
+              {busy ? 'Wgrywanie…' : 'Wgraj formularz'}
+            </button>
+          </div>
+        </form>
+      </Card>
+      <Card title="Obecny formularz">
+        {registrationForm ? (
+          <div className="flex flex-col gap-3 text-sm">
+            <p className="font-semibold text-slate-900">{registrationForm.name}</p>
+            <p className="text-xs text-slate-500">
+              {fileSize(registrationForm.size)} · wgrany {new Date(registrationForm.uploadedAt).toLocaleString('pl-PL')}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <a href={registrationForm.url} download={registrationForm.name} className={smallButtonClass}>
+                Pobierz
+              </a>
+              <button type="button" className={dangerButtonClass} onClick={remove}>
+                Usuń
+              </button>
+            </div>
+          </div>
+        ) : defaultUrl ? (
+          <div className="flex flex-col gap-3 text-sm">
+            <p className="text-slate-600">Plik domyślny (z {client.news.sourceSite}):</p>
+            <p className="break-all font-semibold text-slate-900">{defaultUrl.split('/').pop()}</p>
+            <div>
+              <a href={defaultUrl} download className={smallButtonClass}>
+                Pobierz
+              </a>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-500">Brak — przycisk „Zgłoś zespół” jest ukryty, dopóki nie wgrasz formularza.</p>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 const tabs = [
   { id: 'aktualnosci', label: 'Aktualności' },
   { id: 'druzyny', label: 'Nazwy drużyn w edycjach' },
   { id: 'rekordy', label: 'Rekordy' },
+  { id: 'formularz', label: 'Formularz zgłoszenia' },
   { id: 'odwiedziny', label: 'Odwiedziny' },
 ] as const;
 type TabId = (typeof tabs)[number]['id'];
@@ -855,7 +1210,7 @@ function AdminPage() {
         <LoginForm />
       ) : (
         <>
-          <div className="mb-5 flex gap-2 border-b border-slate-200" role="tablist">
+          <div className="mb-5 flex gap-2 overflow-x-auto border-b border-slate-200" role="tablist">
             {tabs.map((item) => (
               <button
                 key={item.id}
@@ -863,7 +1218,7 @@ function AdminPage() {
                 role="tab"
                 aria-selected={tab === item.id}
                 onClick={() => setParams(item.id === 'aktualnosci' ? {} : { zakladka: item.id })}
-                className={`-mb-px border-b-2 px-3 py-2 text-sm font-semibold transition ${
+                className={`-mb-px shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-semibold transition ${
                   tab === item.id ? 'border-orange-600 text-orange-600' : 'border-transparent text-slate-600 hover:text-slate-900'
                 }`}
               >
@@ -871,7 +1226,17 @@ function AdminPage() {
               </button>
             ))}
           </div>
-          {tab === 'aktualnosci' ? <NewsAdmin /> : tab === 'druzyny' ? <TeamNamesAdmin /> : tab === 'rekordy' ? <RecordsAdmin /> : <VisitsAdmin />}
+          {tab === 'aktualnosci' ? (
+            <NewsAdmin />
+          ) : tab === 'druzyny' ? (
+            <TeamNamesAdmin />
+          ) : tab === 'rekordy' ? (
+            <RecordsAdmin />
+          ) : tab === 'formularz' ? (
+            <RegistrationFormAdmin />
+          ) : (
+            <VisitsAdmin />
+          )}
         </>
       )}
     </div>

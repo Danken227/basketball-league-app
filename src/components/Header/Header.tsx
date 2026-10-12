@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import client from '@client/client';
-import { useAdmin } from '../../data/siteContent';
+import { useAdmin, useSiteContent } from '../../data/siteContent';
 import ThemeToggle from './ThemeToggle';
 
 interface NavLinkItem {
@@ -33,11 +33,13 @@ const navItems: (NavLinkItem | NavGroupItem)[] = [
     ],
   },
   { label: 'Regulamin', path: '/regulamin' },
+  { label: 'Kontakt', path: '/kontakt' },
 ];
 
 const youtubeUrl = client.links.youtube;
-// Formularz zgłoszenia drużyny z dalk.pl (ten sam plik co przycisk „Zgłoś team” na stronie ligi).
-const registrationFormUrl = client.links.registrationForm;
+// Formularz zgłoszenia drużyny z dalk.pl (ten sam plik co przycisk „Zgłoś team” na stronie ligi) — dopóki
+// administrator nie wgra własnego w panelu.
+const defaultRegistrationFormUrl = client.links.registrationForm;
 
 const itemClass = (active: boolean) =>
   `rounded-full px-3 py-2 text-sm transition ${active ? 'bg-white/10 text-white' : 'text-slate-300 hover:bg-white/10 hover:text-white'}`;
@@ -105,6 +107,7 @@ function Header() {
   const [open, setOpen] = useState(false);
   // Zalogowany administrator widzi obok logo wejście do panelu — wie, że jest zalogowany.
   const admin = useAdmin();
+  const registrationFormUrl = useSiteContent().registrationForm?.url ?? defaultRegistrationFormUrl;
 
   return (
     <header className="keep-dark sticky top-0 z-30 bg-slate-950 text-slate-50 shadow-lg shadow-slate-900/20">

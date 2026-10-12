@@ -20,5 +20,5 @@ export declare function handleAdmin(request: {
   body?: unknown;
   setCookie?: string;
   cacheControl?: string;
-  binary?: { contentType: string; data: Buffer };
+  binary?: { contentType: string; data: Buffer; disposition?: string };
 }>;
