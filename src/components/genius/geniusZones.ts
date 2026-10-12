@@ -1,9 +1,9 @@
 // Strefy tabeli z panelu administratora (zakładka „Awanse/spadki”): wiersze z miejscami do play-off (od góry)
 // i spadkowymi (od dołu) dostają klasę i tło (genius.css), a pod tabelą — legendę; tylko gdy w panelu zaznaczono
 // „Pokazuj w tabelach”. Miejsce bierzemy z kolumny pozycji Genius (tabelę można sortować po innych kolumnach).
-// Faz bez grup w rozgrywkach z grupami (np. „PLAY OFF” w zakończonych edycjach) nie oznaczamy.
+// Fazy play-off („PLAY OFF” w zakończonych edycjach) nie oznaczamy.
 import type { StandingsZone } from '../../data/playoff';
-import { readGroups } from './geniusGroups';
+import { isPlayoffPhase, readGroups } from './geniusGroups';
 
 const LEGEND_CLASS = 'genius-zone-legend';
 
@@ -11,7 +11,8 @@ export function applyStandingsZones(root: HTMLElement, zone: StandingsZone | und
   const tables = [...root.querySelectorAll<HTMLTableElement>('table.standings')];
   if (tables.length === 0) return;
   const { names, current } = readGroups(root);
-  const groupPhase = names.length === 0 || !names.some((name) => /^grupa\b/i.test(name)) || /^grupa\b/i.test(current);
+  // Tabela fazy play-off (jedyna albo wybrana) nie ma stref.
+  const groupPhase = !isPlayoffPhase(current) && !(names.length > 0 && names.every(isPlayoffPhase));
   const active = zone?.show && groupPhase && (zone.playoff > 0 || zone.relegation > 0) ? zone : undefined;
 
   tables.forEach((table) => {

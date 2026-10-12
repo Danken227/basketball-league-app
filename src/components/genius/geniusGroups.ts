@@ -24,15 +24,18 @@ const known: Record<string, string> = { ...FIRST_GROUPS, ...load() };
 
 export const firstGroup = (cid: number): string | undefined => known[cid];
 
-// Grupa sezonu zasadniczego ("Grupa A"); inne fazy to np. "PLAY OFF" w zakończonych edycjach.
+// Grupa sezonu zasadniczego ("Grupa A").
 export const isGroupName = (name: string) => /^grupa\b/i.test(name);
+// Faza play-off ("PLAY OFF") — w zakończonych edycjach obok grup albo sezonu zasadniczego (np. "Ekstraliga 2026").
+export const isPlayoffPhase = (name: string) => /play\s*-?\s*off/i.test(name);
 
-// Fazy spoza grup (np. "PLAY OFF") chowamy w menu tabel: tabela tej fazy w Genius jest pusta, a drabinkę play-off
-// pokazuje nasz przełącznik Tabela / Play-off. Rozgrywki bez grup zostają bez zmian.
-export function hideNonGroupPhases(root: HTMLElement) {
+// Fazy play-off chowamy w menu tabel, gdy jest też inna faza: tabela play-off w Genius jest pusta, a drabinkę
+// pokazuje nasz przełącznik Tabela / Play-off.
+export function hidePlayoffPhases(root: HTMLElement) {
   const links = [...root.querySelectorAll<HTMLElement>('.selection-scroll a.menuoption')];
-  const hasGroups = links.some((link) => isGroupName(link.textContent?.trim() ?? ''));
-  links.forEach((link) => link.classList.toggle('genius-phase-hidden', hasGroups && !isGroupName(link.textContent?.trim() ?? '')));
+  const playoff = (link: HTMLElement) => isPlayoffPhase(link.textContent?.trim() ?? '');
+  const hasOther = links.some((link) => !playoff(link));
+  links.forEach((link) => link.classList.toggle('genius-phase-hidden', hasOther && playoff(link)));
 }
 
 // Menu grup w treści tabeli Genius (chowamy je w genius.css na stronie głównej, na rzecz naszego przełącznika).
