@@ -73,6 +73,12 @@ export interface SeriesGame {
 
 export interface PlayoffMatch {
   key: string;
+  // Numer pary w rundzie (od 1) i liczba drużyn w rundzie (opis „zwycięzca ćwierćfinału 2”).
+  number: number;
+  teamsInRound: number;
+  // Pary poprzedniej rundy, z których przychodzą drużyny (fromLosers — przegrani: mecz o 3. miejsce).
+  sources?: [PlayoffMatch, PlayoffMatch];
+  fromLosers?: boolean;
   format: SeriesFormat;
   teams: [PlayoffSeed | null | undefined, PlayoffSeed | null | undefined];
   games: SeriesGame[];
@@ -114,10 +120,17 @@ function seriesWinner(format: SeriesFormat, games: SeriesGame[]): { winner?: 0 |
   return game && game.score![0] !== game.score![1] ? { winner: game.score![0] > game.score![1] ? 0 : 1 } : {};
 }
 
-function resolve(key: string, format: SeriesFormat, teams: PlayoffMatch['teams'], bracket: PlayoffBracket, games: PlayoffGame[]): PlayoffMatch {
+function resolve(
+  key: string,
+  format: SeriesFormat,
+  teams: PlayoffMatch['teams'],
+  bracket: PlayoffBracket,
+  games: PlayoffGame[],
+  place: Pick<PlayoffMatch, 'number' | 'teamsInRound' | 'sources' | 'fromLosers'>,
+): PlayoffMatch {
   const manual = bracket.results[key];
   const [a, b] = teams;
-  const match: PlayoffMatch = { key, format, teams, games: a && b ? seriesGames(a, b, games) : [], manual };
+  const match: PlayoffMatch = { key, ...place, format, teams, games: a && b ? seriesGames(a, b, games) : [], manual };
   if (a === null && b === null) match.winner = match.loser = null;
   else if (a && b === null) [match.winner, match.loser] = [a, null];
   else if (b && a === null) [match.winner, match.loser] = [b, null];
@@ -136,8 +149,14 @@ export function playoffRounds(bracket: PlayoffBracket, games: PlayoffGame[] = []
   let teams: (PlayoffSeed | null | undefined)[] = bracket.seeds;
   for (let round = 0; teams.length >= 2; round++) {
     const format = bracket.formats?.[round] ?? 'single';
+    const previous = rounds.at(-1);
+    const teamsInRound = teams.length;
     const matches = Array.from({ length: teams.length / 2 }, (_, index) =>
-      resolve(`r${round}m${index}`, format, [teams[index * 2], teams[index * 2 + 1]], bracket, games),
+      resolve(`r${round}m${index}`, format, [teams[index * 2], teams[index * 2 + 1]], bracket, games, {
+        number: index + 1,
+        teamsInRound,
+        sources: previous && [previous[index * 2], previous[index * 2 + 1]],
+      }),
     );
     rounds.push(matches);
     teams = matches.map((match) => match.winner);
@@ -149,7 +168,21 @@ export function playoffRounds(bracket: PlayoffBracket, games: PlayoffGame[] = []
 export function thirdPlaceMatch(bracket: PlayoffBracket, rounds: PlayoffMatch[][], games: PlayoffGame[] = []): PlayoffMatch | undefined {
   const semis = rounds.at(-2);
   if (!bracket.thirdPlace || !semis || semis.length !== 2) return undefined;
-  return resolve('third', 'single', [semis[0].loser, semis[1].loser], bracket, games);
+  return resolve('third', 'single', [semis[0].loser, semis[1].loser], bracket, games, { number: 1, teamsInRound: 2, sources: [semis[0], semis[1]], fromLosers: true });
+}
+
+// Runda w dopełniaczu: „zwycięzca ćwierćfinału 2”.
+const roundGenitive = (teamsInRound: number) =>
+  teamsInRound === 4 ? 'półfinału' : teamsInRound === 8 ? 'ćwierćfinału' : teamsInRound === 2 ? 'finału' : `meczu 1/${teamsInRound / 2} finału`;
+
+// Opis miejsca w parze, gdy drużyny jeszcze nie znamy: z której pary przyjdzie („Zwycięzca B4–A5”, a gdy i tam
+// drużyn jeszcze nie ma — „Zwycięzca ćwierćfinału 2”).
+export function pendingLabel(match: PlayoffMatch, side: 0 | 1) {
+  const source = match.sources?.[side];
+  const who = match.fromLosers ? 'Przegrany' : 'Zwycięzca';
+  if (!source) return `${who} pary`;
+  const [a, b] = source.teams;
+  return a && b ? `${who} ${seedLabel(a)}–${seedLabel(b)}` : `${who} ${roundGenitive(source.teamsInRound)} ${source.number}`;
 }
 
 // Nazwa rundy po liczbie drużyn w niej.

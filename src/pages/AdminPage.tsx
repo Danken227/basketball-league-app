@@ -12,6 +12,7 @@ import { news as dalkNews, newsCategories, newsCategory, newsDateLabel, newsPath
 import PlayoffBracket from '../components/playoff/PlayoffBracket';
 import {
   PLAYOFF_SIZES,
+  pendingLabel,
   playoffRounds,
   roundName,
   seedLabel,
@@ -1430,7 +1431,10 @@ function PlayoffAdmin() {
   ];
   const rounds = draft ? playoffRounds(draft, games) : [];
   const third = draft ? thirdPlaceMatch(draft, rounds, games) : undefined;
-  const matchName = (seed: PlayoffSeed | null | undefined) => (seed === null ? 'wolny los' : seed ? `${seedLabel(seed)} ${seed.name}` : 'zwycięzca pary');
+  const matchName = (match: PlayoffMatch, side: 0 | 1) => {
+    const seed = match.teams[side];
+    return seed === null ? 'wolny los' : seed ? `${seedLabel(seed)} ${seed.name}` : pendingLabel(match, side).toLowerCase();
+  };
 
   // Wynik pary z Genius: rozegrane mecze (wynik z punktu widzenia pierwszej drużyny) i podsumowanie serii.
   const geniusResult = (match: PlayoffMatch) => {
@@ -1446,7 +1450,7 @@ function PlayoffAdmin() {
     return (
       <div key={match.key} className="flex flex-col gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm ring-1 ring-slate-200">
         <p className="font-medium text-slate-900">
-          {matchName(a)} <span className="text-slate-400">vs</span> {matchName(b)}
+          {matchName(match, 0)} <span className="text-slate-400">vs</span> {matchName(match, 1)}
         </p>
         {known && (
           <>
