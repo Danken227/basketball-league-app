@@ -10,6 +10,10 @@ const replaceIn = (value: string, { geniusName, name }: TeamNameEntry) =>
 
 export function applyTeamRenames(root: HTMLElement, renames: TeamNameEntry[]) {
   if (renames.length === 0) return;
+  // Linki do drużyn pamiętają nazwę z Genius — z nich indeks bierze obecne nazwy drużyn (readTeamLinks).
+  root.querySelectorAll<HTMLAnchorElement>('a[href^="/druzyny/"]:not([data-genius-name])').forEach((link) => {
+    link.dataset.geniusName = link.textContent?.trim() ?? '';
+  });
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     const text = node.nodeValue ?? '';

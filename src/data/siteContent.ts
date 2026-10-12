@@ -3,6 +3,7 @@
 // wczytuje je raz i dokleja do treści przeniesionych z dalk.pl oraz danych Genius.
 import { useSyncExternalStore } from 'react';
 import { news as dalkNews, type NewsItem } from './news';
+import { teamName } from '../components/genius/geniusIndex';
 
 export interface AddedNewsItem extends NewsItem {
   // Treść wpisana przez administratora (z niej serwer zbudował html).
@@ -75,9 +76,15 @@ export function useNews(): NewsItem[] {
     : [...news, ...dalkNews].sort((a, b) => b.date.localeCompare(a.date) || (b.publishedAt ?? '').localeCompare(a.publishedAt ?? ''));
 }
 
-// Drużyny wybranej edycji z inną nazwą (nazwa z Genius → nazwa w tej edycji) albo innym logo.
+// Drużyny wybranej edycji z inną nazwą (nazwa z Genius → nazwa w tej edycji) albo innym logo. Wpis dotyczy numeru
+// drużyny: zamieniamy jej obecną nazwę z Genius (indeks drużyn), więc zmiana nazwy w Genius nie psuje wpisów.
+// Nazwa zapisana w panelu zostaje jako zapas — gdy indeksu jeszcze nie ma albo ma nazwę sprzed zmiany (do doby).
 export function teamRenames(teamNames: TeamNameEntry[], editionId: string | undefined) {
-  return editionId ? teamNames.filter((entry) => entry.editionId === editionId && (entry.name !== entry.geniusName || entry.logo)) : [];
+  if (!editionId) return [];
+  return teamNames
+    .filter((entry) => entry.editionId === editionId)
+    .flatMap((entry) => [...new Set([teamName(entry.teamId), entry.geniusName])].flatMap((geniusName) => (geniusName ? [{ ...entry, geniusName }] : [])))
+    .filter((entry) => entry.name !== entry.geniusName || entry.logo);
 }
 
 export const renameTeam = (name: string, renames: TeamNameEntry[]) => renames.find((entry) => entry.geniusName === name)?.name ?? name;

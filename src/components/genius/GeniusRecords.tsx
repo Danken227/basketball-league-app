@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { renameTeam, teamRenames, useSiteContent, type TeamNameEntry } from '../../data/siteContent';
+import { useGeniusIndex } from '../../hooks/useGeniusIndex';
 import { findCompetition } from './geniusConfig';
 import { loadStoredRecords, recordCategories, type RecordField, type RecordRow, type StoredRecords } from './geniusRecordsData';
 
@@ -49,9 +50,8 @@ function RecordsTable({
                   {row.player}
                 </Link>
                 <p className="truncate text-xs text-slate-500">
-                  {renameTeam(row.team, renames)} ·{' '}
                   <Link to={`/mecze/${row.matchId}?rozgrywki=${cid}&sekcja=boxscore`} className="hover:text-orange-600 hover:underline">
-                    vs {renameTeam(row.opponent, renames)}
+                    {renameTeam(row.team, renames)} vs {renameTeam(row.opponent, renames)}
                   </Link>
                   {row.date && `, ${formatDate(row.date)}`}
                 </p>
@@ -70,6 +70,7 @@ function RecordsTable({
 
 function RecordsView({ cid, records, note }: { cid: number; records: Record<RecordField, RecordRow[]>; note: string }) {
   // Nazwy drużyn z edycji tych rozgrywek (panel administratora).
+  useGeniusIndex();
   const renames = teamRenames(useSiteContent().teamNames, findCompetition(cid)?.editionId);
   return (
     <div className="mt-5">

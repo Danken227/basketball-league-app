@@ -344,7 +344,7 @@ function translateText(text: string, parent: Element): string | undefined {
 }
 
 // Bez pełnego tłumaczenia (geniusTranslation) zostaje to, co strona miała wcześniej: polskie nazwy tabel
-// na stronie Statystyki i polskie daty meczów w podsumowaniu drużyny.
+// na stronie Statystyki i polskie daty meczów (podsumowanie drużyny, terminarze).
 const baseTitles: Record<string, string> = {
   'Shooting Statistics': 'Rzuty',
   Averages: 'Średnie',
@@ -356,7 +356,7 @@ function translateBase(root: HTMLElement) {
     const title = baseTitles[heading.textContent?.trim() ?? ''];
     if (title) heading.textContent = title;
   });
-  root.querySelectorAll('td.matchTime').forEach((cell) => {
+  root.querySelectorAll('td.matchTime, .match-time span').forEach((cell) => {
     const date = translateDate(cell.textContent?.trim() ?? '');
     if (date) cell.textContent = date;
   });

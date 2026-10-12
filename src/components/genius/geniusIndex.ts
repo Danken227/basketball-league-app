@@ -28,8 +28,8 @@ export interface PersonTeam {
 }
 
 // Wersja w nazwie: zmiana odrzuca indeksy zapisane wcześniej (v1 mógł zawierać skutki awarii Genius — puste listy
-// i fałszywe "nie grał").
-const STORAGE_KEY = 'genius-index-v2';
+// i fałszywe "nie grał", v2 — nazwy drużyn podmienione na nazwy z edycji zamiast nazw z Genius).
+const STORAGE_KEY = 'genius-index-v3';
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 function load(): StoredIndex {
@@ -135,7 +135,8 @@ export const personTeams = (personId: string, cid: number): PersonTeam[] | undef
 export function readTeamLinks(root: ParentNode): [string, string][] {
   return [...root.querySelectorAll('a[href]')].flatMap((link) => {
     const id = link.getAttribute('href')!.match(/^\/druzyny\/(\d+)/)?.[1];
-    const name = link.textContent?.trim();
+    // Nazwa z Genius, nie ta podmieniona na nazwę z edycji (applyTeamRenames).
+    const name = (link as HTMLElement).dataset.geniusName ?? link.textContent?.trim();
     return id && name ? [[id, name] as [string, string]] : [];
   });
 }
