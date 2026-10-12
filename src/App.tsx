@@ -22,7 +22,9 @@ import StatisticsPage from './pages/StatisticsPage';
 // Strony rzadko odwiedzane (panel administratora, regulamin) i strony danych testowych (tylko poza domeną ligi)
 // wczytujemy dopiero przy wejściu na nie — nie powiększają kodu pobieranego przy pierwszym wejściu.
 const AdminPage = lazy(() => import('./pages/AdminPage'));
+const NewsPreviewPage = lazy(() => import('./pages/NewsPreviewPage'));
 const RegulationsPage = lazy(() => import('./pages/RegulationsPage'));
+const ContactPage = lazy(() => import('./pages/ContactPage'));
 const PlayerPage = lazy(() => import('./pages/PlayerPage'));
 const PlayersPage = lazy(() => import('./pages/PlayersPage'));
 const SchedulePage = lazy(() => import('./pages/SchedulePage'));
@@ -91,7 +93,9 @@ function App() {
               <Route path="/aktualnosci" element={<NewsPage />} />
               <Route path="/aktualnosci/:slug" element={<NewsArticlePage />} />
               <Route path="/regulamin" element={<RegulationsPage />} />
+              <Route path="/kontakt" element={<ContactPage />} />
               <Route path="/admin" element={<AdminPage />} />
+              <Route path="/admin/podglad" element={<NewsPreviewPage />} />
               <Route path="/tabele" element={<BySource genius={<GeniusListPage title="Tabele" icon={icons.table} path="standings" />} mock={<TablesPage />} />} />
               <Route
                 path="/terminarz"

@@ -14,9 +14,24 @@ const adminPassword = () => process.env.ADMIN_PASSWORD;
 
 const COOKIE = `${client.storagePrefix}_admin`;
 const SESSION_SECONDS = 12 * 60 * 60;
+// "Zapamiętaj mnie": sesja na 30 dni (ciasteczko zostaje po zamknięciu przeglądarki).
+const REMEMBER_SECONDS = 30 * 24 * 60 * 60;
 
 const NEWS_KEY = `${client.storagePrefix}:news`;
 const TEAM_NAMES_KEY = `${client.storagePrefix}:team-names`;
+// Formularz zgłoszenia drużyny wgrany w panelu (przycisk „Zgłoś zespół”): plik (data URL) osobno od opisu (nazwa,
+// rozmiar, adres), który trafia do treści wczytywanej przez każdego odwiedzającego.
+const FORM_KEY = `${client.storagePrefix}:registration-form`;
+const FORM_META_KEY = `${client.storagePrefix}:registration-form-meta`;
+// Pojedyncze zapytanie do Upstash ma limit 1 MB, a base64 powiększa plik o 1/3 — plik do ok. 700 KB.
+const MAX_FORM_LENGTH = 950000;
+const FORM_TYPES = {
+  pdf: 'application/pdf',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  odt: 'application/vnd.oasis.opendocument.text',
+  rtf: 'application/rtf',
+};
 // Logo drużyny w edycji wgrane w panelu (data URL) — osobno od listy nazw, żeby lista (wczytywana przez każdego
 // odwiedzającego) była lekka. Strona pobiera logo z /api/admin?action=team-logo (z długą pamięcią podręczną).
 const teamLogoKey = (teamId, editionId) => `${client.storagePrefix}:team-logo:${teamId}:${editionId}`;
@@ -119,8 +134,8 @@ export function fileStore(file) {
 // Sesja: "<wygaśnięcie>.<podpis HMAC>" w ciasteczku HttpOnly.
 const sign = (value) => crypto.createHmac('sha256', sessionSecret).update(value).digest('base64url');
 
-function sessionToken() {
-  const expires = String(Math.floor(Date.now() / 1000) + SESSION_SECONDS);
+function sessionToken(seconds) {
+  const expires = String(Math.floor(Date.now() / 1000) + seconds);
   return `${expires}.${sign(expires)}`;
 }
 
@@ -140,7 +155,9 @@ function safeEqual(a, b) {
   return left.length === right.length && crypto.timingSafeEqual(left, right);
 }
 
-const cookie = (value, maxAge, secure) => `${COOKIE}=${value}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${secure ? '; Secure' : ''}`;
+// Bez maxAge ciasteczko sesyjne — znika po zamknięciu przeglądarki (sam token i tak wygasa po SESSION_SECONDS).
+const cookie = (value, maxAge, secure) =>
+  `${COOKIE}=${value}; Path=/; HttpOnly; SameSite=Strict${maxAge === undefined ? '' : `; Max-Age=${maxAge}`}${secure ? '; Secure' : ''}`;
 
 const text = (value, max) => (typeof value === 'string' ? value.trim().slice(0, max) : '');
 
@@ -207,10 +224,23 @@ export async function handleAdmin({ method, action, query = {}, body = {}, cooki
     return { status: 200, binary: { contentType: match[1], data: Buffer.from(match[2], 'base64') }, cacheControl: 'public, max-age=31536000, immutable' };
   }
 
+  if (action === 'registration-form') {
+    const form = store ? await store.get(FORM_KEY) : undefined;
+    const match = typeof form?.data === 'string' ? form.data.match(/^data:([a-z0-9.+/-]+);base64,(.+)$/) : null;
+    if (!match) return fail(404, 'Brak formularza.');
+    // Nazwa pliku w nagłówku: wersja ASCII i pełna (RFC 5987) dla polskich znaków.
+    const ascii = form.name.replace(/ł/g, 'l').replace(/Ł/g, 'L').normalize('NFKD').replace(/[^\x20-\x7e]/g, '').replace(/["\\]/g, '') || 'formularz';
+    return {
+      status: 200,
+      binary: { contentType: match[1], data: Buffer.from(match[2], 'base64'), disposition: `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(form.name)}` },
+      cacheControl: 'public, max-age=31536000, immutable',
+    };
+  }
+
   if (action === 'content') {
     if (!store) return { status: 200, body: { news: [], teamNames: [] } };
-    const [news, teamNames] = await Promise.all([store.get(NEWS_KEY), store.get(TEAM_NAMES_KEY)]);
-    return { status: 200, body: { news: news ?? [], teamNames: teamNames ?? [] } };
+    const [news, teamNames, registrationForm] = await Promise.all([store.get(NEWS_KEY), store.get(TEAM_NAMES_KEY), store.get(FORM_META_KEY)]);
+    return { status: 200, body: { news: news ?? [], teamNames: teamNames ?? [], registrationForm: registrationForm ?? null } };
   }
 
   if (action === 'visits') {
@@ -237,12 +267,40 @@ export async function handleAdmin({ method, action, query = {}, body = {}, cooki
       await new Promise((resolve) => setTimeout(resolve, 600));
       return fail(401, 'Nieprawidłowy login lub hasło.');
     }
-    return { status: 200, body: { admin: true }, setCookie: cookie(sessionToken(), SESSION_SECONDS, secure) };
+    const remember = body.remember === true;
+    return {
+      status: 200,
+      body: { admin: true },
+      setCookie: remember ? cookie(sessionToken(REMEMBER_SECONDS), REMEMBER_SECONDS, secure) : cookie(sessionToken(SESSION_SECONDS), undefined, secure),
+    };
   }
 
   if (action === 'logout') return { status: 200, body: { admin: false }, setCookie: cookie('', 0, secure) };
 
   if (!validSession(cookieHeader)) return fail(401, 'Sesja wygasła — zaloguj się ponownie.');
+
+  // Podgląd aktualności: wpis zbudowany jak przy publikacji, ale bez zapisu (działa też bez bazy).
+  if (action === 'news-preview') {
+    const title = text(body.title, 200);
+    const content = text(body.body, 20000);
+    const now = new Date();
+    return {
+      status: 200,
+      body: {
+        item: {
+          slug: 'podglad',
+          title,
+          date: warsawDay(now),
+          publishedAt: now.toISOString(),
+          category: text(body.category, 40),
+          excerpt: excerptOf(content),
+          html: newsHtml(content),
+          image: text(body.image, 500),
+          source: '',
+        },
+      },
+    };
+  }
   if (!store) return fail(503, 'Brak bazy danych: podłącz Upstash Redis do projektu Vercela.');
 
   if (action === 'news-add' || action === 'news-update') {
@@ -288,6 +346,33 @@ export async function handleAdmin({ method, action, query = {}, body = {}, cooki
       NEWS_KEY,
       news.filter((item) => item.slug !== body.slug),
     );
+    return { status: 200, body: { ok: true } };
+  }
+
+  if (action === 'registration-form-save') {
+    const name = text(body.name, 120).replace(/[\\/"]/g, '_');
+    const extension = name.match(/\.([a-z0-9]+)$/i)?.[1].toLowerCase();
+    const contentType = extension && FORM_TYPES[extension];
+    if (!contentType) return fail(400, 'Formularz: plik PDF, DOC, DOCX, ODT albo RTF.');
+    const data = typeof body.data === 'string' ? body.data : '';
+    const base64 = data.match(/^data:[^;,]*;base64,([A-Za-z0-9+/=]+)$/)?.[1];
+    if (!base64) return fail(400, 'Nie udało się odczytać pliku.');
+    if (data.length > MAX_FORM_LENGTH) return fail(400, 'Plik jest za duży (maks. ok. 700 KB).');
+    const uploadedAt = new Date().toISOString();
+    const meta = {
+      name,
+      size: Math.floor((base64.length * 3) / 4) - (base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0),
+      uploadedAt,
+      url: `/api/admin?action=registration-form&v=${Date.parse(uploadedAt)}`,
+    };
+    await store.set(FORM_KEY, { name, data: `data:${contentType};base64,${base64}` });
+    await store.set(FORM_META_KEY, meta);
+    return { status: 200, body: { registrationForm: meta } };
+  }
+
+  if (action === 'registration-form-delete') {
+    await store.set(FORM_META_KEY, null);
+    await store.set(FORM_KEY, null);
     return { status: 200, body: { ok: true } };
   }
 

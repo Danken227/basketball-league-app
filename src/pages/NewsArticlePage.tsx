@@ -1,6 +1,6 @@
 import { Link, useParams } from 'react-router-dom';
 import { NewsCover } from '../components/NewsSection/NewsCard';
-import { newsCategory, newsDateLabel, newsPath, withExternalLinks } from '../data/news';
+import { newsCategory, newsDateLabel, newsPath, withExternalLinks, type NewsItem } from '../data/news';
 import { useNews, useSiteContent } from '../data/siteContent';
 import Placeholder from './Placeholder';
 
@@ -14,6 +14,22 @@ const contentClass = [
   '[&_img]:my-4 [&_img]:h-auto [&_img]:max-w-full [&_img]:rounded-xl',
   '[&_table]:my-4 [&_table]:w-full [&_table]:text-sm [&_td]:border [&_td]:border-slate-200 [&_td]:px-2 [&_td]:py-1',
 ].join(' ');
+
+// Wpis: okładka, data, temat, tytuł i treść (także podgląd w panelu administratora).
+export function NewsArticle({ item }: { item: NewsItem }) {
+  return (
+    <article className="mt-4 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200">
+      <NewsCover item={item} className="aspect-video" />
+      <div className="p-5 sm:p-8">
+        <p className="text-xs text-slate-500">
+          <time dateTime={item.publishedAt ?? item.date}>{newsDateLabel(item)}</time> · {newsCategory(item).label}
+        </p>
+        <h1 className="mt-2 text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">{item.title}</h1>
+        <div className={`mt-5 ${contentClass}`} dangerouslySetInnerHTML={{ __html: withExternalLinks(item.html) }} />
+      </div>
+    </article>
+  );
+}
 
 // Treść aktualności; pod nią przejście do nowszego i starszego wpisu.
 function NewsArticlePage() {
@@ -33,16 +49,7 @@ function NewsArticlePage() {
       <Link to="/aktualnosci" className="text-sm font-medium text-orange-600 hover:text-orange-700">
         ← Wszystkie aktualności
       </Link>
-      <article className="mt-4 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200">
-        <NewsCover item={item} className="aspect-video" />
-        <div className="p-5 sm:p-8">
-          <p className="text-xs text-slate-500">
-            <time dateTime={item.publishedAt ?? item.date}>{newsDateLabel(item)}</time> · {newsCategory(item).label}
-          </p>
-          <h1 className="mt-2 text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">{item.title}</h1>
-          <div className={`mt-5 ${contentClass}`} dangerouslySetInnerHTML={{ __html: withExternalLinks(item.html) }} />
-        </div>
-      </article>
+      <NewsArticle item={item} />
       <nav className="mt-6 grid gap-3 sm:grid-cols-2" aria-label="Inne aktualności">
         {newer ? (
           <Link to={newsPath(newer)} className="rounded-xl bg-white p-4 ring-1 ring-slate-200 transition hover:ring-orange-300">

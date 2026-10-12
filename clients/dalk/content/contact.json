@@ -1,0 +1,46 @@
+{
+  "cards": [
+    {
+      "icon": "place",
+      "title": "Fundacja Działań na rzecz Sportu i Rekreacji",
+      "lines": ["REGON: 368140279", "NIP: 8952156446", "", "ul. Bezpieczna 28/20", "51-114 Wrocław", "", "Nr konta:", "PKO Bank Polski 63 1020 5242 0000 2502 0402 0996"]
+    },
+    {
+      "icon": "person",
+      "title": "Zarząd",
+      "lines": ["Prezes zarządu"],
+      "person": "Adam Dąbrowski",
+      "phone": "+48 500 143 403",
+      "email": "kosz.dalk@gmail.com",
+      "featured": true
+    },
+    {
+      "icon": "edit",
+      "title": "Przez zawodników dla zawodników",
+      "lines": [
+        "Zapraszamy kapitanów drużyn do dzielenia się pomysłami na ulepszenie naszej ligi.",
+        "Jeśli jesteś zainteresowany reklamą lub sponsorowaniem ligi — również napisz na:"
+      ],
+      "email": "kosz.dalk@gmail.com"
+    }
+  ],
+  "authorities": {
+    "title": "Władze ligi",
+    "organizer": {
+      "label": "Organizator",
+      "name": "Fundacja Działań na rzecz Sportu i Rekreacji",
+      "document": { "label": "Statut fundacji", "href": "https://dalk.pl/images/FUNDACJA-DZIALAN-NA-RZECZ-SPORTU-I-REKREACJI.pdf" }
+    },
+    "people": [
+      { "role": "Komisarz ligi", "names": ["Adam Dąbrowski"] },
+      { "role": "Sekretarz zawodów, koordynator sędziów stolikowych", "names": ["Bartosz Brandys"] },
+      { "role": "Koordynator sędziów boiskowych, obsady sędziowskie", "names": ["Jędrzej Mądry", "Marcin Lutomski"] },
+      {
+        "role": "Obsługa techniczna ligi",
+        "note": "Implementacja Genius Sports & hosting",
+        "names": ["Lukas.design"],
+        "href": "https://lukas.design/"
+      }
+    ]
+  }
+}

@@ -74,6 +74,7 @@ function snapshotWriter(): Plugin {
             res.setHeader('cache-control', result.cacheControl ?? 'no-store')
             if (result.binary) {
               res.setHeader('content-type', result.binary.contentType)
+              if (result.binary.disposition) res.setHeader('content-disposition', result.binary.disposition)
               res.end(result.binary.data)
               return
             }

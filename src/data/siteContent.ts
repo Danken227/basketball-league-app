@@ -23,10 +23,19 @@ export interface TeamNameEntry {
   updatedAt: string;
 }
 
+// Formularz zgłoszenia drużyny wgrany w panelu (zastępuje plik z konfiguracji klienta).
+export interface RegistrationForm {
+  name: string;
+  size: number;
+  uploadedAt: string;
+  url: string;
+}
+
 interface SiteContent {
   loaded: boolean;
   news: AddedNewsItem[];
   teamNames: TeamNameEntry[];
+  registrationForm?: RegistrationForm;
 }
 
 let content: SiteContent = { loaded: false, news: [], teamNames: [] };
@@ -53,8 +62,10 @@ export async function adminRequest<T>(action: string, body?: unknown, query?: Re
 
 // Wczytanie (albo ponowne, po zmianie w panelu). Bez serwera (np. podgląd builda) zostają same treści z dalk.pl.
 export function reloadSiteContent() {
-  request = adminRequest<{ news: AddedNewsItem[]; teamNames: TeamNameEntry[] }>('content')
-    .then((data) => setContent({ loaded: true, news: data.news ?? [], teamNames: data.teamNames ?? [] }))
+  request = adminRequest<{ news: AddedNewsItem[]; teamNames: TeamNameEntry[]; registrationForm?: RegistrationForm | null }>('content')
+    .then((data) =>
+      setContent({ loaded: true, news: data.news ?? [], teamNames: data.teamNames ?? [], registrationForm: data.registrationForm ?? undefined }),
+    )
     .catch(() => setContent({ ...content, loaded: true }));
   return request;
 }
