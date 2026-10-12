@@ -20,7 +20,7 @@ function DemoBanner() {
     <div className="bg-amber-400 px-4 py-2 text-center text-xs font-semibold text-slate-950 sm:text-sm">
       {dataSource === 'mock'
         ? 'Wersja demonstracyjna — wyniki, drużyny i zawodnicy to dane testowe. Prawdziwe dane Genius Sports pojawią się po uruchomieniu strony na domenie ligi.'
-        : `Wersja demonstracyjna — zapis danych Genius Sports${snapshotDate ? ` z ${snapshotDate}` : ''} (bieżąca edycja, bez aktualizacji na żywo).`}
+        : `Wersja demonstracyjna — zapis danych Genius Sports${snapshotDate ? ` z ${snapshotDate}` : ''} (edycje 2026/27 i 2026, bez aktualizacji na żywo).`}
     </div>
   );
 }

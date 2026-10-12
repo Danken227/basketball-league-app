@@ -260,7 +260,7 @@ function GeniusPlayerPage() {
   const options = editionOptions.filter((o) => o.value === editionId || playedEditions.some((e) => e.id === o.value));
   const listsLeft = pendingCompetitions('players').length;
   const checksLeft = competitionsWith('players', id!).filter((cid) => playedIn(id!, cid) === undefined).length;
-  // W migawce danych jest tylko bieżąca edycja — nie ma czego sprawdzać.
+  // W migawce nie budujemy indeksu (GeniusIndexLoader) — nie ma czego sprawdzać.
   const checking = !geniusSnapshot && (listsLeft > 0 || checksLeft > 0);
 
   // Wejście bez wskazanej edycji (np. z listy historycznej): gdy w bieżącej zawodnik nie zagrał,

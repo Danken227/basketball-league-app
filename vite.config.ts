@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import zlib from 'node:zlib'
 import { fileURLToPath } from 'node:url'
 import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
@@ -131,6 +132,34 @@ function snapshotWriter(): Plugin {
   }
 }
 
+// Build wersji demonstracyjnej: pliki migawki w dist/snapshot kompresujemy gzipem (<plik>.html.gz, manifest
+// z gzip: true, rozpakowuje je geniusSnapshot.ts). Cała migawka to ok. 300 MB HTML, a wdrożenie z CLI Vercela
+// (plan Hobby) mieści najwyżej 100 MB; po kompresji jest ok. 10 razy mniejsza.
+function snapshotCompressor(): Plugin {
+  let outDir = ''
+  return {
+    name: 'genius-snapshot-compressor',
+    apply: 'build',
+    configResolved(config) {
+      outDir = path.resolve(config.root, config.build.outDir)
+    },
+    closeBundle() {
+      const dir = path.join(outDir, 'snapshot')
+      const manifestPath = path.join(dir, 'index.json')
+      if (!fs.existsSync(manifestPath)) return
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+      for (const file of Object.keys(manifest.files)) {
+        const source = path.join(dir, file)
+        if (!fs.existsSync(source)) continue
+        fs.writeFileSync(`${source}.gz`, zlib.gzipSync(fs.readFileSync(source), { level: 9 }))
+        fs.rmSync(source)
+      }
+      manifest.gzip = true
+      fs.writeFileSync(manifestPath, JSON.stringify(manifest))
+    },
+  }
+}
+
 export default defineConfig(({ mode }) => {
   // Dane logowania administratora (ADMIN_LOGIN, ADMIN_PASSWORD) z .env.local dla api/_admin.js — Vite domyślnie
   // udostępnia zmienne z plików .env tylko stronie (i tylko z przedrostkiem VITE_).
@@ -140,6 +169,7 @@ export default defineConfig(({ mode }) => {
       react(),
       tailwindcss(),
       snapshotWriter(),
+      snapshotCompressor(),
       clientHtml(),
     ],
     publicDir: path.join(clientDir, 'public'),

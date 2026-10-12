@@ -21,7 +21,7 @@ export const isGeniusDomain = (hostname = window.location.hostname) =>
 
 // Źródło danych strony: na domenie ligi elementy Genius na żywo, poza nią nasze dane testowe (wymyślone drużyny).
 // Zmienna VITE_DATA_SOURCE=genius|snapshot|mock wymusza źródło; "snapshot" to migawka danych Genius (zapisane treści
-// bieżącej edycji, geniusSnapshot.ts) — wersja demonstracyjna budowana z clients/<klient>/public/snapshot, którego nie ma w repozytorium.
+// dwóch ostatnich edycji, geniusSnapshot.ts) — wersja demonstracyjna budowana z clients/<klient>/public/snapshot, którego nie ma w repozytorium.
 export type DataSource = 'genius' | 'snapshot' | 'mock';
 const forcedSource = import.meta.env.VITE_DATA_SOURCE;
 export const dataSource: DataSource =
@@ -35,8 +35,10 @@ export const geniusTranslation = import.meta.env.VITE_GENIUS_TRANSLATION === 'pl
 // Edycje ligi w Genius (od najnowszej) i numery rozgrywek poszczególnych lig.
 const allEditions: GeniusEdition[] = client.genius.editions;
 
-// Migawka obejmuje tylko bieżącą edycję, więc w niej filtry nie proponują innych.
-export const geniusEditions = geniusSnapshot ? allEditions.slice(0, 1) : allEditions;
+// Migawka obejmuje dwie ostatnie edycje (bieżącą w całości, poprzednią bez części zakładek meczów),
+// więc w niej filtry nie proponują starszych.
+export const snapshotEditions = allEditions.slice(0, 2);
+export const geniusEditions = geniusSnapshot ? snapshotEditions : allEditions;
 
 export const currentGeniusEdition = geniusEditions[0];
 export const geniusEditionById = new Map(geniusEditions.map((edition) => [edition.id, edition]));

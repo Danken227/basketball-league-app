@@ -7,6 +7,9 @@ export interface SnapshotManifest {
   createdAt: string;
   // Nazwa pliku → klucz osadzenia.
   files: Record<string, string>;
+  // Pliki skompresowane gzipem (<nazwa>.gz) — tak je zapisuje build wersji demonstracyjnej (vite.config.ts),
+  // bo cała migawka (ok. 300 MB HTML) nie zmieściłaby się w limicie wdrożenia Vercela.
+  gzip?: boolean;
 }
 
 export const SNAPSHOT_DIR = '/snapshot';
@@ -30,12 +33,27 @@ export function snapshotFile(key: string) {
 }
 
 let manifest: Promise<SnapshotManifest | undefined> | undefined;
+let manifestFiles: Record<string, string> | undefined;
 
 export function loadManifest() {
   manifest ??= fetch(`${SNAPSHOT_DIR}/index.json`)
     .then((response) => (response.ok ? (response.json() as Promise<SnapshotManifest>) : undefined))
-    .catch(() => undefined);
+    .catch(() => undefined)
+    .then((m) => {
+      manifestFiles = m?.files;
+      return m;
+    });
   return manifest;
+}
+
+// Czy ta treść jest w migawce (przed wczytaniem manifestu zakładamy, że tak).
+export const inSnapshot = (cacheKey: string) => !manifestFiles || snapshotFile(cacheKey) in manifestFiles;
+
+// Treść pliku: skompresowaną gzipem rozpakowujemy (serwer może ją też oddać już rozpakowaną — wtedy bez zmian).
+async function readSnapshotFile(response: Response) {
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (bytes[0] !== 0x1f || bytes[1] !== 0x8b) return new TextDecoder().decode(bytes);
+  return new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
 }
 
 const contents = new Map<string, Promise<string | undefined>>();
@@ -47,8 +65,8 @@ export function loadSnapshot(cacheKey: string): Promise<string | undefined> {
   if (!content) {
     content = loadManifest().then((m) =>
       m?.files[file]
-        ? fetch(`${SNAPSHOT_DIR}/${file}`)
-            .then((response) => (response.ok ? response.text() : undefined))
+        ? fetch(`${SNAPSHOT_DIR}/${file}${m.gzip ? '.gz' : ''}`)
+            .then((response) => (response.ok ? readSnapshotFile(response) : undefined))
             .catch(() => undefined)
         : undefined,
     );
@@ -61,7 +79,7 @@ export function loadSnapshot(cacheKey: string): Promise<string | undefined> {
 // go jak wczytaną, pustą treść (np. blok ligi zawodnika bez występów się chowa) zamiast czekać w nieskończoność.
 export const snapshotMissingHtml = (competition?: string) =>
   `<div class="hs-embed genius-snapshot-missing${competition ? ` _comp_${competition}` : ''}"><p class="genius-status">` +
-  'Ta część nie jest dostępna w wersji demonstracyjnej (zapisane dane Genius Sports z bieżącej edycji).</p></div>';
+  'Ta część nie jest dostępna w wersji demonstracyjnej (zapisane dane Genius Sports z dwóch ostatnich edycji).</p></div>';
 
 declare global {
   interface Window {

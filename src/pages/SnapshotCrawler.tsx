@@ -3,13 +3,13 @@ import { useEffect, useRef, useState } from 'react';
 import GeniusEmbed from '../components/genius/GeniusEmbed';
 import GeniusWidget from '../components/genius/GeniusWidget';
 import { geniusCacheKey, type GeniusEmbedOptions } from '../components/genius/geniusCache';
-import { currentGeniusEdition, geniusJuniorCompetitions, geniusResultsWidgets, isGeniusDomain } from '../components/genius/geniusConfig';
+import { geniusJuniorCompetitions, geniusResultsWidgets, isGeniusDomain, snapshotEditions } from '../components/genius/geniusConfig';
 import { SNAPSHOT_DIR, snapshotFile, snapshotKey, widgetSnapshotKey, type SnapshotManifest } from '../components/genius/geniusSnapshot';
 
 // Zbieranie migawki danych Genius do wersji demonstracyjnej (tylko serwer deweloperski, adres /__snapshot na dev.dalk.pl).
-// Przechodzi po kolei przez strony Genius bieżącej edycji, po jednej naraz (z przerwami, żeby nie obciążać Genius),
+// Przechodzi przez strony Genius dwóch ostatnich edycji, po dwie naraz (z przerwami, żeby nie obciążać Genius),
 // i zapisuje ich treść — już po naszych poprawkach — do clients/<klient>/public/snapshot (zapis robi wtyczka w vite.config.ts).
-// Kolejne strony (drużyny, zawodnicy z czołówek, ostatnie mecze) wynikają z treści list. Zapisane wcześniej strony
+// Kolejne strony (drużyny, zawodnicy, rozegrane mecze) wynikają z treści list. Zapisane wcześniej strony
 // są pomijane, więc przerwane zbieranie można wznowić.
 
 type Derive = 'groups' | 'teams' | 'players' | 'leaders' | 'schedule';
@@ -31,17 +31,25 @@ type Item = EmbedItem | WidgetItem;
 const PAUSE_MS = 1500;
 const SETTLE_MS = 2500;
 const TIMEOUT_MS = 90000;
-const MATCHES_PER_LEAGUE = 4;
+// Po pustej (niepoprawnej) odpowiedzi czekamy chwilę na poprawną, a potem ponawiamy stronę później (do ATTEMPTS razy).
+const INVALID_MS = 10000;
+const ATTEMPTS = 3;
+// Ile stron Genius wczytujemy naraz.
+const CONCURRENCY = 2;
 const LEADERS_PER_CATEGORY = 5;
+// Wszystkie zakładki meczów bieżącej edycji; z poprzedniej tylko podsumowanie i box score (play by play waży
+// ok. 600 KB na mecz, a cała migawka musi się zmieścić w limicie wdrożenia Vercela).
 const MATCH_SECTIONS = ['summary', 'boxscore', 'playbyplay', 'shotchart', 'analysis'];
+const OLDER_MATCH_SECTIONS = ['summary', 'boxscore'];
 
 const keyOf = (item: Item) => (item.type === 'widget' ? widgetSnapshotKey(item.widgetId) : snapshotKey(geniusCacheKey(item.options)));
 const embed = (options: EmbedItem['options'], cid?: number, derive?: Derive): EmbedItem => ({ type: 'embed', options, cid, derive });
 
-const seniorCids = Object.values(currentGeniusEdition.competitions);
-const juniorCids = Object.values(geniusJuniorCompetitions[currentGeniusEdition.id] ?? {});
+const seniorCids = snapshotEditions.flatMap((edition) => Object.values(edition.competitions));
+const juniorCids = snapshotEditions.flatMap((edition) => Object.values(geniusJuniorCompetitions[edition.id] ?? {}));
+const currentCids = [...Object.values(snapshotEditions[0].competitions), ...Object.values(geniusJuniorCompetitions[snapshotEditions[0].id] ?? {})];
 // Strony wszystkich zawodników tylko w Ekstralidze, 1. i 2. Lidze (3. Liga ma ich najwięcej — tam tylko czołówka liderów).
-const playerPagesCids = [currentGeniusEdition.competitions.eks, currentGeniusEdition.competitions['1'], currentGeniusEdition.competitions['2']];
+const playerPagesCids = snapshotEditions.flatMap((edition) => [edition.competitions.eks, edition.competitions['1'], edition.competitions['2']]);
 
 // Listy rozgrywek (wszystkie ligi i kategorie juniorów) — z nich wynikają kolejne strony.
 function initialQueue(): Item[] {
@@ -50,7 +58,7 @@ function initialQueue(): Item[] {
     const senior = seniorCids.includes(cid);
     items.push(
       embed({ page: `/competition/${cid}/standings` }, cid, 'groups'),
-      embed({ page: `/competition/${cid}/schedule` }, cid, senior ? 'schedule' : undefined),
+      embed({ page: `/competition/${cid}/schedule` }, cid, 'schedule'),
       // Terminarz w tle paska meczów (godziny i hale).
       embed({ page: `/competition/${cid}/schedule`, showSubMenus: false, showMatchFilter: false }),
       embed({ page: `/competition/${cid}/teams` }, cid, senior ? 'teams' : undefined),
@@ -95,11 +103,10 @@ function deriveItems(derive: Derive, cid: number, html: string): Item[] {
       embed({ page: `/competition/${cid}/person/${id}/gamelog`, showTitle: true, showSubMenus: false }),
     ]);
   }
-  // Ostatnie rozegrane mecze ligi: wszystkie zakładki strony meczu.
-  const played = [...root.querySelectorAll('.match-wrap.STATUS_COMPLETE[id^="extfix_"]')].map((wrap) => wrap.id.replace('extfix_', ''));
-  return played
-    .slice(-MATCHES_PER_LEAGUE)
-    .flatMap((id) => MATCH_SECTIONS.map((section) => embed({ page: `/competition/${cid}/match/${id}/${section}`, nativeStyle: true })));
+  // Wszystkie rozegrane mecze rozgrywek (seniorów i juniorów).
+  const played = [...new Set([...root.querySelectorAll('.match-wrap.STATUS_COMPLETE[id^="extfix_"]')].map((wrap) => wrap.id.replace('extfix_', '')))];
+  const sections = currentCids.includes(cid) ? MATCH_SECTIONS : OLDER_MATCH_SECTIONS;
+  return played.flatMap((id) => sections.map((section) => embed({ page: `/competition/${cid}/match/${id}/${section}`, nativeStyle: true })));
 }
 
 async function save(key: string, content: string) {
@@ -133,17 +140,87 @@ declare global {
   }
 }
 
+// Jedna wczytywana strona: czeka na treść (z limitem czasu) i oddaje ją przez onDone (bez treści = błąd).
+function CrawlSlot({ item, onDone }: { item: Item; onDone: (content?: string) => void }) {
+  const settleTimer = useRef<number>(undefined);
+  const done = useRef(false);
+  const onDoneRef = useRef(onDone);
+  useEffect(() => {
+    onDoneRef.current = onDone;
+  });
+  const finish = (content?: string) => {
+    if (done.current) return;
+    done.current = true;
+    window.clearTimeout(settleTimer.current);
+    onDoneRef.current(content);
+  };
+
+  // Limit czasu na jedną stronę (Genius bywa przeciążony) — po nim pomijamy ją i idziemy dalej.
+  useEffect(() => {
+    const timer = window.setTimeout(() => finish(), TIMEOUT_MS);
+    return () => {
+      window.clearTimeout(timer);
+      window.clearTimeout(settleTimer.current);
+    };
+  }, []);
+
+  // Widget paska meczów: zapisujemy karty meczów (li.spls_lsmatch), gdy ich liczba przestanie się zmieniać.
+  useEffect(() => {
+    if (item.type !== 'widget') return;
+    let last = -1;
+    let stable = 0;
+    const timer = window.setInterval(() => {
+      const doc = document.querySelector<HTMLIFrameElement>(`#spw_${item.widgetId} iframe`)?.contentDocument;
+      const cards = doc ? [...doc.querySelectorAll('li.spls_lsmatch')] : [];
+      stable = cards.length > 0 && cards.length === last ? stable + 1 : 0;
+      last = cards.length;
+      if (stable >= 4) {
+        window.clearInterval(timer);
+        finish(`<ul>${cards.map((card) => card.outerHTML).join('')}</ul>`);
+      }
+    }, 750);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (item.type === 'widget') return <GeniusWidget widgetId={item.widgetId} />;
+
+  // Strona Genius: czekamy na świeżą treść właściwych rozgrywek, a zapisujemy, gdy przestanie się zmieniać
+  // (skrypty Genius i nasze poprawki — sortowanie, stronicowanie, loga — dopracowują ją jeszcze chwilę).
+  const onContent = (placeholder: HTMLElement) => {
+    // Treść zapytania leży w elemencie genius-target (GeniusEmbed) — zapisujemy ją bez niego.
+    const root = placeholder.querySelector<HTMLElement>(':scope > .genius-target') ?? placeholder;
+    const expected = item.options.page.match(/^\/competition\/(\d+)\//)?.[1];
+    const fresh = [...root.children].find((child) => child.classList.contains('hs-embed'));
+    if (!fresh) return;
+    window.clearTimeout(settleTimer.current);
+    // Przeciążony Genius potrafi oddać pustą stronę bez klasy rozgrywek (np. lista zawodników bez nikogo) —
+    // takiej nie zapisujemy: jeśli w ciągu kilku sekund nie przyjdzie poprawna, strona wraca do kolejki.
+    if (expected && !fresh.classList.contains(`_comp_${expected}`)) {
+      settleTimer.current = window.setTimeout(() => finish(), INVALID_MS);
+      return;
+    }
+    settleTimer.current = window.setTimeout(() => finish(contentOf(root)), SETTLE_MS);
+  };
+  return <GeniusEmbed {...item.options} onContent={onContent} />;
+}
+
 function SnapshotCrawler() {
   const queue = useRef<Item[]>([]);
+  const attempts = useRef(new Map<string, number>());
   const seen = useRef(new Set<string>());
   const saved = useRef(new Set<string>());
-  const [current, setCurrent] = useState<Item>();
+  // Wczytywane strony (po jednej na miejsce); busy — miejsce pracuje albo właśnie szuka następnej strony.
+  const [slots, setSlots] = useState<(Item | undefined)[]>(() => Array(CONCURRENCY).fill(undefined));
+  const busy = useRef<boolean[]>(Array(CONCURRENCY).fill(false));
   const [progress, setProgress] = useState<Progress>({ done: 0, skipped: 0, failed: [], total: 0, finished: false });
-  const settleTimer = useRef<number>(undefined);
 
   useEffect(() => {
-    window.__snapshotProgress = { ...progress, current: current && keyOf(current) };
-  }, [progress, current]);
+    const current = slots.filter((item): item is Item => Boolean(item)).map(keyOf);
+    window.__snapshotProgress = { ...progress, current: current.join(' · ') || undefined };
+  }, [progress, slots]);
+
+  const setSlot = (slot: number, item?: Item) => setSlots((all) => all.map((current, i) => (i === slot ? item : current)));
 
   const enqueue = (items: Item[]) => {
     for (const item of items) {
@@ -155,28 +232,30 @@ function SnapshotCrawler() {
     setProgress((p) => ({ ...p, total: seen.current.size }));
   };
 
-  // Następna strona z kolejki; zapisane wcześniej pomijamy (ale z zapisanych list nadal wyprowadzamy kolejne strony).
-  const next = async () => {
-    while (queue.current.length > 0) {
-      const item = queue.current.shift()!;
-      const key = keyOf(item);
-      if (!saved.current.has(snapshotFile(key))) {
-        setCurrent(item);
-        return;
+  // Wolne miejsca biorą kolejne strony z kolejki; zapisane wcześniej pomijamy (ale z zapisanych list nadal
+  // wyprowadzamy kolejne strony). Koniec, gdy kolejka jest pusta i żadne miejsce nie pracuje.
+  const fill = async () => {
+    for (let slot = 0; slot < CONCURRENCY; slot++) {
+      if (busy.current[slot]) continue;
+      busy.current[slot] = true;
+      let item: Item | undefined;
+      while ((item = queue.current.shift())) {
+        const key = keyOf(item);
+        if (!saved.current.has(snapshotFile(key))) break;
+        if (item.type === 'embed' && item.derive && item.cid) {
+          const html = await fetch(`${SNAPSHOT_DIR}/${snapshotFile(key)}`).then((r) => r.text());
+          enqueue(deriveItems(item.derive, item.cid, html));
+        }
+        setProgress((p) => ({ ...p, skipped: p.skipped + 1 }));
       }
-      if (item.type === 'embed' && item.derive && item.cid) {
-        const html = await fetch(`${SNAPSHOT_DIR}/${snapshotFile(key)}`).then((r) => r.text());
-        enqueue(deriveItems(item.derive, item.cid, html));
-      }
-      setProgress((p) => ({ ...p, skipped: p.skipped + 1 }));
+      if (item) setSlot(slot, item);
+      else busy.current[slot] = false;
     }
-    setCurrent(undefined);
-    setProgress((p) => ({ ...p, finished: true }));
+    if (busy.current.every((b) => !b) && queue.current.length === 0) setProgress((p) => ({ ...p, finished: true }));
   };
 
-  const finish = async (item: Item, content?: string) => {
-    window.clearTimeout(settleTimer.current);
-    setCurrent(undefined);
+  const finish = async (slot: number, item: Item, content?: string) => {
+    setSlot(slot, undefined);
     const key = keyOf(item);
     if (content) {
       try {
@@ -187,10 +266,16 @@ function SnapshotCrawler() {
       } catch (error) {
         setProgress((p) => ({ ...p, failed: [...p.failed, `${key} (${String(error)})`] }));
       }
+    } else if ((attempts.current.get(key) ?? 1) < ATTEMPTS) {
+      attempts.current.set(key, (attempts.current.get(key) ?? 1) + 1);
+      queue.current.push(item);
     } else {
       setProgress((p) => ({ ...p, failed: [...p.failed, key] }));
     }
-    window.setTimeout(next, PAUSE_MS);
+    window.setTimeout(() => {
+      busy.current[slot] = false;
+      fill();
+    }, PAUSE_MS);
   };
 
   // Start: lista zapisanych już plików (wznowienie), potem kolejka list rozgrywek.
@@ -204,50 +289,13 @@ function SnapshotCrawler() {
         if (!active) return;
         Object.keys(manifest?.files ?? {}).forEach((file) => saved.current.add(file));
         enqueue(initialQueue());
-        next();
+        fill();
       });
     return () => {
       active = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Limit czasu na jedną stronę (Genius bywa przeciążony) — po nim pomijamy ją i idziemy dalej.
-  useEffect(() => {
-    if (!current) return;
-    const timer = window.setTimeout(() => finish(current), TIMEOUT_MS);
-    return () => window.clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current]);
-
-  // Widget paska meczów: zapisujemy karty meczów (li.spls_lsmatch), gdy ich liczba przestanie się zmieniać.
-  useEffect(() => {
-    if (current?.type !== 'widget') return;
-    let last = -1;
-    let stable = 0;
-    const timer = window.setInterval(() => {
-      const doc = document.querySelector<HTMLIFrameElement>(`#spw_${current.widgetId} iframe`)?.contentDocument;
-      const cards = doc ? [...doc.querySelectorAll('li.spls_lsmatch')] : [];
-      stable = cards.length > 0 && cards.length === last ? stable + 1 : 0;
-      last = cards.length;
-      if (stable >= 4) {
-        window.clearInterval(timer);
-        finish(current, `<ul>${cards.map((card) => card.outerHTML).join('')}</ul>`);
-      }
-    }, 750);
-    return () => window.clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current]);
-
-  // Strona Genius: czekamy na świeżą treść właściwych rozgrywek, a zapisujemy, gdy przestanie się zmieniać
-  // (skrypty Genius i nasze poprawki — sortowanie, stronicowanie, loga — dopracowują ją jeszcze chwilę).
-  const onContent = (item: EmbedItem) => (root: HTMLElement) => {
-    const expected = item.options.page.match(/^\/competition\/(\d+)\//)?.[1];
-    const fresh = [...root.children].find((child) => child.classList.contains('hs-embed'));
-    if (!fresh || (expected && fresh.className.includes('_comp_') && !fresh.classList.contains(`_comp_${expected}`))) return;
-    window.clearTimeout(settleTimer.current);
-    settleTimer.current = window.setTimeout(() => finish(item, contentOf(root)), SETTLE_MS);
-  };
 
   if (!isGeniusDomain()) {
     return <p className="mx-auto max-w-3xl p-8 text-sm">Migawkę zbiera się na domenie ligi (np. http://{client.site.devHost}:5180/__snapshot).</p>;
@@ -260,7 +308,7 @@ function SnapshotCrawler() {
         Zapisane: {progress.done} · pominięte (już były): {progress.skipped} · błędy: {progress.failed.length} · wszystkich w kolejce: {progress.total}
         {progress.finished ? ' · gotowe' : ''}
       </p>
-      {current && <p className="mt-1 truncate text-xs text-slate-500">Teraz: {keyOf(current)}</p>}
+      {slots.map((item, slot) => item && <p key={slot} className="mt-1 truncate text-xs text-slate-500">Teraz: {keyOf(item)}</p>)}
       {progress.failed.length > 0 && (
         <ul className="mt-3 max-h-40 overflow-auto text-xs text-red-600">
           {progress.failed.map((key) => (
@@ -268,11 +316,15 @@ function SnapshotCrawler() {
           ))}
         </ul>
       )}
-      {/* Bieżąca strona Genius (widoczna, w szerokości strony, żeby tabele miały pełny układ). */}
-      <div className="mt-6">
-        {current?.type === 'widget' && <GeniusWidget key={keyOf(current)} widgetId={current.widgetId} />}
-        {current?.type === 'embed' && <GeniusEmbed key={keyOf(current)} {...current.options} onContent={onContent(current)} />}
-      </div>
+      {/* Bieżące strony Genius (widoczne, w szerokości strony, żeby tabele miały pełny układ). */}
+      {slots.map(
+        (item, slot) =>
+          item && (
+            <div key={`${slot}|${keyOf(item)}`} className="mt-6">
+              <CrawlSlot item={item} onDone={(content) => finish(slot, item, content)} />
+            </div>
+          ),
+      )}
     </div>
   );
 }
