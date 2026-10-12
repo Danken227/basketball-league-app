@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { playoffRounds, roundName, seedLabel, thirdPlaceMatch, type PlayoffBracket as Bracket, type PlayoffMatch, type PlayoffSeed, type SeriesGame } from '../../data/playoff';
+import { pendingLabel, playoffRounds, roundName, seedLabel, thirdPlaceMatch, type PlayoffBracket as Bracket, type PlayoffMatch, type PlayoffSeed, type SeriesGame } from '../../data/playoff';
 import { renameTeam, type TeamNameEntry } from '../../data/siteContent';
 import { usePlayoffGames } from './playoffGames';
 
@@ -8,9 +8,25 @@ import { usePlayoffGames } from './playoffGames';
 
 const MATCH_HEIGHT = 112;
 
-function TeamRow({ seed, won, lost, cid, renames, showSeed }: { seed: PlayoffSeed | null | undefined; won: boolean; lost: boolean; cid: number; renames: TeamNameEntry[]; showSeed: boolean }) {
+function TeamRow({
+  seed,
+  pending,
+  won,
+  lost,
+  cid,
+  renames,
+  showSeed,
+}: {
+  seed: PlayoffSeed | null | undefined;
+  pending: string;
+  won: boolean;
+  lost: boolean;
+  cid: number;
+  renames: TeamNameEntry[];
+  showSeed: boolean;
+}) {
   if (seed === null) return <div className="flex h-9 items-center px-3 text-xs italic text-slate-400">Wolny los</div>;
-  if (!seed) return <div className="flex h-9 items-center px-3 text-xs text-slate-400">Zwycięzca pary</div>;
+  if (!seed) return <div className="flex h-9 items-center px-3 text-xs text-slate-400">{pending}</div>;
   const rename = renames.find((entry) => entry.teamId === seed.teamId);
   const name = rename?.name ?? renameTeam(seed.name, renames);
   const logo = rename?.logo || seed.logo;
@@ -57,6 +73,7 @@ function MatchCard({ match, cid, renames, showSeed }: { match: PlayoffMatch; cid
         <div key={index} className={index === 1 ? 'border-t border-slate-100' : ''}>
           <TeamRow
             seed={seed}
+            pending={pendingLabel(match, index as 0 | 1)}
             won={Boolean(decided && match.winner === seed)}
             lost={Boolean(decided && match.winner !== seed)}
             cid={cid}
