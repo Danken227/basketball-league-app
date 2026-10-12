@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { Fragment, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { FilterSelect } from '../components/common/Filters';
 import PageHeader from '../components/common/PageHeader';
@@ -25,6 +25,8 @@ import {
   type SeriesFormat,
   seriesFormats,
   type StandingsZone,
+  type ZoneCounts,
+  zoneOfGroup,
 } from '../data/playoff';
 import { usePlayoffGames } from '../components/playoff/playoffGames';
 import { adminRequest, reloadSiteContent, setAdmin, teamRenames, useAdmin, useSiteContent, type AddedNewsItem } from '../data/siteContent';
@@ -1094,40 +1096,86 @@ const editionLeagues = (editionId: string) =>
     return cid === undefined ? [] : [{ leagueId: value, cid: String(cid), label }];
   });
 
+// Grupy sezonu zasadniczego rozgrywek w Genius (z menu tabel; bez grup — pusta lista).
+async function loadGroupNames(cid: string): Promise<string[]> {
+  const root = await fetchGeniusPage(`/competition/${cid}/standings`);
+  if (!root) throw new Error('Genius nie odpowiedział');
+  return readGroups(root).names.filter(isGroupName);
+}
+
 function ZonesAdmin() {
   const { zones } = useSiteContent();
   const [editionId, setEditionId] = useState(geniusEditions[0].id);
   // Wpisane w formularzu (numer rozgrywek → strefy); bez wpisu — zapisane.
   const [draft, setDraft] = useState<Record<string, StandingsZone>>({});
+  // „Pokazuj w tabelach” dla całej edycji; undefined — jak w zapisanych strefach.
+  const [showDraft, setShowDraft] = useState<boolean>();
+  // Grupy rozgrywek z Genius (numer rozgrywek → nazwy grup; null — nie udało się sprawdzić).
+  const [groupsOf, setGroupsOf] = useState<Record<string, string[] | null>>({});
   const [error, setError] = useState<string>();
   const [saved, setSaved] = useState<string>();
   const [busy, setBusy] = useState(false);
   const leagues = editionLeagues(editionId);
+  const cidsKey = leagues.map((league) => league.cid).join(',');
   const zoneOf = (cid: string): StandingsZone => draft[cid] ?? zones[cid] ?? { playoff: 0, relegation: 0 };
+  const show = showDraft ?? leagues.some((league) => zones[league.cid]?.show);
   const previousEdition = geniusEditions[editionOrder(editionId) + 1];
 
-  const change = (cid: string, field: 'playoff' | 'relegation', value: string) => {
+  // Podział na grupy sprawdzamy w Genius (nie na sztywno): rozgrywki bez grup nie mają ustawień grup.
+  useEffect(() => {
+    let active = true;
+    for (const cid of cidsKey.split(',').filter(Boolean)) {
+      loadGroupNames(cid)
+        .catch(() => null)
+        .then((names) => active && setGroupsOf((prev) => ({ ...prev, [cid]: names })));
+    }
+    return () => {
+      active = false;
+    };
+  }, [cidsKey]);
+
+  const setZone = (cid: string, zone: StandingsZone) => {
     setSaved(undefined);
-    setDraft((prev) => ({ ...prev, [cid]: { ...zoneOf(cid), [field]: Math.max(0, Math.min(30, Math.floor(Number(value) || 0))) } }));
+    setDraft((prev) => ({ ...prev, [cid]: zone }));
   };
 
-  const changeShow = (cid: string, show: boolean) => {
-    setSaved(undefined);
-    setDraft((prev) => ({ ...prev, [cid]: { ...zoneOf(cid), show } }));
+  const number = (value: string) => Math.max(0, Math.min(30, Math.floor(Number(value) || 0)));
+
+  const change = (cid: string, field: keyof ZoneCounts, value: string, group?: string) => {
+    const zone = zoneOf(cid);
+    if (group === undefined) setZone(cid, { ...zone, [field]: number(value) });
+    else setZone(cid, { ...zone, groups: { ...zone.groups, [group]: { ...zoneOfGroup(zone, group), [field]: number(value) } } });
+  };
+
+  // Osobne strefy grup: na start takie jak wspólne, po wyłączeniu — znowu wspólne.
+  const toggleGroups = (cid: string, enabled: boolean) => {
+    const zone = zoneOf(cid);
+    const names = groupsOf[cid] ?? [];
+    if (enabled) setZone(cid, { ...zone, groups: Object.fromEntries(names.map((name) => [name, { playoff: zone.playoff, relegation: zone.relegation }])) });
+    else setZone(cid, { playoff: zone.playoff, relegation: zone.relegation, show: zone.show });
   };
 
   const changeEdition = (value: string) => {
     setEditionId(value);
     setDraft({});
+    setShowDraft(undefined);
     setSaved(undefined);
     setError(undefined);
   };
 
-  // Te same strefy co w poprzedniej edycji (po poziomie rozgrywek) — do zapisania albo poprawienia.
+  // Te same strefy co w poprzedniej edycji (po poziomie rozgrywek, bez ustawień grup — grupy mogą być inne).
   const copyPrevious = () => {
     if (!previousEdition) return;
     const previous = new Map(editionLeagues(previousEdition.id).map((league) => [league.leagueId, zones[league.cid]]));
-    setDraft(Object.fromEntries(leagues.map((league) => [league.cid, previous.get(league.leagueId) ?? { playoff: 0, relegation: 0 }])));
+    setDraft(
+      Object.fromEntries(
+        leagues.map((league) => {
+          const zone = previous.get(league.leagueId);
+          return [league.cid, { playoff: zone?.playoff ?? 0, relegation: zone?.relegation ?? 0 }];
+        }),
+      ),
+    );
+    setShowDraft(leagues.length > 0 && editionLeagues(previousEdition.id).some((league) => zones[league.cid]?.show));
     setSaved(undefined);
   };
 
@@ -1137,9 +1185,10 @@ function ZonesAdmin() {
     setError(undefined);
     setSaved(undefined);
     try {
-      await adminRequest('zones-save', { zones: Object.fromEntries(leagues.map((league) => [league.cid, zoneOf(league.cid)])) });
+      await adminRequest('zones-save', { zones: Object.fromEntries(leagues.map((league) => [league.cid, { ...zoneOf(league.cid), show }])) });
       await reloadSiteContent();
       setDraft({});
+      setShowDraft(undefined);
       setSaved(`Zapisano strefy tabel edycji ${editionName(editionId)}.`);
     } catch (e) {
       setError(errorText(e));
@@ -1148,11 +1197,23 @@ function ZonesAdmin() {
     }
   };
 
+  const countInput = (cid: string, field: keyof ZoneCounts, value: number, label: string, group?: string) => (
+    <input
+      className={zoneInputClass}
+      type="number"
+      min={0}
+      max={30}
+      value={value}
+      onChange={(e) => change(cid, field, e.target.value, group)}
+      aria-label={label}
+    />
+  );
+
   return (
     <Card title="Awanse i spadki w tabelach">
       <p className="mb-4 text-sm text-slate-600">
-        Ustaw, ile miejsc od góry każdej tabeli (w każdej grupie) daje awans do play-off, a ile od dołu oznacza spadek. Pozostałe miejsca są neutralne. Z zaznaczonym
-        „Pokazuj w tabelach” tabele na stronie oznaczą strefy kolorem z legendą. Zakładka „Play-off” bierze ze strefy drużyny do drabinki (także gdy strefy są ukryte).
+        Ustaw, ile miejsc od góry każdej tabeli daje awans do play-off, a ile od dołu oznacza spadek. Pozostałe miejsca są neutralne. Gdy grupy mają różną liczbę
+        drużyn, zaznacz „Osobno dla grup” i ustaw strefy każdej grupy. Zakładka „Play-off” bierze ze strefy drużyny do drabinki (także gdy strefy są ukryte).
       </p>
       <form onSubmit={submit} className="flex flex-col gap-4">
         <div className="flex flex-wrap items-end gap-3">
@@ -1163,8 +1224,20 @@ function ZonesAdmin() {
             </button>
           )}
         </div>
+        <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700">
+          <input
+            type="checkbox"
+            className="h-4 w-4 accent-orange-600"
+            checked={show}
+            onChange={(e) => {
+              setShowDraft(e.target.checked);
+              setSaved(undefined);
+            }}
+          />
+          Pokazuj strefy w tabelach tej edycji (kolor wiersza i legenda)
+        </label>
         <div className="overflow-x-auto">
-          <table className="w-full max-w-2xl text-left text-sm">
+          <table className="w-full max-w-3xl text-left text-sm">
             <thead className="text-[11px] uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="py-2 pr-4 font-semibold">Poziom rozgrywek</th>
@@ -1176,47 +1249,67 @@ function ZonesAdmin() {
                   <span className="mr-1.5 inline-block h-2.5 w-2.5 rounded-sm bg-red-500" aria-hidden="true" />
                   Spadek (od dołu)
                 </th>
-                <th className="py-2 text-center font-semibold">Pokazuj w tabelach</th>
+                <th className="py-2 text-center font-semibold">Osobno dla grup</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {leagues.map((league) => {
                 const zone = zoneOf(league.cid);
+                const names = groupsOf[league.cid];
+                const perGroup = Boolean(zone.groups);
+                // Blokada z faktycznego podziału w Genius: bez grup (albo przed sprawdzeniem) — nie da się zaznaczyć.
+                const canSplit = Boolean(names && names.length > 1);
+                const reason = names === undefined ? 'Sprawdzanie grup w Genius…' : names === null ? 'Nie udało się sprawdzić grup w Genius' : 'Rozgrywki bez podziału na grupy';
                 return (
-                  <tr key={league.cid}>
-                    <td className="py-2 pr-4 font-semibold text-slate-900">{league.label}</td>
-                    <td className="py-2 pr-4 text-center">
-                      <input
-                        className={zoneInputClass}
-                        type="number"
-                        min={0}
-                        max={30}
-                        value={zone.playoff}
-                        onChange={(e) => change(league.cid, 'playoff', e.target.value)}
-                        aria-label={`${league.label}: miejsca do play-off`}
-                      />
-                    </td>
-                    <td className="py-2 pr-4 text-center">
-                      <input
-                        className={zoneInputClass}
-                        type="number"
-                        min={0}
-                        max={30}
-                        value={zone.relegation}
-                        onChange={(e) => change(league.cid, 'relegation', e.target.value)}
-                        aria-label={`${league.label}: miejsca spadkowe`}
-                      />
-                    </td>
-                    <td className="py-2 text-center">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 accent-orange-600"
-                        checked={Boolean(zone.show)}
-                        onChange={(e) => changeShow(league.cid, e.target.checked)}
-                        aria-label={`${league.label}: pokazuj strefy w tabelach`}
-                      />
-                    </td>
-                  </tr>
+                  <Fragment key={league.cid}>
+                    <tr>
+                      <td className="py-2 pr-4 font-semibold text-slate-900">
+                        {league.label}
+                        {names && names.length > 1 && <span className="ml-1 text-xs font-normal text-slate-500">({names.length} {names.length < 5 ? 'grupy' : 'grup'})</span>}
+                      </td>
+                      <td className="py-2 pr-4 text-center">
+                        {perGroup ? (
+                          <span className="text-xs text-slate-400">w grupach</span>
+                        ) : (
+                          countInput(league.cid, 'playoff', zone.playoff, `${league.label}: miejsca do play-off`)
+                        )}
+                      </td>
+                      <td className="py-2 pr-4 text-center">
+                        {perGroup ? (
+                          <span className="text-xs text-slate-400">w grupach</span>
+                        ) : (
+                          countInput(league.cid, 'relegation', zone.relegation, `${league.label}: miejsca spadkowe`)
+                        )}
+                      </td>
+                      <td className="py-2 text-center">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-orange-600 disabled:opacity-40"
+                          checked={perGroup}
+                          disabled={!canSplit && !perGroup}
+                          title={canSplit ? undefined : reason}
+                          onChange={(e) => toggleGroups(league.cid, e.target.checked)}
+                          aria-label={`${league.label}: osobne strefy dla grup`}
+                        />
+                      </td>
+                    </tr>
+                    {perGroup &&
+                      [...new Set([...(names ?? []), ...Object.keys(zone.groups ?? {})])].map((group) => {
+                        const counts = zoneOfGroup(zone, group);
+                        return (
+                          <tr key={group} className="bg-slate-50">
+                            <td className="py-1.5 pl-4 pr-4 text-slate-700">{group}</td>
+                            <td className="py-1.5 pr-4 text-center">
+                              {countInput(league.cid, 'playoff', counts.playoff, `${league.label}, ${group}: miejsca do play-off`, group)}
+                            </td>
+                            <td className="py-1.5 pr-4 text-center">
+                              {countInput(league.cid, 'relegation', counts.relegation, `${league.label}, ${group}: miejsca spadkowe`, group)}
+                            </td>
+                            <td />
+                          </tr>
+                        );
+                      })}
+                  </Fragment>
                 );
               })}
             </tbody>
@@ -1328,7 +1421,9 @@ function PlayoffAdmin() {
 
   const groups = standings?.cid === cid ? standings.groups : undefined;
   const allRows = groups?.flatMap((group) => group.rows) ?? [];
-  const qualified = groups && zone ? groups.flatMap((group) => group.rows.filter((row) => row.position <= zone.playoff)) : [];
+  // Strefa play-off każdej grupy (osobne ustawienia grup albo wspólne).
+  const inPlayoffZone = (row: PlayoffSeed) => Boolean(zone && row.position <= zoneOfGroup(zone, row.group).playoff);
+  const qualified = groups ? groups.flatMap((group) => group.rows.filter(inPlayoffZone)) : [];
   const groupNames = groups?.map((group) => group.group) ?? [];
   const phases = (standings?.cid === cid ? standings.phases : undefined) ?? [];
 
@@ -1433,7 +1528,7 @@ function PlayoffAdmin() {
 
   const seedOptions = [
     { value: '', label: 'Wolny los' },
-    ...allRows.map((row) => ({ value: seedKey(row), label: `${seedLabel(row)} · ${row.name}${zone && row.position <= zone.playoff ? '' : ' (poza strefą)'}` })),
+    ...allRows.map((row) => ({ value: seedKey(row), label: `${seedLabel(row)} · ${row.name}${inPlayoffZone(row) ? '' : ' (poza strefą)'}` })),
   ];
   const rounds = draft ? playoffRounds(draft, games) : [];
   const third = draft ? thirdPlaceMatch(draft, rounds, games) : undefined;
@@ -1510,8 +1605,10 @@ function PlayoffAdmin() {
         ) : (
           <div className="flex flex-col gap-5">
             <p className="text-sm text-slate-600">
-              {zone?.playoff
-                ? `Strefa play-off: ${zone.playoff} ${zone.playoff === 1 ? 'miejsce' : 'miejsca'} z każdej ${groups.length > 1 ? `z ${groups.length} grup` : 'tabeli'} — ${qualified.length} drużyn.`
+              {qualified.length > 0
+                ? zone?.groups
+                  ? `Strefa play-off (osobno dla grup): ${groups.map((group) => `${seedLabel({ group: group.group, position: 0 }).replace(/0$/, '')} ${zoneOfGroup(zone, group.group).playoff}`).join(', ')} — ${qualified.length} drużyn.`
+                  : `Strefa play-off: ${zone?.playoff} ${zone?.playoff === 1 ? 'miejsce' : 'miejsca'} z ${groups.length > 1 ? `każdej z ${groups.length} grup` : 'tabeli'} — ${qualified.length} drużyn.`
                 : 'Te rozgrywki nie mają strefy play-off — ustaw ją w zakładce „Awanse/spadki” (do drabinki możesz też wybrać drużyny ręcznie).'}
               {stored && ' Nazwy drużyn odświeżone z obecnych tabel — zapisz, żeby je utrwalić.'}
             </p>

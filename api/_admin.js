@@ -438,8 +438,17 @@ export async function handleAdmin({ method, action, query = {}, body = {}, cooki
       if (!/^\d+$/.test(cid)) continue;
       const playoff = count(zone?.playoff, 30);
       const relegation = count(zone?.relegation, 30);
+      // Osobne strefy grup (nazwa grupy → miejsca), gdy grupy mają różną liczbę drużyn.
+      const groups = Object.fromEntries(
+        Object.entries(zone?.groups && typeof zone.groups === 'object' ? zone.groups : {})
+          .slice(0, 16)
+          .map(([group, counts]) => [text(group, 60), { playoff: count(counts?.playoff, 30), relegation: count(counts?.relegation, 30) }])
+          .filter(([group]) => group),
+      );
+      const hasGroups = Object.keys(groups).length > 0;
+      const any = playoff || relegation || Object.values(groups).some((counts) => counts.playoff || counts.relegation);
       // show — oznaczać strefy w tabelach na stronie (strefa play-off służy też drabince, gdy jest ukryta).
-      if (playoff || relegation) zones[cid] = { playoff, relegation, show: zone?.show === true };
+      if (any) zones[cid] = { playoff, relegation, show: zone?.show === true, ...(hasGroups ? { groups } : {}) };
       else delete zones[cid];
     }
     await store.set(ZONES_KEY, zones);

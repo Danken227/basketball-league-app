@@ -89,15 +89,23 @@ function PlayerBlocks({ personId, editionId, section }: { personId: string; edit
   const photo = Object.values(info).find((i) => i.photo)?.photo;
 
   // Cała treść w ramce jak strona drużyny (karta osadzenia Genius) — czarny nagłówek odcina się od niej także w trybie ciemnym.
+  // Na telefonie zdjęcie nad nazwiskiem (nazwisko ma całą szerokość). Czcionkę nazwiska dobieramy do szerokości ramki
+  // i najdłuższego słowa (jednostki cqw), żeby słowo mieściło się w linii; poniżej 20 px słowo już się łamie.
+  const longestWord = Math.max(8, ...(name ?? '').split(/\s+/).map((word) => word.length));
   return (
     <div className="mt-4 rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
-      <section className="keep-dark flex items-center gap-5 rounded-xl bg-slate-950 p-6 text-white">
+      <section className="keep-dark flex flex-col items-start gap-4 rounded-xl bg-slate-950 p-5 text-white sm:flex-row sm:items-center sm:gap-5 sm:p-6">
         {photo && (
-          <PhotoDialog thumbnail={photo} full={largePhoto(photo)} alt={name ?? 'Zdjęcie zawodnika'} className="h-24 w-24 ring-2 ring-white/10 sm:h-32 sm:w-32" />
+          <PhotoDialog thumbnail={photo} full={largePhoto(photo)} alt={name ?? 'Zdjęcie zawodnika'} className="h-24 w-24 shrink-0 ring-2 ring-white/10 sm:h-32 sm:w-32" />
         )}
-        <div className="min-w-0">
+        <div className="@container w-full min-w-0 sm:flex-1">
           <p className="text-sm font-semibold uppercase tracking-wide text-orange-400">Edycja {edition.name}</p>
-          <h1 className="mt-1 text-3xl font-black uppercase sm:text-4xl">{name ?? 'Zawodnik'}</h1>
+          <h1
+            className="mt-1 font-black uppercase leading-tight [overflow-wrap:anywhere]"
+            style={{ fontSize: `clamp(1.25rem, calc(100cqw / ${(longestWord * 0.75).toFixed(2)}), 2.25rem)` }}
+          >
+            {name ?? 'Zawodnik'}
+          </h1>
           {played.length > 0 && (
             <ul className="mt-4 flex flex-wrap gap-2">
               {played.map(({ league, cid }) => (

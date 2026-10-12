@@ -2,12 +2,21 @@
 // rozstawienie (miejsca z tabel grup z zapamiętaną drużyną) i format serii w każdej rundzie; wyniki par liczymy
 // z meczów fazy play-off w Genius (pary rozpoznajemy po numerach obu drużyn), a kolejne rundy — ze zwycięzców.
 
-// Miejsca w tabeli: do play-off od góry, spadkowe od dołu (pozostałe neutralne). show — oznaczać je w tabelach.
-export interface StandingsZone {
+// Miejsca w tabeli: do play-off od góry, spadkowe od dołu (pozostałe neutralne).
+export interface ZoneCounts {
   playoff: number;
   relegation: number;
-  show?: boolean;
 }
+
+// Strefy rozgrywek: wspólne dla wszystkich grup albo osobno dla grup (groups — nazwa grupy → strefy, np. gdy grupy
+// mają różną liczbę drużyn). show — oznaczać je w tabelach (ustawiane dla całej edycji).
+export interface StandingsZone extends ZoneCounts {
+  show?: boolean;
+  groups?: Record<string, ZoneCounts>;
+}
+
+// Strefy tabeli danej grupy ("" — rozgrywki bez grup).
+export const zoneOfGroup = (zone: StandingsZone, group: string): ZoneCounts => zone.groups?.[group] ?? zone;
 
 // Miejsce w drabince: drużyna z danego miejsca grupy ("" — rozgrywki bez grup).
 export interface PlayoffSeed {
