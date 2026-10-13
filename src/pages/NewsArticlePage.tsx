@@ -1,6 +1,7 @@
+import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { NewsCover } from '../components/NewsSection/NewsCard';
-import { newsCategory, newsDateLabel, newsPath, withExternalLinks, type NewsItem } from '../data/news';
+import { loadNewsHtml, newsCategory, newsDateLabel, newsPath, withExternalLinks, type NewsItem } from '../data/news';
 import { useNews, useSiteContent } from '../data/siteContent';
 import Placeholder from './Placeholder';
 
@@ -15,17 +16,37 @@ const contentClass = [
   '[&_table]:my-4 [&_table]:w-full [&_table]:text-sm [&_td]:border [&_td]:border-slate-200 [&_td]:px-2 [&_td]:py-1',
 ].join(' ');
 
+// Treść wpisu: wpisy z panelu mają ją od razu, a wpisy z dalk.pl doczytujemy (loadNewsHtml).
+function useNewsHtml(item: NewsItem) {
+  const [loaded, setLoaded] = useState<{ slug: string; html: string }>();
+  useEffect(() => {
+    if (item.html !== undefined) return;
+    let active = true;
+    void loadNewsHtml(item.slug).then((html) => active && setLoaded({ slug: item.slug, html }));
+    return () => {
+      active = false;
+    };
+  }, [item.slug, item.html]);
+  return item.html ?? (loaded?.slug === item.slug ? loaded.html : undefined);
+}
+
 // Wpis: okładka, data, temat, tytuł i treść (także podgląd w panelu administratora).
 export function NewsArticle({ item }: { item: NewsItem }) {
+  const html = useNewsHtml(item);
   return (
     <article className="mt-4 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200">
-      <NewsCover item={item} className="aspect-video" />
+      <NewsCover item={item} className="aspect-video" priority />
       <div className="p-5 sm:p-8">
         <p className="text-xs text-slate-500">
           <time dateTime={item.publishedAt ?? item.date}>{newsDateLabel(item)}</time> · {newsCategory(item).label}
         </p>
         <h1 className="mt-2 text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">{item.title}</h1>
-        <div className={`mt-5 ${contentClass}`} dangerouslySetInnerHTML={{ __html: withExternalLinks(item.html) }} />
+        {html === undefined ? (
+          // Wysokość ekranu: nawigacja pod wpisem nie zjeżdża w dół, gdy treść się wczyta.
+          <p className="mt-5 min-h-screen text-sm text-slate-500">Wczytywanie…</p>
+        ) : (
+          <div className={`mt-5 ${contentClass}`} dangerouslySetInnerHTML={{ __html: withExternalLinks(html) }} />
+        )}
       </div>
     </article>
   );

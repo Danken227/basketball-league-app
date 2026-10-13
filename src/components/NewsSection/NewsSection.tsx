@@ -1,12 +1,13 @@
 import { Link } from 'react-router-dom';
-import { useNews } from '../../data/siteContent';
-import NewsCard from './NewsCard';
+import { useNews, useSiteContent } from '../../data/siteContent';
+import NewsCard, { NewsCardSkeleton } from './NewsCard';
 
 // Najnowsze aktualności na stronie głównej; pełna lista na /aktualnosci.
 const HOME_NEWS_COUNT = 8;
 
 const NewsSection = () => {
   const news = useNews();
+  const { loaded } = useSiteContent();
   return (
     <section>
       <div className="mb-3 flex items-baseline justify-between">
@@ -16,9 +17,9 @@ const NewsSection = () => {
         </Link>
       </div>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {news.slice(0, HOME_NEWS_COUNT).map((item, index) => (
-          <NewsCard key={item.slug} item={item} featured={index === 0} />
-        ))}
+        {loaded
+          ? news.slice(0, HOME_NEWS_COUNT).map((item, index) => <NewsCard key={item.slug} item={item} featured={index === 0} priority={index === 0} />)
+          : Array.from({ length: HOME_NEWS_COUNT }, (_, index) => <NewsCardSkeleton key={index} featured={index === 0} />)}
       </div>
     </section>
   );

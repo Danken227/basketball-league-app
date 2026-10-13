@@ -2,7 +2,8 @@
 // Pliki JSON tworzy scripts/scrape-dalk.mjs; treść to oczyszczony HTML (akapity, pogrubienia, linki,
 // listy, obrazy) — bez stylów z Worda i edytora strony.
 import client from '@client/client';
-import newsData from '@client/content/news.json';
+// Bez treści wpisów (plugin newsSummary w vite.config.ts) — treść doczytuje loadNewsHtml na stronie wpisu.
+import newsData from '@client/content/news.json?summary';
 
 export interface NewsItem {
   slug: string;
@@ -10,7 +11,8 @@ export interface NewsItem {
   // Data publikacji, RRRR-MM-DD.
   date: string;
   excerpt: string;
-  html: string;
+  // Treść wpisu. Wpisy z dalk.pl przychodzą bez niej (loadNewsHtml); wpisy z panelu mają ją od razu.
+  html?: string;
   // Baner wpisu z dalk.pl (okładka karty i wpisu).
   image: string;
   // Adres wpisu na dalk.pl.
@@ -39,6 +41,10 @@ const localImages: Record<string, string> = client.news.imageRewrites;
 export const newsImage = (url: string) => localImages[url] ?? url;
 
 export const news: NewsItem[] = newsData.map((item) => ({ ...item, image: newsImage(item.image) }));
+
+// Treść wpisu z dalk.pl — pełny plik aktualności w osobnej części bundla, wczytywany dopiero na stronie wpisu.
+export const loadNewsHtml = (slug: string) =>
+  import('@client/content/news.json').then(({ default: items }) => items.find((item) => item.slug === slug)?.html ?? '');
 
 export const NEWS_PER_PAGE = 10;
 

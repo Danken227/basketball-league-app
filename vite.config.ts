@@ -161,10 +161,48 @@ function snapshotCompressor(): Plugin {
   }
 }
 
+// Data zapisu migawki (pasek wersji demonstracyjnej) — wpisana w build, żeby pasek od razu miał docelowy tekst.
+function snapshotCreatedAt() {
+  try {
+    return (JSON.parse(fs.readFileSync(path.join(snapshotDir, 'index.json'), 'utf8')) as { createdAt?: string }).createdAt ?? ''
+  } catch {
+    return ''
+  }
+}
+
+// Lista aktualności bez treści wpisów: import "…/news.json?summary" daje wpisy bez pola html. Listy i strona
+// główna potrzebują tylko tytułu, zajawki i okładki, a pełny plik (ok. 130 KB) wczytuje dopiero strona wpisu.
+function newsSummary(): Plugin {
+  const suffix = '?summary'
+  return {
+    name: 'news-summary',
+    enforce: 'pre',
+    // Filtry: hooki działają tylko dla tych importów, a nie dla każdego modułu strony.
+    resolveId: {
+      filter: { id: /\?summary$/ },
+      async handler(id, importer) {
+        const resolved = await this.resolve(id.slice(0, -suffix.length), importer)
+        return resolved && `\0${resolved.id}${suffix}`
+      },
+    },
+    load: {
+      filter: { id: /^\0.*\?summary$/ },
+      handler(id) {
+        const file = id.slice(1, -suffix.length)
+        this.addWatchFile(file)
+        const items = JSON.parse(fs.readFileSync(file, 'utf8')) as { html?: string }[]
+        for (const item of items) delete item.html
+        return `export default ${JSON.stringify(items)}`
+      },
+    },
+  }
+}
+
 export default defineConfig(({ mode }) => {
   // Dane logowania administratora (ADMIN_LOGIN, ADMIN_PASSWORD) z .env.local dla api/_admin.js — Vite domyślnie
   // udostępnia zmienne z plików .env tylko stronie (i tylko z przedrostkiem VITE_).
   for (const [key, value] of Object.entries(loadEnv(mode, process.cwd(), 'ADMIN_'))) process.env[key] ??= value
+  const snapshot = loadEnv(mode, process.cwd(), 'VITE_').VITE_DATA_SOURCE === 'snapshot'
   return {
     plugins: [
       react(),
@@ -172,7 +210,9 @@ export default defineConfig(({ mode }) => {
       snapshotWriter(),
       snapshotCompressor(),
       clientHtml(),
+      newsSummary(),
     ],
+    define: { 'import.meta.env.VITE_SNAPSHOT_CREATED_AT': JSON.stringify(snapshot ? snapshotCreatedAt() : '') },
     publicDir: path.join(clientDir, 'public'),
     resolve: { alias: { '@client': clientDir } },
     server: {
