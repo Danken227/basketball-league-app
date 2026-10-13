@@ -85,7 +85,8 @@ function App() {
         <div className="flex min-h-screen flex-col bg-slate-50">
           <Header />
           <DemoBanner />
-          <main className="flex-1">
+          {/* Co najmniej wysokość ekranu: stopka zaczyna poza widokiem i nie zjeżdża w dół, gdy treść się wczyta. */}
+          <main className="min-h-screen flex-1">
             {/* Na domenie ligi podstrony pokazują dane Genius Sports, poza nią nasze dane testowe. */}
             <Suspense fallback={<p className="py-16 text-center text-sm text-slate-500">Wczytywanie…</p>}>
             <Routes>

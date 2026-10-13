@@ -102,7 +102,7 @@ export function GeniusLeagueTable() {
           />
         </div>
       )}
-      {cid && <GeniusEmbed page={standingsPage(cid, defaultGroup.phase)} compact onContent={onContent} />}
+      {cid && <GeniusEmbed page={standingsPage(cid, defaultGroup.phase)} compact className="genius-home-table" onContent={onContent} />}
       <GeniusPrefetch items={standingsPrefetch()} />
     </section>
   );
