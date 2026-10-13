@@ -63,6 +63,8 @@ function initialQueue(): Item[] {
       // Terminarz w tle paska meczów (godziny i hale).
       embed({ page: `/competition/${cid}/schedule`, showSubMenus: false, showMatchFilter: false }),
       embed({ page: `/competition/${cid}/teams` }, cid, senior ? 'teams' : undefined),
+      // Lista drużyn w tle (GeniusIndexLoader) — z niej strona drużyny wie, w których edycjach drużyna grała.
+      embed({ page: `/competition/${cid}/teams`, showSubMenus: false }),
       embed({ page: `/competition/${cid}/players`, showSubMenus: false }, cid, playerPagesCids.includes(cid) ? 'players' : undefined),
       embed({ page: `/competition/${cid}/statistics/player`, showSubMenus: false }),
       embed({ page: `/competition/${cid}/statistics/team`, showSubMenus: false }),
@@ -92,10 +94,10 @@ function deriveItems(derive: Derive, cid: number, html: string): Item[] {
       : [];
   }
   if (derive === 'teams') {
-    return ids('a[href]', /^\/druzyny\/(\d+)/).flatMap((id) => [
-      embed({ page: `/competition/${cid}/team/${id}/home`, showTitle: true }),
-      embed({ page: `/competition/${cid}/team/${id}/roster`, showTitle: true }),
-    ]);
+    // Wszystkie zakładki drużyny; terminarz daje też godziny i hale najbliższych meczów w podsumowaniu.
+    return ids('a[href]', /^\/druzyny\/(\d+)/).flatMap((id) =>
+      ['home', 'roster', 'schedule', 'statistics'].map((section) => embed({ page: `/competition/${cid}/team/${id}/${section}`, showTitle: true })),
+    );
   }
   // Statystyki każdego zawodnika ligi seniorów (w każdej lidze, w której jest na liście — także dwie drużyny).
   if (derive === 'players') {
