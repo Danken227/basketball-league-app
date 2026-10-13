@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { leagues, type StatCategory } from '../../data/league';
+import { SelectChevron } from '../common/Filters';
 import SegmentedControl from '../common/SegmentedControl';
 import GeniusEmbed from './GeniusEmbed';
 import GeniusPrefetch from './GeniusPrefetch';
@@ -36,29 +37,32 @@ const leadersPrefetch = currentCompetitions.map(({ cid }) => ({ page: `/competit
 
 function CompetitionSelect({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   return (
-    <select
-      aria-label="Rozgrywki"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700"
-    >
-      <optgroup label="Ligi">
-        {seniorCompetitions.map((c) => (
-          <option key={c.value} value={c.value}>
-            {c.label}
-          </option>
-        ))}
-      </optgroup>
-      {juniorCompetitions.length > 0 && (
-        <optgroup label="Juniorzy">
-          {juniorCompetitions.map((c) => (
+    <span className="relative">
+      <select
+        aria-label="Rozgrywki"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="appearance-none rounded-lg border border-slate-200 bg-white py-1 pl-2 pr-7 text-xs text-slate-700"
+      >
+        <optgroup label="Ligi">
+          {seniorCompetitions.map((c) => (
             <option key={c.value} value={c.value}>
               {c.label}
             </option>
           ))}
         </optgroup>
-      )}
-    </select>
+        {juniorCompetitions.length > 0 && (
+          <optgroup label="Juniorzy">
+            {juniorCompetitions.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))}
+          </optgroup>
+        )}
+      </select>
+      <SelectChevron className="right-2 h-3.5 w-3.5 text-slate-500" />
+    </span>
   );
 }
 
