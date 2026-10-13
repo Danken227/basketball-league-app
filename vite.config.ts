@@ -161,17 +161,6 @@ function snapshotCompressor(): Plugin {
   }
 }
 
-// Wersja demonstracyjna (VITE_DATA_SOURCE=snapshot): manifest migawki pobieramy od razu z HTML-em, równolegle z kodem
-// strony, a nie dopiero po jego wykonaniu — od niego zależy wczytanie wszystkich danych Genius na stronie.
-function snapshotPreload(): Plugin {
-  return {
-    name: 'genius-snapshot-preload',
-    transformIndexHtml: () => [
-      { tag: 'link', attrs: { rel: 'preload', href: '/snapshot/index.json', as: 'fetch', crossorigin: '' }, injectTo: 'head' },
-    ],
-  }
-}
-
 // Data zapisu migawki (pasek wersji demonstracyjnej) — wpisana w build, żeby pasek od razu miał docelowy tekst.
 function snapshotCreatedAt() {
   try {
@@ -222,7 +211,6 @@ export default defineConfig(({ mode }) => {
       snapshotCompressor(),
       clientHtml(),
       newsSummary(),
-      snapshot && snapshotPreload(),
     ],
     define: { 'import.meta.env.VITE_SNAPSHOT_CREATED_AT': JSON.stringify(snapshot ? snapshotCreatedAt() : '') },
     publicDir: path.join(clientDir, 'public'),
