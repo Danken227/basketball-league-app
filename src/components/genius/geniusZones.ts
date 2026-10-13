@@ -1,6 +1,6 @@
 // Strefy tabeli z panelu administratora (zakładka „Awanse/spadki”): wiersze z miejscami do play-off (od góry)
 // i spadkowymi (od dołu) dostają klasę i tło (genius.css), a pod tabelą — legendę; tylko gdy w panelu zaznaczono
-// „Pokazuj w tabelach”. Miejsce bierzemy z kolumny pozycji Genius (tabelę można sortować po innych kolumnach).
+// „Pokazuj w tabelach”. Miejsce to kolejność wiersza w tabeli Genius (tabelę można sortować po innych kolumnach).
 // Fazy play-off („PLAY OFF” w zakończonych edycjach) nie oznaczamy.
 import { zoneOfGroup, type StandingsZone } from '../../data/playoff';
 import { isPlayoffPhase, readGroups } from './geniusGroups';
@@ -19,8 +19,13 @@ export function applyStandingsZones(root: HTMLElement, zone: StandingsZone | und
 
   tables.forEach((table) => {
     const rows = [...table.querySelectorAll<HTMLTableRowElement>('tbody tr')];
-    rows.forEach((row) => {
-      const position = Number(row.cells[0]?.textContent?.trim()) || 0;
+    rows.forEach((row, index) => {
+      // Genius daje drużynom z równym bilansem to samo miejsce (np. kilka „6”), a wtedy strefy obejmowały złe
+      // wiersze. Numerujemy kolejno w kolejności Genius (jego rozstrzygnięcie remisów): zapamiętanej przy
+      // sortowaniu (geniusTableSort), a przed pierwszym sortowaniem — w kolejności wierszy.
+      const position = Number(row.dataset.geniusOrder ?? index) + 1;
+      const cell = row.cells[0];
+      if (cell && /^\d+$/.test(cell.textContent?.trim() ?? '') && cell.textContent !== String(position)) cell.textContent = String(position);
       const playoff = Boolean(active && position > 0 && position <= active.playoff);
       const relegation = Boolean(active && !playoff && position > rows.length - active.relegation);
       row.classList.toggle('zone-playoff', playoff);
