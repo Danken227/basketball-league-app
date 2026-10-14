@@ -3,9 +3,10 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { FilterSelect } from '../components/common/Filters';
 import PageHeader from '../components/common/PageHeader';
 import { icons } from '../components/common/icons';
-import { competitionId, geniusEditionById, geniusEditions, geniusLeagueOptions } from '../components/genius/geniusConfig';
+import { competitionId, geniusEditionById, geniusEditions, geniusLeagueOptions, geniusSnapshot, isGeniusDomain } from '../components/genius/geniusConfig';
 import { fetchGeniusPage } from '../components/genius/geniusFetch';
 import { isGroupName, isPlayoffPhase, readGroups } from '../components/genius/geniusGroups';
+import { collectHistory, historyCoverage, type EditionCoverage } from '../components/genius/geniusHistory';
 import { loadStoredRecords, playedMatchIds, recomputeRecords, type RecordsProgress, type StoredRecords } from '../components/genius/geniusRecordsData';
 import client from '@client/client';
 import { news as dalkNews, newsCategories, newsCategory, newsDateLabel, newsPath } from '../data/news';
@@ -1822,6 +1823,84 @@ function RegistrationFormAdmin() {
   );
 }
 
+// Listy drużyn i zawodników zamkniętych sezonów (geniusHistory.ts): z nich filtr „Edycja” na stronach drużyny
+// i zawodnika od razu wie, w których sezonach ktoś grał. Przycisk jest aktywny tylko wtedy, gdy któregoś
+// zamkniętego sezonu brakuje — czyli po dodaniu nowego sezonu w konfiguracji strony.
+function GeniusSeasonsAdmin() {
+  const [coverage, setCoverage] = useState<EditionCoverage[]>();
+  const [progress, setProgress] = useState<{ done: number; total: number }>();
+  const [error, setError] = useState<string>();
+  const [saved, setSaved] = useState<string>();
+  const canCollect = isGeniusDomain() && !geniusSnapshot;
+
+  const refresh = () =>
+    historyCoverage()
+      .then(setCoverage)
+      .catch((e) => setError(errorText(e)));
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  const missing = coverage?.flatMap((edition) => edition.missing) ?? [];
+  const collect = async () => {
+    setError(undefined);
+    setSaved(undefined);
+    try {
+      const failed = await collectHistory(missing, (done, total) => setProgress({ done, total }));
+      setSaved(
+        failed.length === 0
+          ? 'Zapisano. Strona zacznie korzystać z nowych list w ciągu ok. 5 minut.'
+          : `Zapisano część list. Genius nie oddał ${failed.length} z nich — spróbuj ponownie za chwilę.`,
+      );
+      await refresh();
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setProgress(undefined);
+    }
+  };
+
+  return (
+    <Card title="Sezony Genius">
+      <p className="mb-4 text-sm text-slate-600">
+        Na stronach drużyny i zawodnika filtr „Edycja” pokazuje sezony, w których ktoś grał. Listy zakończonych sezonów się nie zmieniają, więc
+        trzymamy je u siebie — wtedy strona nie pyta o nie Genius przy każdej wizycie. Po dodaniu nowego sezonu w konfiguracji strony poprzedni
+        sezon staje się zakończony: kliknij wtedy przycisk poniżej (zbieranie trwa kilka minut). Bieżący sezon strona zawsze sprawdza w Genius na
+        żywo.
+      </p>
+      {coverage === undefined ? (
+        <p className="text-sm text-slate-500">Sprawdzanie…</p>
+      ) : (
+        <ul className="mb-4 space-y-1 text-sm">
+          {coverage.map((edition) => (
+            <li key={edition.editionId}>
+              <span className="font-semibold text-slate-900">Sezon {edition.name}</span>{' '}
+              {edition.missing.length === 0 ? (
+                <span className="text-emerald-700">— w komplecie</span>
+              ) : (
+                <span className="text-amber-700">— brakuje list ({edition.missing.length} rozgrywek)</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        <button type="button" className={buttonClass} disabled={!canCollect || missing.length === 0 || Boolean(progress)} onClick={collect}>
+          Zbierz brakujące sezony
+        </button>
+        {progress && (
+          <span className="text-sm text-slate-600">
+            Zbieranie list: {progress.done} z {progress.total}…
+          </span>
+        )}
+        {coverage && missing.length === 0 && !progress && <span className="text-sm text-slate-500">Wszystkie zakończone sezony są w komplecie.</span>}
+      </div>
+      {!canCollect && <p className="mb-3 text-sm text-slate-500">Zbieranie działa tylko na stronie ligi (Genius wydaje dane tylko jej domenie).</p>}
+      <Message error={error} success={saved} />
+    </Card>
+  );
+}
+
 const tabs = [
   { id: 'aktualnosci', label: 'Aktualności' },
   { id: 'druzyny', label: 'Nazwy drużyn w edycjach' },
@@ -1829,6 +1908,7 @@ const tabs = [
   { id: 'strefy', label: 'Awanse/spadki' },
   { id: 'playoff', label: 'Play-off' },
   { id: 'formularz', label: 'Formularz zgłoszenia' },
+  { id: 'sezony', label: 'Sezony Genius' },
   { id: 'odwiedziny', label: 'Odwiedziny' },
 ] as const;
 type TabId = (typeof tabs)[number]['id'];
@@ -1890,6 +1970,8 @@ function AdminPage() {
             <PlayoffAdmin />
           ) : tab === 'formularz' ? (
             <RegistrationFormAdmin />
+          ) : tab === 'sezony' ? (
+            <GeniusSeasonsAdmin />
           ) : (
             <VisitsAdmin />
           )}

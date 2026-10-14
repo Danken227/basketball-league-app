@@ -101,29 +101,6 @@ function snapshotWriter(): Plugin {
         res.setHeader('cache-control', 'no-store')
         res.end(fs.readFileSync(file))
       })
-      // Listy zamkniętych edycji (strona /__indeks, HistoryIndexBuilder) → clients/<klient>/public/genius-history.json.
-      server.middlewares.use('/__genius-history/save', (req, res) => {
-        if (req.method !== 'POST') {
-          res.statusCode = 405
-          res.end()
-          return
-        }
-        let body = ''
-        req.setEncoding('utf8')
-        req.on('data', (chunk: string) => (body += chunk))
-        req.on('end', () => {
-          try {
-            const file = JSON.parse(body) as { lists: Record<string, string[]> }
-            if (!file.lists || Object.keys(file.lists).length === 0) throw new Error('Pusty plik list')
-            const json = JSON.stringify(file)
-            fs.writeFileSync(path.join(clientDir, 'public', 'genius-history.json'), json)
-            res.end(`${Math.round(json.length / 1024)} KB`)
-          } catch (error) {
-            res.statusCode = 400
-            res.end(String(error))
-          }
-        })
-      })
       server.middlewares.use('/__snapshot/save', (req, res) => {
         if (req.method !== 'POST') {
           res.statusCode = 405

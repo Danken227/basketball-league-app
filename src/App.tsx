@@ -34,8 +34,6 @@ const TeamsPage = lazy(() => import('./pages/TeamsPage'));
 
 // Zbieranie migawki danych Genius do wersji demonstracyjnej — tylko na serwerze deweloperskim (poza buildem).
 const SnapshotCrawler = import.meta.env.DEV ? lazy(() => import('./pages/SnapshotCrawler')) : null;
-// Listy drużyn i zawodników zamkniętych edycji (genius-history.json) — też tylko na serwerze deweloperskim.
-const HistoryIndexBuilder = import.meta.env.DEV ? lazy(() => import('./pages/HistoryIndexBuilder')) : null;
 
 // Po przejściu na inną stronę (np. z linku w tabeli) zaczynamy od góry; zmiana filtrów w adresie nie przewija.
 function ScrollToTop() {
@@ -122,7 +120,6 @@ function App() {
                   }
                 />
               )}
-              {HistoryIndexBuilder && <Route path="/__indeks" element={<HistoryIndexBuilder />} />}
               <Route path="*" element={<Placeholder title="Nie znaleziono strony" />} />
             </Routes>
             </Suspense>
