@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useGeniusIndex } from '../../hooks/useGeniusIndex';
 import GeniusEmbed from './GeniusEmbed';
-import { markFailed, pendingCompetitions, readTeamLinks, saveList, saveTeamNames, type IndexKind } from './geniusIndex';
+import { loadHistory, markFailed, pendingCompetitions, readTeamLinks, saveList, saveTeamNames, type IndexKind } from './geniusIndex';
 import { useForegroundReady } from './geniusPriority';
 
 const pageOf = (kind: IndexKind, cid: number) => `/competition/${cid}/${kind === 'teams' ? 'teams' : 'players'}`;
@@ -15,6 +15,9 @@ function GeniusIndexLoader({ kind }: { kind: IndexKind }) {
   useGeniusIndex();
   const ready = useForegroundReady();
   const next = ready ? pendingCompetitions(kind)[0] : undefined;
+
+  // Listy zamkniętych edycji z pliku (geniusIndex) — z Genius tylko bieżąca edycja i to, czego w pliku brakuje.
+  useEffect(() => loadHistory(), []);
 
   // Lista, która nie wczyta się w 25 s, jest pomijana w tej wizycie, żeby indeks nie stanął.
   useEffect(() => {

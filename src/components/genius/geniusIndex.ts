@@ -3,9 +3,11 @@
 // i zawodników poszczególnych rozgrywek (GeniusIndexLoader, po jednym zapytaniu naraz) i trzymamy
 // w localStorage przez dobę, żeby nie obciążać serwera Genius przy każdym wejściu.
 // Osobno zapisujemy, czy zawodnik faktycznie zagrał w rozgrywkach (być w składzie to nie to samo co zagrać mecz).
+// Listy zamkniętych edycji (wszystkich poza bieżącą) się nie zmieniają, więc zamiast pytać o nie Genius przy pierwszej
+// wizycie bierzemy je z pliku genius-history.json (loadHistory). Bieżąca edycja zawsze z Genius, na żywo.
 
 import type { LeagueId } from '../../data/league';
-import { geniusEditions } from './geniusConfig';
+import { currentGeniusEdition, geniusEditions } from './geniusConfig';
 
 export type IndexKind = 'teams' | 'players';
 
@@ -75,6 +77,48 @@ export const indexedCompetitions = geniusEditions.flatMap((edition) =>
 
 export const competitionInfo = (cid: number) => indexedCompetitions.find((c) => c.cid === cid);
 
+// Plik z listami zamkniętych edycji zbiera strona /__indeks na serwerze deweloperskim (HistoryIndexBuilder) — raz,
+// po dodaniu nowej edycji w konfiguracji klienta. Edycji, której w pliku nie ma (np. plik niezaktualizowany),
+// szukamy w Genius jak dawniej, więc stary plik spowalnia tylko pierwszą wizytę, niczego nie psuje.
+export const HISTORY_FILE = '/genius-history.json';
+
+export interface HistoryFile {
+  createdAt: string;
+  // Jak StoredIndex.lists: "<rodzaj>:<numer rozgrywek>" → numery drużyn albo zawodników.
+  lists: Record<string, string[]>;
+  teamNames: Record<string, string>;
+}
+
+const pastCids = new Set(indexedCompetitions.filter((c) => c.editionId !== currentGeniusEdition.id).map((c) => c.cid));
+const kinds: IndexKind[] = ['teams', 'players'];
+let history: 'idle' | 'loading' | 'done' = 'idle';
+
+// Wczytuje plik (raz na wizytę, i tylko gdy w indeksie brakuje list zamkniętych edycji). Do jego wczytania
+// GeniusIndexLoader nie pyta Genius o zamknięte edycje (pendingCompetitions).
+export function loadHistory() {
+  if (history !== 'idle') return;
+  if ([...pastCids].every((cid) => kinds.every((kind) => `${kind}:${cid}` in index.lists))) {
+    history = 'done';
+    return;
+  }
+  history = 'loading';
+  fetch(HISTORY_FILE)
+    .then((response) => (response.ok ? (response.json() as Promise<HistoryFile>) : undefined))
+    .catch(() => undefined)
+    .then((file) => {
+      for (const [key, ids] of Object.entries(file?.lists ?? {})) {
+        // Tylko zamknięte edycje — gdyby plik miał listę edycji, która jest teraz bieżąca, bierzemy ją z Genius.
+        if (pastCids.has(Number(key.split(':')[1])) && ids.length > 0 && !(key in index.lists)) index.lists[key] = ids;
+      }
+      if (file?.teamNames) {
+        index.teamNames ??= {};
+        for (const [id, name] of Object.entries(file.teamNames)) index.teamNames[id] ??= name;
+      }
+      history = 'done';
+      changed();
+    });
+}
+
 export function saveList(kind: IndexKind, cid: number, ids: string[]) {
   // Pusta lista to prawie zawsze pusta odpowiedź Genius (np. przy awarii) — nie zapamiętujemy jej na dobę;
   // GeniusIndexLoader po limicie czasu pominie te rozgrywki tylko w bieżącej wizycie.
@@ -89,9 +133,12 @@ export function markFailed(kind: IndexKind, cid: number) {
   listeners.forEach((listener) => listener());
 }
 
-// Rozgrywki, których lista jeszcze nie jest w indeksie (w kolejności od najnowszej edycji).
+// Rozgrywki, których lista jeszcze nie jest w indeksie (w kolejności od najnowszej edycji). Zamknięte edycje
+// dopiero po wczytaniu pliku — wtedy zostają tylko te, których w nim nie było.
 export const pendingCompetitions = (kind: IndexKind) =>
-  indexedCompetitions.filter(({ cid }) => !(`${kind}:${cid}` in index.lists) && !failed.has(`${kind}:${cid}`)).map(({ cid }) => cid);
+  indexedCompetitions
+    .filter(({ cid }) => !(`${kind}:${cid}` in index.lists) && !failed.has(`${kind}:${cid}`) && (history === 'done' || !pastCids.has(cid)))
+    .map(({ cid }) => cid);
 
 // Rozgrywki, na których listach jest dana drużyna albo zawodnik.
 export const competitionsWith = (kind: IndexKind, id: string) =>
