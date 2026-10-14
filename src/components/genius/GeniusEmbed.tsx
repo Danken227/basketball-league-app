@@ -118,11 +118,17 @@ function loadJQuery(): Promise<JQueryAppend> {
   return jQueryReady;
 }
 
+// Pliki Genius, które przeglądarka i tak odrzuca: arkusz footable Genius zwraca jako stronę HTML, a ikonę druku
+// (przycisk i tak chowamy w genius.css) przeglądarki blokują — nie pobieramy ich wcale.
+const BROKEN_GENIUS_CSS = /\/footable\.bootstrap\.min\.css$/;
+const withoutPrintIcon = (html: string) => html.replace(/<img[^>]*print-icon\.png[^>]*>/g, '');
+
 // Skrypty i arkusze, których używa treść Genius (sortowanie tabel, filtry relacji meczu, wygląd strony meczu) —
 // każdy dodawany raz, jak w skrypcie osadzenia.
 function addGeniusAssets(json: { css?: string[]; js?: string[] }, withCss: boolean) {
   if (withCss)
     for (const href of json.css ?? []) {
+      if (BROKEN_GENIUS_CSS.test(href)) continue;
       if ([...document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')].some((link) => link.getAttribute('href') === href)) continue;
       const link = document.createElement('link');
       link.rel = 'stylesheet';
@@ -230,7 +236,7 @@ function GeniusEmbed({
       if (nativeStyle) addSnapshotStylesheet();
       installSnapshotScripts();
       loadSnapshot(cacheKey).then((html) => {
-        if (active) placeholder.innerHTML = html ?? snapshotMissingHtml(expectedCompetition);
+        if (active) placeholder.innerHTML = html ? withoutPrintIcon(html) : snapshotMissingHtml(expectedCompetition);
       });
       return () => {
         active = false;
@@ -248,7 +254,7 @@ function GeniusEmbed({
     target.className = 'genius-target';
     // Zapamiętana kopia (oznaczona klasą genius-cached) albo komunikat o wczytywaniu.
     const cached = readGeniusCache(cacheKey);
-    target.innerHTML = cached ? `<div class="genius-cached">${cached}</div>` : loadingHtml;
+    target.innerHTML = cached ? `<div class="genius-cached">${withoutPrintIcon(cached)}</div>` : loadingHtml;
     placeholder.replaceChildren(target);
 
     // Treść pobieramy wprost z serwera Genius (geniusFetch) — to samo, co robi skrypt osadzenia Genius, bez
@@ -279,7 +285,7 @@ function GeniusEmbed({
         const jQuery = await loadJQuery();
         if (controller.signal.aborted) return;
         addGeniusAssets(json, nativeStyle);
-        jQuery(target).append(json.html ?? '');
+        jQuery(target).append(withoutPrintIcon(json.html ?? ''));
         if (!hasValidContent()) throw new Error('Genius: brak poprawnej treści');
       })
       .catch(() => {
