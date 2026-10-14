@@ -86,7 +86,8 @@ const HISTORY_API = '/api/admin?action=genius-history';
 
 export interface HistoryFile {
   createdAt: string;
-  // Jak StoredIndex.lists: "<rodzaj>:<numer rozgrywek>" → numery drużyn albo zawodników.
+  // Jak StoredIndex.lists: "<rodzaj>:<numer rozgrywek>" → numery drużyn albo zawodników. Rodzaj "played" to zawodnicy
+  // z zestawienia statystyk rozgrywek, czyli ci, którzy zagrali choć jeden mecz (tam nie ma tych tylko ze składu).
   lists: Record<string, string[]>;
   teamNames: Record<string, string>;
 }
@@ -94,6 +95,10 @@ export interface HistoryFile {
 export const pastCompetitions = indexedCompetitions.filter((c) => c.editionId !== currentGeniusEdition.id);
 const pastCids = new Set(pastCompetitions.map((c) => c.cid));
 export const indexKinds: IndexKind[] = ['teams', 'players'];
+export type HistoryKind = IndexKind | 'played';
+export const historyKinds: HistoryKind[] = ['teams', 'players', 'played'];
+// Zamknięte rozgrywki → zawodnicy z występami (z pliku) — playedIn odpowiada z nich od razu, bez sprawdzania w Genius.
+const historyPlayed = new Map<number, Set<string>>();
 
 // Oba źródła list (brak któregoś — np. podgląd builda bez serwera — po prostu pomijamy). fresh: z pominięciem
 // pamięci serwera (panel administratora tuż po zapisie).
@@ -113,16 +118,16 @@ let history: 'idle' | 'loading' | 'done' = 'idle';
 // GeniusIndexLoader nie pyta Genius o zamknięte edycje (pendingCompetitions).
 export function loadHistory() {
   if (history !== 'idle') return;
-  if ([...pastCids].every((cid) => indexKinds.every((kind) => `${kind}:${cid}` in index.lists))) {
-    history = 'done';
-    return;
-  }
   history = 'loading';
   fetchHistorySources().then((files) => {
     for (const file of files) {
       for (const [key, ids] of Object.entries(file.lists ?? {})) {
+        const [kind, cidText] = key.split(':');
+        const cid = Number(cidText);
         // Tylko zamknięte edycje — gdyby plik miał listę edycji, która jest teraz bieżąca, bierzemy ją z Genius.
-        if (pastCids.has(Number(key.split(':')[1])) && ids.length > 0 && !(key in index.lists)) index.lists[key] = ids;
+        if (!pastCids.has(cid) || ids.length === 0) continue;
+        if (kind === 'played') historyPlayed.set(cid, new Set(ids));
+        else if (!(key in index.lists)) index.lists[key] = ids;
       }
       index.teamNames ??= {};
       for (const [id, name] of Object.entries(file.teamNames ?? {})) index.teamNames[id] ??= name;
@@ -176,7 +181,12 @@ export function savePlayed(personId: string, cid: number, played: boolean) {
   changed();
 }
 
+// Zamknięte rozgrywki, o które nie warto jeszcze pytać Genius: plik z listami dopiero się wczytuje.
+export const awaitingHistory = (cid: number) => history !== 'done' && pastCids.has(cid);
+
 export const playedIn = (personId: string, cid: number): boolean | undefined => {
+  const fromHistory = historyPlayed.get(cid);
+  if (fromHistory) return fromHistory.has(personId);
   const key = `${personId}:${cid}`;
   return index.played[key] ?? (notPlayed.has(key) ? false : undefined);
 };

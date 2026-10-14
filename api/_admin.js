@@ -505,7 +505,7 @@ export async function handleAdmin({ method, action, query = {}, body = {}, cooki
   // Nowe listy zamkniętych edycji (z przeglądarki administratora) dopisujemy do zapisanych wcześniej.
   if (action === 'genius-history-save') {
     const lists = Object.entries(body.lists ?? {}).filter(
-      ([key, ids]) => /^(teams|players):\d+$/.test(key) && Array.isArray(ids) && ids.length > 0 && ids.every((id) => /^\d+$/.test(String(id))),
+      ([key, ids]) => /^(teams|players|played):\d+$/.test(key) && Array.isArray(ids) && ids.length > 0 && ids.every((id) => /^\d+$/.test(String(id))),
     );
     if (lists.length === 0) return fail(400, 'Brak list do zapisania.');
     const teamNames = Object.entries(body.teamNames ?? {}).filter(([id, name]) => /^\d+$/.test(id) && typeof name === 'string' && name.length <= 200);

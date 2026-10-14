@@ -4,16 +4,19 @@
 import { adminRequest } from '../../data/siteContent';
 import { geniusEditionById } from './geniusConfig';
 import { fetchGeniusJson } from './geniusFetch';
-import { fetchHistorySources, indexKinds, pastCompetitions, type HistoryFile, type IndexKind } from './geniusIndex';
+import { fetchHistorySources, historyKinds, pastCompetitions, type HistoryFile, type HistoryKind } from './geniusIndex';
 
 const PAUSE_MS = 1000;
 const ATTEMPTS = 3;
 const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
+// Strona Genius z listą danego rodzaju: drużyny, zawodnicy (skład) i zestawienie statystyk (tylko ci, którzy zagrali).
+const listPage: Record<HistoryKind, string> = { teams: 'teams', players: 'players', played: 'statistics/player' };
+
 export interface EditionCoverage {
   editionId: string;
   name: string;
-  // Rozgrywki edycji bez kompletu list (drużyny i zawodnicy).
+  // Rozgrywki edycji bez kompletu list (drużyny, zawodnicy, występy).
   missing: number[];
 }
 
@@ -26,13 +29,13 @@ export async function historyCoverage(): Promise<EditionCoverage[]> {
     editionId,
     name: geniusEditionById.get(editionId)?.name ?? editionId,
     missing: pastCompetitions
-      .filter((c) => c.editionId === editionId && indexKinds.some((kind) => !has(`${kind}:${c.cid}`)))
+      .filter((c) => c.editionId === editionId && historyKinds.some((kind) => !has(`${kind}:${c.cid}`)))
       .map((c) => c.cid),
   }));
 }
 
 // Numery z linków Genius (".../team/123", ".../person/456", także zakodowane w parametrze WHurl) i nazwy drużyn.
-function readList(html: string, kind: IndexKind) {
+function readList(html: string, kind: HistoryKind) {
   const root = new DOMParser().parseFromString(html, 'text/html').body;
   const pattern = kind === 'teams' ? /\/team\/(\d+)/ : /\/person\/(\d+)/;
   const ids = new Set<string>();
@@ -47,9 +50,9 @@ function readList(html: string, kind: IndexKind) {
   return { ids: [...ids], names };
 }
 
-async function loadList(kind: IndexKind, cid: number) {
+async function loadList(kind: HistoryKind, cid: number) {
   for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
-    const json = await fetchGeniusJson(`/competition/${cid}/${kind}`, { showSubMenus: false }).catch(() => undefined);
+    const json = await fetchGeniusJson(`/competition/${cid}/${listPage[kind]}`, { showSubMenus: false }).catch(() => undefined);
     // Pusta strona (przy przeciążeniu Genius) nie ma klasy rozgrywek — wtedy próbujemy jeszcze raz.
     if (json?.html?.includes(`_comp_${cid}`)) {
       const list = readList(json.html, kind);
@@ -60,9 +63,12 @@ async function loadList(kind: IndexKind, cid: number) {
   return undefined;
 }
 
-// Listy wskazanych rozgrywek z Genius → baza panelu. Zwraca rozgrywki, których listy nie udało się pobrać.
+// Brakujące listy wskazanych rozgrywek z Genius → baza panelu (listy już zapisane pomijamy). Zwraca listy,
+// których nie udało się pobrać.
 export async function collectHistory(cids: number[], onProgress: (done: number, total: number) => void): Promise<string[]> {
-  const tasks = cids.flatMap((cid) => indexKinds.map((kind) => ({ kind, cid })));
+  const files = await fetchHistorySources(true);
+  const has = (key: string) => files.some((file) => (file.lists?.[key]?.length ?? 0) > 0);
+  const tasks = cids.flatMap((cid) => historyKinds.map((kind) => ({ kind, cid }))).filter(({ kind, cid }) => !has(`${kind}:${cid}`));
   const file: Pick<HistoryFile, 'lists' | 'teamNames'> = { lists: {}, teamNames: {} };
   const failed: string[] = [];
   for (const [done, { kind, cid }] of tasks.entries()) {

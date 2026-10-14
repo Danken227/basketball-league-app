@@ -6,7 +6,7 @@ import GeniusEmbed, { type StatsMode } from '../../components/genius/GeniusEmbed
 import GeniusIndexLoader from '../../components/genius/GeniusIndexLoader';
 import { useForegroundReady } from '../../components/genius/geniusPriority';
 import { currentGeniusEdition, findCompetition, geniusEditionById, geniusEditions, geniusSnapshot } from '../../components/genius/geniusConfig';
-import { competitionsWith, pendingCompetitions, personTeams, playedIn, savePersonTeams, savePlayed, type PersonTeam } from '../../components/genius/geniusIndex';
+import { awaitingHistory, competitionsWith, pendingCompetitions, personTeams, playedIn, savePersonTeams, savePlayed, type PersonTeam } from '../../components/genius/geniusIndex';
 import { leagues, type League } from '../../data/league';
 import { useGeniusIndex } from '../../hooks/useGeniusIndex';
 import StatsModeToggle from '../../components/genius/StatsModeToggle';
@@ -228,7 +228,8 @@ function TeamsFetcher({ personId, cid }: { personId: string; cid: number }) {
 function PlayedChecker({ personId }: { personId: string }) {
   useGeniusIndex();
   const ready = useForegroundReady();
-  const next = ready ? competitionsWith('players', personId).find((cid) => playedIn(personId, cid) === undefined) : undefined;
+  // Zamknięte rozgrywki rozstrzyga plik list (geniusIndex) — do jego wczytania o nie nie pytamy.
+  const next = ready ? competitionsWith('players', personId).find((cid) => playedIn(personId, cid) === undefined && !awaitingHistory(cid)) : undefined;
 
   // Gdy sprawdzenie się nie uda, zostawiamy edycję na liście (lepiej pokazać za dużo niż ukryć występy).
   useEffect(() => {
