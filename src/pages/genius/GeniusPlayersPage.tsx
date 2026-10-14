@@ -51,13 +51,28 @@ function CompetitionPlayers({ editionId, leagueIds, query, letter }: { editionId
     const cid = competitionId(editionId, leagueId);
     return cid ? [{ leagueId, cid }] : [];
   });
+  // Kolejna liga pojawia się dopiero po wczytaniu poprzedniej: rosnąca lista nie spycha w dół list pod nią
+  // (strona nie skacze), a Genius dostaje zapytania po kolei zamiast kilku naraz.
+  const listsKey = lists.map(({ cid }) => cid).join();
+  const [shown, setShown] = useState({ key: listsKey, count: 1 });
+  const count = shown.key === listsKey ? shown.count : 1;
+  const showNext = (index: number) =>
+    setShown((prev) => {
+      const current = prev.key === listsKey ? prev.count : 1;
+      return index + 2 > current ? { key: listsKey, count: index + 2 } : prev;
+    });
 
   return (
     <div className="mt-6 flex flex-col gap-6">
-      {lists.map(({ leagueId, cid }) => (
+      {lists.slice(0, count).map(({ leagueId, cid }, index) => (
         <section key={cid}>
           {leagueIds.length > 1 && <h2 className="mb-2 text-lg font-black text-slate-900">{geniusLeagueName(leagueId)}</h2>}
-          <GeniusEmbed page={`/competition/${cid}/players`} showSubMenus={false} textFilter={{ selector: '.playerblock', query, letter }} />
+          <GeniusEmbed
+            page={`/competition/${cid}/players`}
+            showSubMenus={false}
+            textFilter={{ selector: '.playerblock', query, letter }}
+            onContent={() => showNext(index)}
+          />
         </section>
       ))}
     </div>

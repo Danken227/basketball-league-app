@@ -13,6 +13,16 @@ interface FilterSelectProps {
   options: { value: string; label: string }[];
 }
 
+// Strzałka listy rozwijanej. Listy mają appearance-none: natywny wygląd (np. Safari/WebKit) bierze nasz kolor
+// tekstu, ale nie tło, i jasny tekst ciemnej listy znika na jasnym polu — strzałkę rysujemy więc sami.
+export function SelectChevron({ className }: { className: string }) {
+  return (
+    <svg className={`pointer-events-none absolute top-1/2 -translate-y-1/2 ${className}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <path d="M5.2 7.2a.75.75 0 0 1 1.06 0L10 10.94l3.74-3.74a.75.75 0 1 1 1.06 1.06l-4.27 4.27a.75.75 0 0 1-1.06 0L5.2 8.26a.75.75 0 0 1 0-1.06Z" />
+    </svg>
+  );
+}
+
 export function FilterSelect({ label, value, onChange, options }: FilterSelectProps) {
   return (
     <label className="flex min-w-48 flex-1 flex-col gap-1 sm:flex-none">
@@ -25,9 +35,7 @@ export function FilterSelect({ label, value, onChange, options }: FilterSelectPr
             </option>
           ))}
         </select>
-        <svg className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-orange-500" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-          <path d="M5.2 7.2a.75.75 0 0 1 1.06 0L10 10.94l3.74-3.74a.75.75 0 1 1 1.06 1.06l-4.27 4.27a.75.75 0 0 1-1.06 0L5.2 8.26a.75.75 0 0 1 0-1.06Z" />
-        </svg>
+        <SelectChevron className="right-3 h-4 w-4 text-orange-500" />
       </span>
     </label>
   );

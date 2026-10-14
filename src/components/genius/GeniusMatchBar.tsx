@@ -2,6 +2,7 @@ import client from '@client/client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { leagues, type LeagueId } from '../../data/league';
 import { DragScroller, GroupLabel } from '../common/DragScroller';
+import { SelectChevron } from '../common/Filters';
 import GeniusWidget from './GeniusWidget';
 import { competitionIdByName, geniusSnapshot } from './geniusConfig';
 import { fetchGeniusPage } from './geniusFetch';
@@ -559,18 +560,21 @@ function GeniusMatchBar({ widgetId }: { widgetId: string }) {
             <span className="text-[10px] font-normal uppercase tracking-wider text-slate-500">Dane: FIBA LiveStats · Genius Sports</span>
           </h2>
           {!failed && (
-            <select
-              aria-label="Liga"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value as Filter)}
-              className="rounded-lg border border-white/20 bg-slate-800 px-2 py-1 text-xs text-slate-100"
-            >
-              {filterOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            <span className="relative">
+              <select
+                aria-label="Liga"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value as Filter)}
+                className="appearance-none rounded-lg border border-white/20 bg-slate-800 py-1 pl-2 pr-7 text-xs text-slate-100"
+              >
+                {filterOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <SelectChevron className="right-2 h-3.5 w-3.5 text-slate-300" />
+            </span>
           )}
         </div>
 

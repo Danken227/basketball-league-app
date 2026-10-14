@@ -524,6 +524,12 @@
   display: none;
 }
 
+/* Tabela strony głównej (GeniusLeagueTable): do wczytania — wysokość tabeli ligi, żeby sekcja Top 10 pod nią
+   nie zjeżdżała w dół. Tylko dopóki tabeli nie ma, więc krótsze tabele nie zostawiają pustego miejsca. */
+.genius-home-table:not(:has(table)) {
+  min-height: 26rem;
+}
+
 .genius-compact th,
 .genius-compact td {
   padding: 0.4rem 0.3rem;
