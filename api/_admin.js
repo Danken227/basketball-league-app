@@ -91,6 +91,9 @@ const VISIT_DAYS = 400;
 const recordsKey = (cid) => `${client.storagePrefix}:records:${cid}`;
 const RECORD_FIELDS = ['pts', 'reb', 'ast'];
 const MAX_RECORDS_LENGTH = 60000;
+// Listy drużyn i zawodników zamkniętych edycji Genius (zakładka „Sezony Genius”, czyta je geniusIndex na stronie).
+const geniusHistoryKey = () => `${client.storagePrefix}:genius-history`;
+const MAX_GENIUS_HISTORY_LENGTH = 900000;
 
 // Wiersz rekordu z przeglądarki administratora: tylko znane pola, przycięte teksty i liczby.
 const recordRow = (row) => ({
@@ -260,6 +263,14 @@ export async function handleAdmin({ method, action, query = {}, body = {}, cooki
     const cid = /^\d+$/.test(query.cid ?? '') ? query.cid : undefined;
     const records = store && cid ? await store.get(recordsKey(cid)) : undefined;
     return { status: 200, body: { records: records ?? null } };
+  }
+
+  // Listy zamkniętych edycji — nie zmieniają się, więc odpowiedź może chwilę poleżeć w pamięci serwera (CDN Vercela,
+  // s-maxage): po zapisie w panelu strona zobaczy nowe listy najpóźniej po 5 minutach. Przeglądarka pyta za każdym
+  // razem (max-age=0, bez stale-while-revalidate, które przeglądarki też stosują i pokazywały stare listy).
+  if (action === 'genius-history') {
+    const history = store ? await store.get(geniusHistoryKey()) : undefined;
+    return { status: 200, body: { history: history ?? null }, cacheControl: 'public, max-age=0, s-maxage=300' };
   }
 
   if (action === 'team-logo') {
@@ -489,6 +500,24 @@ export async function handleAdmin({ method, action, query = {}, body = {}, cooki
     if (JSON.stringify(records).length > MAX_RECORDS_LENGTH) return fail(400, 'Za dużo danych rekordów.');
     await store.set(recordsKey(cid), records);
     return { status: 200, body: { records } };
+  }
+
+  // Nowe listy zamkniętych edycji (z przeglądarki administratora) dopisujemy do zapisanych wcześniej.
+  if (action === 'genius-history-save') {
+    const lists = Object.entries(body.lists ?? {}).filter(
+      ([key, ids]) => /^(teams|players):\d+$/.test(key) && Array.isArray(ids) && ids.length > 0 && ids.every((id) => /^\d+$/.test(String(id))),
+    );
+    if (lists.length === 0) return fail(400, 'Brak list do zapisania.');
+    const teamNames = Object.entries(body.teamNames ?? {}).filter(([id, name]) => /^\d+$/.test(id) && typeof name === 'string' && name.length <= 200);
+    const previous = (await store.get(geniusHistoryKey())) ?? { lists: {}, teamNames: {} };
+    const history = {
+      createdAt: new Date().toISOString(),
+      lists: { ...previous.lists, ...Object.fromEntries(lists.map(([key, ids]) => [key, ids.map(String)])) },
+      teamNames: { ...previous.teamNames, ...Object.fromEntries(teamNames) },
+    };
+    if (JSON.stringify(history).length > MAX_GENIUS_HISTORY_LENGTH) return fail(400, 'Za dużo danych list.');
+    await store.set(geniusHistoryKey(), history);
+    return { status: 200, body: { saved: lists.length } };
   }
 
   if (action === 'team-name-save') {

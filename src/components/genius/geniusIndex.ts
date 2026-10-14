@@ -4,7 +4,8 @@
 // w localStorage przez dobę, żeby nie obciążać serwera Genius przy każdym wejściu.
 // Osobno zapisujemy, czy zawodnik faktycznie zagrał w rozgrywkach (być w składzie to nie to samo co zagrać mecz).
 // Listy zamkniętych edycji (wszystkich poza bieżącą) się nie zmieniają, więc zamiast pytać o nie Genius przy pierwszej
-// wizycie bierzemy je z pliku genius-history.json (loadHistory). Bieżąca edycja zawsze z Genius, na żywo.
+// wizycie bierzemy je z pliku genius-history.json i z bazy panelu administratora (loadHistory). Bieżąca edycja
+// zawsze z Genius, na żywo.
 
 import type { LeagueId } from '../../data/league';
 import { currentGeniusEdition, geniusEditions } from './geniusConfig';
@@ -77,10 +78,11 @@ export const indexedCompetitions = geniusEditions.flatMap((edition) =>
 
 export const competitionInfo = (cid: number) => indexedCompetitions.find((c) => c.cid === cid);
 
-// Plik z listami zamkniętych edycji zbiera strona /__indeks na serwerze deweloperskim (HistoryIndexBuilder) — raz,
-// po dodaniu nowej edycji w konfiguracji klienta. Edycji, której w pliku nie ma (np. plik niezaktualizowany),
-// szukamy w Genius jak dawniej, więc stary plik spowalnia tylko pierwszą wizytę, niczego nie psuje.
-export const HISTORY_FILE = '/genius-history.json';
+// Listy zamkniętych edycji: plik w repozytorium (edycje do 2026) i baza panelu administratora — zakładka „Sezony
+// Genius” zbiera tam edycje, których w pliku nie ma (geniusHistory.ts), po dodaniu nowej edycji w konfiguracji klienta.
+// Edycji, której nie ma w żadnym z nich, szukamy w Genius jak dawniej — spowalnia to tylko pierwszą wizytę.
+const HISTORY_FILE = '/genius-history.json';
+const HISTORY_API = '/api/admin?action=genius-history';
 
 export interface HistoryFile {
   createdAt: string;
@@ -89,34 +91,45 @@ export interface HistoryFile {
   teamNames: Record<string, string>;
 }
 
-const pastCids = new Set(indexedCompetitions.filter((c) => c.editionId !== currentGeniusEdition.id).map((c) => c.cid));
-const kinds: IndexKind[] = ['teams', 'players'];
+export const pastCompetitions = indexedCompetitions.filter((c) => c.editionId !== currentGeniusEdition.id);
+const pastCids = new Set(pastCompetitions.map((c) => c.cid));
+export const indexKinds: IndexKind[] = ['teams', 'players'];
+
+// Oba źródła list (brak któregoś — np. podgląd builda bez serwera — po prostu pomijamy). fresh: z pominięciem
+// pamięci serwera (panel administratora tuż po zapisie).
+export function fetchHistorySources(fresh = false): Promise<HistoryFile[]> {
+  const fromFile = fetch(HISTORY_FILE)
+    .then((response) => (response.ok ? (response.json() as Promise<HistoryFile>) : undefined))
+    .catch(() => undefined);
+  const fromPanel = fetch(fresh ? `${HISTORY_API}&t=${Date.now()}` : HISTORY_API, { cache: fresh ? 'no-store' : 'default' })
+    .then((response) => (response.ok ? (response.json() as Promise<{ history: HistoryFile | null }>) : undefined))
+    .then((data) => data?.history ?? undefined)
+    .catch(() => undefined);
+  return Promise.all([fromFile, fromPanel]).then((files) => files.filter((file): file is HistoryFile => Boolean(file)));
+}
 let history: 'idle' | 'loading' | 'done' = 'idle';
 
 // Wczytuje plik (raz na wizytę, i tylko gdy w indeksie brakuje list zamkniętych edycji). Do jego wczytania
 // GeniusIndexLoader nie pyta Genius o zamknięte edycje (pendingCompetitions).
 export function loadHistory() {
   if (history !== 'idle') return;
-  if ([...pastCids].every((cid) => kinds.every((kind) => `${kind}:${cid}` in index.lists))) {
+  if ([...pastCids].every((cid) => indexKinds.every((kind) => `${kind}:${cid}` in index.lists))) {
     history = 'done';
     return;
   }
   history = 'loading';
-  fetch(HISTORY_FILE)
-    .then((response) => (response.ok ? (response.json() as Promise<HistoryFile>) : undefined))
-    .catch(() => undefined)
-    .then((file) => {
-      for (const [key, ids] of Object.entries(file?.lists ?? {})) {
+  fetchHistorySources().then((files) => {
+    for (const file of files) {
+      for (const [key, ids] of Object.entries(file.lists ?? {})) {
         // Tylko zamknięte edycje — gdyby plik miał listę edycji, która jest teraz bieżąca, bierzemy ją z Genius.
         if (pastCids.has(Number(key.split(':')[1])) && ids.length > 0 && !(key in index.lists)) index.lists[key] = ids;
       }
-      if (file?.teamNames) {
-        index.teamNames ??= {};
-        for (const [id, name] of Object.entries(file.teamNames)) index.teamNames[id] ??= name;
-      }
-      history = 'done';
-      changed();
-    });
+      index.teamNames ??= {};
+      for (const [id, name] of Object.entries(file.teamNames ?? {})) index.teamNames[id] ??= name;
+    }
+    history = 'done';
+    changed();
+  });
 }
 
 export function saveList(kind: IndexKind, cid: number, ids: string[]) {
