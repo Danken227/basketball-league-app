@@ -8,6 +8,7 @@ import { competitionIdByName, geniusSnapshot } from './geniusConfig';
 import { fetchGeniusPage } from './geniusFetch';
 import { placeholderLogo } from './geniusLogo';
 import { loadSnapshot, widgetSnapshotKey } from './geniusSnapshot';
+import { parseScheduleDate } from './geniusUnfinished';
 import { findStream, loadYoutubeVideos, type YoutubeVideo } from './youtubeStreams';
 
 // Pasek meczów w naszym wyglądzie, z danymi z widgetu Genius (ten sam widget co na dalk.pl).
@@ -125,19 +126,6 @@ function parseWidgetDate(dateText: string, timeText?: string): Date {
   let hours = time ? Number(time[1]) % 12 : 0;
   if (time?.[3].toLowerCase() === 'pm') hours += 12;
   return new Date(year, month - 1, day, hours, time ? Number(time[2]) : 0);
-}
-
-const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
-
-// Terminarz Genius podaje termin jako "Oct 4, 2026, 3:15 PM", a po tłumaczeniu (geniusI18n) jako "04.10.2026, 15:15".
-function parseScheduleDate(text: string): Date | undefined {
-  const pl = text.match(/(\d{2})\.(\d{2})\.(\d{4}),? (\d{2}):(\d{2})/);
-  if (pl) return new Date(Number(pl[3]), Number(pl[2]) - 1, Number(pl[1]), Number(pl[4]), Number(pl[5]));
-  const m = text.match(/([A-Za-z]{3})\w* (\d+), (\d{4}),? (\d+):(\d+)\s*(AM|PM)/i);
-  if (!m) return undefined;
-  let hours = Number(m[4]) % 12;
-  if (m[6].toUpperCase() === 'PM') hours += 12;
-  return new Date(Number(m[3]), months.indexOf(m[1].toLowerCase()), Number(m[2]), hours, Number(m[5]));
 }
 
 function readWidget(container: Element | null): WidgetMatch[] | undefined {
