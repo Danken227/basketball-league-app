@@ -5,9 +5,9 @@ import MatchSummary from '../../components/genius/MatchSummary';
 import { findCompetition, geniusSnapshot, isGeniusDomain } from '../../components/genius/geniusConfig';
 import { geniusCacheKey } from '../../components/genius/geniusCache';
 import { fetchGeniusJson, fetchGeniusPage, prefetchGeniusJson } from '../../components/genius/geniusFetch';
-import { inSnapshot } from '../../components/genius/geniusSnapshot';
+import { inSnapshot, loadSnapshot } from '../../components/genius/geniusSnapshot';
 import { parseScheduleDate } from '../../components/genius/geniusUnfinished';
-import { readPlayByPlay, readSummary, type PlayByPlayStats, type SummaryData } from '../../components/genius/matchSummaryData';
+import { pbpStatsPage, readPlayByPlay, readSummary, type PlayByPlayStats, type SummaryData } from '../../components/genius/matchSummaryData';
 import { findStreamVideo, loadYoutubeVideos, youtubeWatchUrl } from '../../components/genius/youtubeStreams';
 import { adminRequest } from '../../data/siteContent';
 
@@ -109,8 +109,15 @@ function GeniusMatchPage() {
     const ready = geniusSnapshot || !isGeniusDomain() ? Promise.resolve(undefined) : fetchGeniusJson(page).catch(() => undefined);
     ready
       .then(() => fetchGeniusPage(pbpPage))
-      .then((root) => {
-        if (active) setPbp({ id, stats: root ? readPlayByPlay(root) : undefined });
+      .then(async (root) => {
+        if (root) return readPlayByPlay(root);
+        // Migawka poprzedniej edycji: zamiast strony zapisu akcji same policzone dane.
+        if (!geniusSnapshot) return undefined;
+        const json = await loadSnapshot(geniusCacheKey({ page: pbpStatsPage(id, cid) }));
+        return json ? ((JSON.parse(json) as PlayByPlayStats | null) ?? undefined) : undefined;
+      })
+      .then((stats) => {
+        if (active) setPbp({ id, stats });
       });
     return () => {
       active = false;

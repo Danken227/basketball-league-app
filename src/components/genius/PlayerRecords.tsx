@@ -186,7 +186,11 @@ function PlayerRecords({ personId, seasonCids, careerCids, seasonName }: { perso
       )}
       {done === cids.length && lines.length === 0 ? (
         <p className="rounded-xl bg-white p-6 text-center text-sm text-slate-500 ring-1 ring-slate-200">
-          {failed > 0 ? 'Genius Sports nie zwrócił meczów zawodnika. Spróbuj odświeżyć stronę za chwilę.' : 'Brak rozegranych meczów.'}
+          {failed > 0
+            ? geniusSnapshot
+              ? 'Meczów tego zawodnika nie ma w wersji demonstracyjnej (zapis danych Genius Sports).'
+              : 'Genius Sports nie zwrócił meczów zawodnika. Spróbuj odświeżyć stronę za chwilę.'
+            : 'Brak rozegranych meczów.'}
         </p>
       ) : (
         lines.length > 0 && (
