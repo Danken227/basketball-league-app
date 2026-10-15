@@ -49,6 +49,7 @@ const client: ClientConfig = {
   },
   links: {
     youtube: 'https://www.youtube.com/@Liga_DALK',
+    facebook: 'https://www.facebook.com/DALKpl',
     // Ten sam plik co przycisk „Zgłoś team” na dalk.pl.
     registrationForm: 'https://dalk.pl/images/PLIKI-DO-POBRANIA/formularz-18-edycja.doc',
   },

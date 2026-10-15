@@ -37,6 +37,8 @@ const navItems: (NavLinkItem | NavGroupItem)[] = [
 ];
 
 const youtubeUrl = client.links.youtube;
+const facebookUrl = client.links.facebook;
+const socialClass = 'grid h-8 w-8 shrink-0 place-items-center rounded-full text-white transition lg:h-9 lg:w-9';
 // Formularz zgłoszenia drużyny z dalk.pl (ten sam plik co przycisk „Zgłoś team” na stronie ligi) — dopóki
 // administrator nie wgra własnego w panelu.
 const defaultRegistrationFormUrl = client.links.registrationForm;
@@ -173,20 +175,35 @@ function Header() {
               </NavLink>
             ),
           )}
-          {/* YouTube i formularz zgłoszenia jako dwa małe przyciski (czerwony i pomarańczowy); w menu mobilnym obok siebie. */}
+          {/* YouTube i Facebook jako okrągłe ikony w kolorach serwisów, obok pomarańczowy przycisk formularza zgłoszenia;
+              w menu mobilnym obok siebie. */}
           <div className="mt-2 flex items-center gap-2 lg:ml-2 lg:mt-0">
             <a
               href={youtubeUrl}
               target="_blank"
               rel="noreferrer"
               aria-label="YouTube"
-              className="flex items-center gap-1.5 whitespace-nowrap rounded-full bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-500 lg:px-4 lg:py-2 lg:text-sm"
+              title="YouTube"
+              className={`${socialClass} bg-red-600 hover:bg-red-500`}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <path d="M23 7.2a3 3 0 0 0-2.1-2.1C19 4.6 12 4.6 12 4.6s-7 0-8.9.5A3 3 0 0 0 1 7.2 31 31 0 0 0 .5 12a31 31 0 0 0 .5 4.8 3 3 0 0 0 2.1 2.1c1.9.5 8.9.5 8.9.5s7 0 8.9-.5a3 3 0 0 0 2.1-2.1 31 31 0 0 0 .5-4.8 31 31 0 0 0-.5-4.8ZM9.7 15.1V8.9l5.8 3.1-5.8 3.1Z" />
               </svg>
-              <span className="lg:hidden xl:inline">YouTube</span>
             </a>
+            {facebookUrl && (
+              <a
+                href={facebookUrl}
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Facebook"
+                title="Facebook"
+                className={`${socialClass} bg-[#1877F2] hover:bg-[#3b8cf5]`}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M13.4 21v-7.7h2.6l.4-3h-3V8.4c0-.9.3-1.5 1.5-1.5h1.6V4.2a21 21 0 0 0-2.3-.1c-2.3 0-3.9 1.4-3.9 4v2.2H7.7v3h2.6V21h3.1Z" />
+                </svg>
+              </a>
+            )}
             {/* Przycisk pobiera formularz zgłoszeniowy klienta (np. plik Word), bez przechodzenia na inną stronę. */}
             {registrationFormUrl && (
               <a
