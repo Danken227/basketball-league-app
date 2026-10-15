@@ -2112,7 +2112,7 @@ function AchievementsAdmin() {
   const draftKey = `${cid}:${storedKey}`;
   const draft = draftState?.key === draftKey ? draftState.draft : draftFrom(stored);
   const setDraft = (change: (draft: AchievementsDraft) => AchievementsDraft) => {
-    setDraftState({ key: draftKey, draft: change(draft) });
+    setDraftState((prev) => ({ key: draftKey, draft: change(prev?.key === draftKey ? prev.draft : draftFrom(stored)) }));
     setSaved(undefined);
   };
 
@@ -2256,11 +2256,13 @@ function AchievementsAdmin() {
       <div className="mb-5 flex flex-col gap-3">
         {individualAwards.map(({ type, label, stat }) => {
           const award = draft.awards[type];
+          // MVP finału — tylko zawodnicy mistrza (złoty medal); bez wybranego mistrza wszyscy.
+          const champion = type === 'finalsMvp' && draft.medals[1] ? teams.filter((team) => team.id === draft.medals[1]) : [];
           return (
-            <div key={type} className="grid items-end gap-2 sm:grid-cols-[12rem_1fr_12rem_auto]">
-              <span className="pb-2 text-sm font-semibold text-slate-900">{label}</span>
+            <div key={type} className={`grid items-center gap-2 ${stat ? 'sm:grid-cols-[12rem_1fr_12rem_auto]' : 'sm:grid-cols-[12rem_1fr]'}`}>
+              <span className="text-sm font-semibold text-slate-900">{label}</span>
               <PlayerSelect
-                teams={teams}
+                teams={champion.length > 0 ? champion : teams}
                 value={award?.playerId ?? ''}
                 fallback={award?.playerName}
                 label={label}
@@ -2271,20 +2273,21 @@ function AchievementsAdmin() {
                   )
                 }
               />
-              <input
-                className={inputClass}
-                placeholder="Wynik (opcjonalnie)"
-                aria-label={`${label} — wynik`}
-                value={award?.value ?? ''}
-                disabled={!award}
-                onChange={(e) => award && setAward(type, { ...award, value: e.target.value })}
-              />
-              {stat ? (
-                <button type="button" className={smallButtonClass} disabled={teams.length === 0} onClick={() => suggest(type)}>
-                  Podpowiedz
-                </button>
-              ) : (
-                <span />
+              {/* Wynik (średnia) tylko przy liderach statystyk — wpisuje go „Podpowiedz”, można poprawić. */}
+              {stat && (
+                <>
+                  <input
+                    className={inputClass}
+                    placeholder="Średnia"
+                    aria-label={`${label} — średnia`}
+                    value={award?.value ?? ''}
+                    disabled={!award}
+                    onChange={(e) => award && setAward(type, { ...award, value: e.target.value })}
+                  />
+                  <button type="button" className={smallButtonClass} disabled={teams.length === 0} onClick={() => suggest(type)}>
+                    Podpowiedz
+                  </button>
+                </>
               )}
             </div>
           );
