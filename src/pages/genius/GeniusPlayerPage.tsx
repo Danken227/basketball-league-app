@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
+import AchievementsStrip from '../../components/common/AchievementsStrip';
+import { playerAchievements } from '../../data/achievements';
+import { useSiteContent } from '../../data/siteContent';
 import { FilterRow, FilterSelect } from '../../components/common/Filters';
 import PhotoDialog from '../../components/common/PhotoDialog';
 import GeniusEmbed, { type StatsMode } from '../../components/genius/GeniusEmbed';
@@ -257,6 +260,7 @@ function PlayedChecker({ personId }: { personId: string }) {
 
 function GeniusPlayerPage() {
   const { id } = useParams();
+  const { achievements } = useSiteContent();
   const [params, setParams] = useSearchParams();
   useGeniusIndex();
   const fromCompetition = findCompetition(Number(params.get('rozgrywki')));
@@ -333,6 +337,7 @@ function GeniusPlayerPage() {
           )}
         </FilterRow>
       </div>
+      <AchievementsStrip title="Osiągnięcia" items={playerAchievements(achievements, id!)} showTeam />
       {/* Indeks list zawodników i sprawdzanie występów działają w tle, po jednym zapytaniu naraz. */}
       {!geniusSnapshot && <GeniusIndexLoader kind="players" />}
       {!geniusSnapshot && <PlayedChecker personId={id!} />}

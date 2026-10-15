@@ -15,6 +15,8 @@ import {
   isGeniusDomain,
 } from '../components/genius/geniusConfig';
 import { checkUnfinishedMatches, type UnfinishedMatch } from '../components/genius/geniusUnfinished';
+import { loadCompetitionRosters, suggestLeader, type RosterPlayer, type RosterTeam } from '../components/genius/geniusRosters';
+import { individualAwards, medalIcons, medalNames, type Achievement, type MedalPlace } from '../data/achievements';
 import { fetchGeniusPage } from '../components/genius/geniusFetch';
 import { isGroupName, isPlayoffPhase, readGroups } from '../components/genius/geniusGroups';
 import { collectHistory, historyCoverage, type EditionCoverage } from '../components/genius/geniusHistory';
@@ -2027,6 +2029,325 @@ function UnfinishedMatchesAdmin({ state }: { state: ReturnType<typeof useUnfinis
   );
 }
 
+// Osiągnięcia (zakładka „Osiągnięcia”): dla wybranych rozgrywek (edycja × liga) medale drużyn, nagrody indywidualne
+// i medale dopisane zawodnikom ręcznie. Drużyny i zawodników (z występami i średnimi) bierzemy z Genius
+// (geniusRosters.ts): medal drużyny trafia do wszystkich jej zawodników, a liderów statystyk podpowiadamy.
+type AwardType = (typeof individualAwards)[number]['type'];
+
+interface AwardDraft {
+  playerId: string;
+  playerName: string;
+  teamId?: string;
+  teamName?: string;
+  value: string;
+}
+
+interface AchievementsDraft {
+  // Miejsce → numer drużyny ("" — brak).
+  medals: Record<MedalPlace, string>;
+  awards: Partial<Record<AwardType, AwardDraft>>;
+  manual: Achievement[];
+}
+
+const medalPlaces: MedalPlace[] = [1, 2, 3];
+
+function draftFrom(items: Achievement[] = []): AchievementsDraft {
+  const teamMedal = (place: MedalPlace) => items.find((item) => item.type === 'medal' && !item.playerId && item.place === place)?.teamId ?? '';
+  return {
+    medals: { 1: teamMedal(1), 2: teamMedal(2), 3: teamMedal(3) },
+    awards: Object.fromEntries(
+      items
+        .filter((item) => item.type !== 'medal' && item.playerId)
+        .map((item) => [item.type, { playerId: item.playerId!, playerName: item.playerName ?? '', teamId: item.teamId, teamName: item.teamName, value: item.value ?? '' }]),
+    ),
+    manual: items.filter((item) => item.type === 'medal' && item.playerId),
+  };
+}
+
+// Wybór zawodnika: zawodnicy z występami pogrupowani po drużynach; zapisany wcześniej, a nieobecny na liście
+// (np. przed wczytaniem drużyn) — jako pierwsza pozycja.
+function PlayerSelect({ teams, value, fallback, onChange, label }: { teams: RosterTeam[]; value: string; fallback?: string; onChange: (player?: { player: RosterPlayer; team: RosterTeam }) => void; label: string }) {
+  const known = teams.some((team) => team.players.some((player) => player.id === value));
+  return (
+    <select
+      className={inputClass}
+      value={value}
+      aria-label={label}
+      onChange={(e) => {
+        const team = teams.find((t) => t.players.some((player) => player.id === e.target.value));
+        onChange(team && { team, player: team.players.find((player) => player.id === e.target.value)! });
+      }}
+    >
+      <option value="">— brak —</option>
+      {value && !known && <option value={value}>{fallback || value}</option>}
+      {teams.map((team) => (
+        <optgroup key={team.id} label={team.name}>
+          {[...team.players]
+            .sort((a, b) => a.name.localeCompare(b.name, 'pl'))
+            .map((player) => (
+              <option key={player.id} value={player.id}>
+                {player.name}
+              </option>
+            ))}
+        </optgroup>
+      ))}
+    </select>
+  );
+}
+
+const statValue = (value: number, unit: string) => `${value.toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} ${unit}`;
+
+function AchievementsAdmin() {
+  const { achievements } = useSiteContent();
+  // Domyślnie ostatnia zakończona edycja (osiągnięcia przyznaje się po sezonie).
+  const [editionId, setEditionId] = useState((geniusEditions[1] ?? geniusEditions[0]).id);
+  const leagues = editionLeagues(editionId);
+  const [leagueChoice, setLeagueChoice] = useState<string>('eks');
+  const league = leagues.find((item) => item.leagueId === leagueChoice) ?? leagues[0];
+  const cid = league?.cid;
+  const stored = cid ? achievements[cid] : undefined;
+  const storedKey = JSON.stringify(stored ?? []);
+
+  const [draftState, setDraftState] = useState<{ key: string; draft: AchievementsDraft }>();
+  const draftKey = `${cid}:${storedKey}`;
+  const draft = draftState?.key === draftKey ? draftState.draft : draftFrom(stored);
+  const setDraft = (change: (draft: AchievementsDraft) => AchievementsDraft) => {
+    setDraftState({ key: draftKey, draft: change(draft) });
+    setSaved(undefined);
+  };
+
+  const [rosters, setRosters] = useState<{ cid: string; teams?: (RosterTeam & { failed?: boolean })[]; error?: string; progress?: string }>();
+  const teams = rosters?.cid === cid ? (rosters.teams ?? []) : [];
+  const [manualPlayer, setManualPlayer] = useState<{ player: RosterPlayer; team: RosterTeam }>();
+  const [manualPlace, setManualPlace] = useState<MedalPlace>(1);
+  const [error, setError] = useState<string>();
+  const [saved, setSaved] = useState<string>();
+  const [busy, setBusy] = useState(false);
+  const canLoad = isGeniusDomain() && !geniusSnapshot;
+
+  // Drużyny i zawodnicy wybranych rozgrywek z Genius (kilkanaście zapytań, ok. 15 s).
+  useEffect(() => {
+    if (!cid || !canLoad) return;
+    let active = true;
+    loadCompetitionRosters(Number(cid), (done, total) => {
+      if (active) setRosters({ cid, progress: `${done} z ${total}` });
+    })
+      .then((loaded) => active && setRosters({ cid, teams: loaded }))
+      .catch((e) => active && setRosters({ cid, error: errorText(e) }));
+    return () => {
+      active = false;
+    };
+  }, [cid, canLoad]);
+
+  const teamById = (id: string) => teams.find((team) => team.id === id);
+  const storedTeamName = (id: string) => stored?.find((item) => item.teamId === id)?.teamName;
+
+  const setAward = (type: AwardType, award?: AwardDraft) =>
+    setDraft((prev) => {
+      const awards = { ...prev.awards };
+      if (award) awards[type] = award;
+      else delete awards[type];
+      return { ...prev, awards };
+    });
+
+  const suggest = (type: AwardType) => {
+    const award = individualAwards.find((item) => item.type === type)!;
+    const leader = award.stat && suggestLeader(teams, award.stat);
+    if (!leader) return;
+    setAward(type, {
+      playerId: leader.player.id,
+      playerName: leader.player.name,
+      teamId: leader.team.id,
+      teamName: leader.team.name,
+      value: statValue(leader.player[award.stat!], award.unit!),
+    });
+  };
+
+  const items = (): Achievement[] => [
+    ...medalPlaces.flatMap((place): Achievement[] => {
+      const teamId = draft.medals[place];
+      if (!teamId) return [];
+      const team = teamById(teamId);
+      const previous = stored?.find((item) => item.type === 'medal' && !item.playerId && item.teamId === teamId);
+      // Bez wczytanych zawodników drużyny (Genius nie oddał statystyk) zostają zapisani wcześniej.
+      const players = team && !('failed' in team && team.failed) ? team.players.map((player) => player.id) : (previous?.players ?? []);
+      return [{ type: 'medal', place, teamId, teamName: team?.name ?? previous?.teamName ?? '', players }];
+    }),
+    ...individualAwards.flatMap(({ type }): Achievement[] => {
+      const award = draft.awards[type];
+      return award?.playerId ? [{ type, ...award, value: award.value.trim() || undefined }] : [];
+    }),
+    ...draft.manual,
+  ];
+
+  const save = async () => {
+    if (!cid) return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      await adminRequest('achievements-save', { cid, items: items() });
+      await reloadSiteContent();
+      setSaved(`Zapisano osiągnięcia: ${league.label}, edycja ${editionName(editionId)}.`);
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const medalTeamPlayers = (teamId: string) => {
+    const team = teamById(teamId);
+    if (team) return 'failed' in team && team.failed ? 'Genius nie oddał zawodników — zostaną zapisani wcześniej wczytani' : `${team.players.length} zawodników z występami dostanie medal`;
+    const previous = stored?.find((item) => item.teamId === teamId && !item.playerId);
+    return previous?.players ? `${previous.players.length} zawodników (zapisanych)` : '';
+  };
+
+  return (
+    <Card title="Osiągnięcia">
+      <p className="mb-4 text-sm text-slate-600">
+        Wybierz rozgrywki i wpisz medale drużyn oraz nagrody indywidualne. Medal drużyny pojawi się na stronie drużyny i u wszystkich jej zawodników, którzy zagrali w
+        tych rozgrywkach (lista z Genius). Najlepszego strzelca, zbierającego i asystującego możesz podpowiedzieć ze statystyk (najwyższa średnia wśród zawodników z co
+        najmniej połową meczów) i poprawić. Medal dla pojedynczego zawodnika (np. gracza spoza listy) dodasz na dole.
+      </p>
+      <div className="mb-5 flex flex-wrap items-end gap-3">
+        <FilterSelect
+          label="Edycja"
+          value={editionId}
+          onChange={setEditionId}
+          options={geniusEditions.map((edition) => ({ value: edition.id, label: edition.name }))}
+        />
+        <FilterSelect label="Liga" value={league?.leagueId ?? ''} onChange={setLeagueChoice} options={leagues.map((item) => ({ value: item.leagueId, label: item.label }))} />
+        <span className="pb-2 text-xs text-slate-500">
+          {!canLoad
+            ? 'Drużyny z Genius wczytują się tylko na stronie ligi.'
+            : rosters?.cid !== cid || rosters.progress !== undefined
+              ? `Wczytywanie drużyn i zawodników z Genius…${rosters?.cid === cid && rosters.progress ? ` (${rosters.progress})` : ''}`
+              : rosters.error
+                ? rosters.error
+                : `Wczytano ${teams.length} drużyn.`}
+        </span>
+      </div>
+
+      <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Medale drużyn</h3>
+      <div className="mb-5 grid gap-3 sm:grid-cols-3">
+        {medalPlaces.map((place) => {
+          const teamId = draft.medals[place];
+          return (
+            <Field key={place} label={`${medalIcons[place]} ${medalNames[place]}`} hint={teamId ? medalTeamPlayers(teamId) : undefined}>
+              <select
+                className={inputClass}
+                value={teamId}
+                onChange={(e) => setDraft((prev) => ({ ...prev, medals: { ...prev.medals, [place]: e.target.value } }))}
+              >
+                <option value="">— brak —</option>
+                {teamId && !teamById(teamId) && <option value={teamId}>{storedTeamName(teamId) ?? teamId}</option>}
+                {teams.map((team) => (
+                  <option key={team.id} value={team.id}>
+                    {team.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          );
+        })}
+      </div>
+
+      <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Nagrody indywidualne</h3>
+      <div className="mb-5 flex flex-col gap-3">
+        {individualAwards.map(({ type, label, stat }) => {
+          const award = draft.awards[type];
+          return (
+            <div key={type} className="grid items-end gap-2 sm:grid-cols-[12rem_1fr_12rem_auto]">
+              <span className="pb-2 text-sm font-semibold text-slate-900">{label}</span>
+              <PlayerSelect
+                teams={teams}
+                value={award?.playerId ?? ''}
+                fallback={award?.playerName}
+                label={label}
+                onChange={(picked) =>
+                  setAward(
+                    type,
+                    picked && { playerId: picked.player.id, playerName: picked.player.name, teamId: picked.team.id, teamName: picked.team.name, value: award?.value ?? '' },
+                  )
+                }
+              />
+              <input
+                className={inputClass}
+                placeholder="Wynik (opcjonalnie)"
+                aria-label={`${label} — wynik`}
+                value={award?.value ?? ''}
+                disabled={!award}
+                onChange={(e) => award && setAward(type, { ...award, value: e.target.value })}
+              />
+              {stat ? (
+                <button type="button" className={smallButtonClass} disabled={teams.length === 0} onClick={() => suggest(type)}>
+                  Podpowiedz
+                </button>
+              ) : (
+                <span />
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Medale dodane zawodnikom ręcznie</h3>
+      {draft.manual.length > 0 && (
+        <ul className="mb-3 text-sm">
+          {draft.manual.map((item, index) => (
+            <li key={`${item.playerId}-${item.place}`} className="flex items-center justify-between gap-3 border-b border-slate-100 py-2 last:border-0">
+              <span>
+                {medalIcons[item.place ?? 1]} <span className="font-semibold text-slate-900">{item.playerName}</span>
+                {item.teamName && <span className="text-slate-500"> · {item.teamName}</span>}
+              </span>
+              <button
+                type="button"
+                className={dangerButtonClass}
+                onClick={() => setDraft((prev) => ({ ...prev, manual: prev.manual.filter((_, i) => i !== index) }))}
+              >
+                Usuń
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="mb-5 grid items-end gap-2 sm:grid-cols-[1fr_12rem_auto]">
+        <PlayerSelect teams={teams} value={manualPlayer?.player.id ?? ''} label="Zawodnik" onChange={setManualPlayer} />
+        <select className={inputClass} value={manualPlace} aria-label="Medal" onChange={(e) => setManualPlace(Number(e.target.value) as MedalPlace)}>
+          {medalPlaces.map((place) => (
+            <option key={place} value={place}>
+              {medalNames[place]}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          className={smallButtonClass}
+          disabled={!manualPlayer}
+          onClick={() => {
+            if (!manualPlayer) return;
+            const { player, team } = manualPlayer;
+            setDraft((prev) => ({
+              ...prev,
+              manual: [...prev.manual, { type: 'medal', place: manualPlace, playerId: player.id, playerName: player.name, teamId: team.id, teamName: team.name }],
+            }));
+            setManualPlayer(undefined);
+          }}
+        >
+          Dodaj medal
+        </button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="button" className={buttonClass} disabled={busy || !cid} onClick={save}>
+          {busy ? 'Zapisywanie…' : 'Zapisz osiągnięcia'}
+        </button>
+        <Message error={error} success={saved} />
+      </div>
+    </Card>
+  );
+}
+
 const tabs = [
   { id: 'aktualnosci', label: 'Aktualności' },
   { id: 'mecze', label: 'Niezamknięte mecze' },
@@ -2034,6 +2355,7 @@ const tabs = [
   { id: 'rekordy', label: 'Rekordy' },
   { id: 'strefy', label: 'Awanse/spadki' },
   { id: 'playoff', label: 'Play-off' },
+  { id: 'osiagniecia', label: 'Osiągnięcia' },
   { id: 'formularz', label: 'Formularz zgłoszenia' },
   { id: 'sezony', label: 'Sezony Genius' },
   { id: 'odwiedziny', label: 'Odwiedziny' },
@@ -2107,6 +2429,8 @@ function AdminPage() {
             <ZonesAdmin />
           ) : tab === 'playoff' ? (
             <PlayoffAdmin />
+          ) : tab === 'osiagniecia' ? (
+            <AchievementsAdmin />
           ) : tab === 'formularz' ? (
             <RegistrationFormAdmin />
           ) : tab === 'sezony' ? (
