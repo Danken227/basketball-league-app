@@ -24,6 +24,31 @@ const TEAM_NAMES_KEY = `${client.storagePrefix}:team-names`;
 const ZONES_KEY = `${client.storagePrefix}:zones`;
 const PLAYOFFS_KEY = `${client.storagePrefix}:playoffs`;
 const PLAYOFF_SIZES = [2, 4, 8, 16, 32];
+// Osiągnięcia (numer rozgrywek → lista: medale drużyn z numerami zawodników, nagrody indywidualne). W treści
+// wczytywanej przez każdego odwiedzającego, więc zawodnicy medalistów to same numery.
+const ACHIEVEMENTS_KEY = `${client.storagePrefix}:achievements`;
+const ACHIEVEMENT_TYPES = ['medal', 'mvp', 'finalsMvp', 'topScorer', 'topRebounder', 'topAssists'];
+const MAX_ACHIEVEMENTS_LENGTH = 400000;
+const digits = (value) => String(value ?? '').replace(/\D/g, '').slice(0, 15);
+
+// Osiągnięcie z przeglądarki administratora: tylko znane pola. Medal ma miejsce i drużynę albo zawodnika (wpis
+// ręczny), nagroda — zawodnika.
+function achievement(input) {
+  const type = ACHIEVEMENT_TYPES.includes(input?.type) ? input.type : undefined;
+  if (!type) return undefined;
+  const place = [1, 2, 3].includes(input?.place) ? input.place : undefined;
+  const teamId = digits(input?.teamId);
+  const playerId = digits(input?.playerId);
+  if (type === 'medal' ? !place || !(teamId || playerId) : !playerId) return undefined;
+  const players = Array.isArray(input?.players) ? [...new Set(input.players.map(digits).filter(Boolean))].slice(0, 60) : [];
+  return {
+    type,
+    ...(place && type === 'medal' ? { place } : {}),
+    ...(teamId ? { teamId, teamName: text(input?.teamName, 120) } : {}),
+    ...(playerId ? { playerId, playerName: text(input?.playerName, 100) } : {}),
+    ...(type === 'medal' && !playerId && players.length > 0 ? { players } : {}),
+  };
+}
 
 const count = (value, max) => Math.max(0, Math.min(max, Math.floor(Number(value) || 0)));
 
@@ -296,16 +321,24 @@ export async function handleAdmin({ method, action, query = {}, body = {}, cooki
 
   if (action === 'content') {
     if (!store) return { status: 200, body: { news: [], teamNames: [] } };
-    const [news, teamNames, registrationForm, zones, playoffs] = await Promise.all([
+    const [news, teamNames, registrationForm, zones, playoffs, achievements] = await Promise.all([
       store.get(NEWS_KEY),
       store.get(TEAM_NAMES_KEY),
       store.get(FORM_META_KEY),
       store.get(ZONES_KEY),
       store.get(PLAYOFFS_KEY),
+      store.get(ACHIEVEMENTS_KEY),
     ]);
     return {
       status: 200,
-      body: { news: news ?? [], teamNames: teamNames ?? [], registrationForm: registrationForm ?? null, zones: zones ?? {}, playoffs: playoffs ?? {} },
+      body: {
+        news: news ?? [],
+        teamNames: teamNames ?? [],
+        registrationForm: registrationForm ?? null,
+        zones: zones ?? {},
+        playoffs: playoffs ?? {},
+        achievements: achievements ?? {},
+      },
     };
   }
 
@@ -482,6 +515,19 @@ export async function handleAdmin({ method, action, query = {}, body = {}, cooki
     delete playoffs[String(body.cid ?? '')];
     await store.set(PLAYOFFS_KEY, playoffs);
     return { status: 200, body: { ok: true } };
+  }
+
+  // Osiągnięcia jednych rozgrywek (cała lista z formularza); pusta lista usuwa wpis.
+  if (action === 'achievements-save') {
+    const cid = String(body.cid ?? '');
+    if (!/^\d+$/.test(cid)) return fail(400, 'Nieprawidłowe rozgrywki.');
+    const items = (Array.isArray(body.items) ? body.items : []).slice(0, 40).map(achievement).filter(Boolean);
+    const achievements = (await store.get(ACHIEVEMENTS_KEY)) ?? {};
+    if (items.length > 0) achievements[cid] = items;
+    else delete achievements[cid];
+    if (JSON.stringify(achievements).length > MAX_ACHIEVEMENTS_LENGTH) return fail(400, 'Za dużo danych osiągnięć.');
+    await store.set(ACHIEVEMENTS_KEY, achievements);
+    return { status: 200, body: { achievements } };
   }
 
   if (action === 'records-save') {

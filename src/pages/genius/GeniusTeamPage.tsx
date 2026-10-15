@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
+import AchievementsStrip from '../../components/common/AchievementsStrip';
 import { FilterRow, FilterSelect } from '../../components/common/Filters';
 import GeniusEmbed from '../../components/genius/GeniusEmbed';
 import GeniusIndexLoader from '../../components/genius/GeniusIndexLoader';
@@ -8,6 +9,8 @@ import { currentGeniusEdition, findCompetition, geniusEditionById, geniusLeagueN
 import { competitionInfo, competitionsWith, pendingCompetitions, readTeamLinks, saveTeamNames, teamName } from '../../components/genius/geniusIndex';
 import { placeholderLogo } from '../../components/genius/geniusLogo';
 import { linkTeamSummary, readTeamSchedule, type TeamScheduleMatch } from '../../components/genius/geniusTeamSummary';
+import { teamAchievements } from '../../data/achievements';
+import { useSiteContent } from '../../data/siteContent';
 import { useGeniusIndex } from '../../hooks/useGeniusIndex';
 
 // Strona drużyny z Genius pod naszym adresem (/druzyny/91563?rozgrywki=49970&sekcja=roster).
@@ -16,6 +19,7 @@ import { useGeniusIndex } from '../../hooks/useGeniusIndex';
 function GeniusTeamPage() {
   const { id } = useParams();
   const [params, setParams] = useSearchParams();
+  const { achievements } = useSiteContent();
   useGeniusIndex();
 
   const teamCompetitions = competitionsWith('teams', id!);
@@ -105,6 +109,7 @@ function GeniusTeamPage() {
           {listsLeft > 0 && <p className="ml-auto text-xs text-slate-500">Sprawdzam, w których edycjach drużyna grała… (listy rozgrywek: zostało {listsLeft})</p>}
         </FilterRow>
       </div>
+      <AchievementsStrip title="Medale drużyny" items={teamAchievements(achievements, id!)} />
       <div ref={embedRef} className="mt-6">
         <GeniusEmbed key={page} page={page} showTitle onContent={onContent} />
       </div>
