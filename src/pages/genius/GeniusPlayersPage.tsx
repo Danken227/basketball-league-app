@@ -18,6 +18,10 @@ import { useGeniusFilters } from '../../hooks/useGeniusFilters';
 import { DEFAULT_LETTER, letterOptions } from '../../utils/letters';
 
 // Filtry list zawodników wspólne dla obu zakładek: fraza z wyszukiwarki i pierwsza litera nazwiska.
+// Listy zawodników dzielimy na strony (pełna baza ligi to ponad 6 tys. nazwisk) — wyszukiwarka i litera
+// przeszukują wszystkich, a na stronie widać tylko tylu.
+const PLAYERS_PAGE_SIZE = 50;
+
 interface ListFilters {
   query: string;
   setQuery: (value: string) => void;
@@ -71,6 +75,7 @@ function CompetitionPlayers({ editionId, leagueIds, query, letter }: { editionId
             page={`/competition/${cid}/players`}
             showSubMenus={false}
             textFilter={{ selector: '.playerblock', query, letter }}
+            pageSize={PLAYERS_PAGE_SIZE}
             onContent={() => showNext(index)}
           />
         </section>
@@ -134,7 +139,7 @@ function HistoricPlayers({ query, setQuery, letter, setLetter }: ListFilters) {
       {editionFilter === 'all' ? (
         <div className="mt-6">
           {/* Pełna baza zawodników ligi z Genius (kilka tysięcy nazwisk, ładuje się dłużej). */}
-          <GeniusEmbed page="/players?all=1" showSubMenus={false} textFilter={{ selector: '.playerblock', query, letter }} />
+          <GeniusEmbed page="/players?all=1" showSubMenus={false} textFilter={{ selector: '.playerblock', query, letter }} pageSize={PLAYERS_PAGE_SIZE} />
         </div>
       ) : (
         <CompetitionPlayers editionId={editionFilter} leagueIds={leagues.map((l) => l.id)} query={query} letter={letter} />
