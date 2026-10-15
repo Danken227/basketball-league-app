@@ -1893,7 +1893,9 @@ function GeniusSeasonsAdmin() {
               {edition.missing.length === 0 ? (
                 <span className="text-emerald-700">— w komplecie</span>
               ) : (
-                <span className="text-amber-700">— brakuje list ({edition.missing.length} rozgrywek)</span>
+                <span className="text-amber-700">
+                  — brakuje list z {edition.missing.length} {edition.missing.length === 1 ? 'ligi' : 'lig'}
+                </span>
               )}
             </li>
           ))}
@@ -1905,7 +1907,7 @@ function GeniusSeasonsAdmin() {
         </button>
         {progress && (
           <span className="text-sm text-slate-600">
-            Zbieranie list: {progress.done} z {progress.total}…
+            Zbieranie list: {progress.done} z {progress.total}… (z każdych rozgrywek 3 listy: drużyny, zawodnicy i kto zagrał)
           </span>
         )}
         {coverage && missing.length === 0 && !progress && <span className="text-sm text-slate-500">Wszystkie zakończone sezony są w komplecie.</span>}
