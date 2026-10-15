@@ -9,7 +9,17 @@ const groupA = [
   '36964', '36965', '36966', '38003', '38004', '38006', '38007', '39634', '39635', '39636', '39639', '39640', '40640', '40642',
   '40666', '40667', '40710', '40713', '42323', '42324', '42326', '42329', '42459', '42460', '42461', '48291', '48292', '48293',
   '48296', '48375', '48376', '49972', '49974', '49982', '50006', '50016',
+  // Starsze edycje (2017/18–2023).
+  '18918', '19455', '20377', '22702', '22706', '23646', '23647', '25881', '25882', '27314', '27318', '28512', '28513', '31132',
+  '31134', '33156', '33157', '34686', '34687', '35529', '35530',
 ];
+// Starsze rozgrywki, w których pierwsza faza ma inną nazwę (Genius domyślnie pokazuje w nich inną fazę).
+const otherFirstPhases: Record<string, string> = {
+  '18777': 'Sezon zasadniczy',
+  '20333': 'Group A',
+  '22691': 'Faza Zasadnicza',
+  '33155': 'Ekstraliga 2022',
+};
 
 const client: ClientConfig = {
   site,
@@ -32,6 +42,19 @@ const client: ClientConfig = {
       { id: '2024-25', name: '2024/25', competitions: { eks: 39633, '1': 39634, '2': 39635, '3': 39636 } },
       { id: '2024', name: '2024', competitions: { eks: 38002, '1': 38003, '2': 38004, '3': 38007 } },
       { id: '2023-24', name: '2023/24', competitions: { eks: 36963, '1': 36964, '2': 36965, '3': 36966 } },
+      // Starsze edycje (3. liga jest od 2023/24). W 2018 Genius ma po dwie rozgrywki na ligę, z których jedna jest
+      // pusta (20322, 20323, 20324) — tu te z meczami. Wiosna 2020 przerwana (pandemia).
+      { id: '2023', name: '2023', competitions: { eks: 35528, '1': 35529, '2': 35530 } },
+      { id: '2022-23', name: '2022/23', competitions: { eks: 34685, '1': 34686, '2': 34687 } },
+      { id: '2022', name: '2022', competitions: { eks: 33155, '1': 33156, '2': 33157 } },
+      { id: '2021-22', name: '2021/22', competitions: { eks: 31131, '1': 31132, '2': 31134 } },
+      { id: '2020-21', name: '2020/21', competitions: { eks: 28505, '1': 28512, '2': 28513 } },
+      { id: '2020', name: '2020', competitions: { eks: 27313, '1': 27314, '2': 27318 } },
+      { id: '2019-20', name: '2019/20', competitions: { eks: 25880, '1': 25881, '2': 25882 } },
+      { id: '2019', name: '2019', competitions: { eks: 23644, '1': 23646, '2': 23647 } },
+      { id: '2018-19', name: '2018/19', competitions: { eks: 22691, '1': 22702, '2': 22706 } },
+      { id: '2018', name: '2018', competitions: { eks: 20378, '1': 20333, '2': 20377 } },
+      { id: '2017-18', name: '2017/18', competitions: { eks: 18777, '1': 18918, '2': 19455 } },
     ],
     // Numery z listy rozgrywek DALK w Genius (wybór rozgrywek: parametr _cc=1). W edycji 2023/24 juniorzy grali
     // we wspólnych rozgrywkach bez podziału na kategorie, a U13 jest od 2025.
@@ -45,7 +68,7 @@ const client: ClientConfig = {
     },
     // Ten sam widget co na dalk.pl, obejmuje wszystkie ligi.
     resultsWidgets: { all: 'L65TRHI9J4MAGUYV9HYOQO094QLVMS' },
-    firstGroups: { ...Object.fromEntries(groupA.map((cid) => [cid, 'Grupa A'])), '48295': 'GRUPA A' },
+    firstGroups: { ...Object.fromEntries(groupA.map((cid) => [cid, 'Grupa A'])), '48295': 'GRUPA A', ...otherFirstPhases },
   },
   links: {
     youtube: 'https://www.youtube.com/@Liga_DALK',
