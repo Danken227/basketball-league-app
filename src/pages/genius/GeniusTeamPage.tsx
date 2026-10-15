@@ -9,8 +9,7 @@ import { currentGeniusEdition, findCompetition, geniusEditionById, geniusLeagueN
 import { competitionInfo, competitionsWith, pendingCompetitions, readTeamLinks, saveTeamNames, teamName } from '../../components/genius/geniusIndex';
 import { placeholderLogo } from '../../components/genius/geniusLogo';
 import { linkTeamSummary, readTeamSchedule, type TeamScheduleMatch } from '../../components/genius/geniusTeamSummary';
-import { teamAchievements } from '../../data/achievements';
-import { useSiteContent } from '../../data/siteContent';
+import { teamAchievements, useAchievements } from '../../data/achievements';
 import { useGeniusIndex } from '../../hooks/useGeniusIndex';
 
 // Strona drużyny z Genius pod naszym adresem (/druzyny/91563?rozgrywki=49970&sekcja=roster).
@@ -19,7 +18,7 @@ import { useGeniusIndex } from '../../hooks/useGeniusIndex';
 function GeniusTeamPage() {
   const { id } = useParams();
   const [params, setParams] = useSearchParams();
-  const { achievements } = useSiteContent();
+  const achievements = useAchievements();
   useGeniusIndex();
 
   const teamCompetitions = competitionsWith('teams', id!);

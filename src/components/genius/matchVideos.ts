@@ -1,7 +1,7 @@
 // Nagrania meczów na YouTube zapisane w bazie panelu (numer meczu → numer filmu). YouTube bez klucza API podaje
 // tylko 15 najnowszych filmów kanału, a liga tworzy transmisje z wyprzedzeniem (np. w środę na mecze najbliższych
 // weekendów), więc nagranie meczu wypada z tej listy po kilku dniach. Panel administratora przy każdym sprawdzeniu
-// terminarzy (zaraz po zalogowaniu i co 5 minut) dopasowuje filmy do rozegranych i najbliższych meczów i zapisuje
+// terminarzy (przy wejściu do panelu i co godzinę, gdy jest otwarty) dopasowuje filmy do rozegranych i najbliższych meczów i zapisuje
 // nowe — wtedy zostają przy meczu na stałe (film transmisji staje się jej nagraniem). Zakładka „Transmisje”
 // pozwala je poprawić ręcznie.
 import { adminRequest } from '../../data/siteContent';

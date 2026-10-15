@@ -24,16 +24,27 @@ const TEAM_NAMES_KEY = `${client.storagePrefix}:team-names`;
 const ZONES_KEY = `${client.storagePrefix}:zones`;
 const PLAYOFFS_KEY = `${client.storagePrefix}:playoffs`;
 const PLAYOFF_SIZES = [2, 4, 8, 16, 32];
-// Osiągnięcia (numer rozgrywek → lista: medale drużyn z numerami zawodników, nagrody indywidualne). W treści
-// wczytywanej przez każdego odwiedzającego, więc zawodnicy medalistów to same numery.
-const ACHIEVEMENTS_KEY = `${client.storagePrefix}:achievements`;
+// Osiągnięcia (numer rozgrywek → lista: medale drużyn z numerami zawodników, nagrody indywidualne): osobny wpis na
+// każdą edycję (lista edycji z wpisami w ACHIEVEMENT_EDITIONS_KEY), żeby żaden wpis nie dochodził do limitu jednego
+// zapytania Upstash (1 MB). Pierwsza wersja trzymała wszystko w jednym wpisie (ACHIEVEMENTS_LEGACY_KEY) — czytamy go
+// dalej, a rozgrywki przenosimy do wpisu edycji przy ich zapisie.
+const ACHIEVEMENTS_LEGACY_KEY = `${client.storagePrefix}:achievements`;
+const ACHIEVEMENT_EDITIONS_KEY = `${client.storagePrefix}:achievement-editions`;
+const achievementsKey = (editionId) => `${client.storagePrefix}:achievements:${editionId}`;
 const ACHIEVEMENT_TYPES = ['medal', 'mvp', 'finalsMvp', 'topScorer', 'topRebounder', 'topAssists'];
-const MAX_ACHIEVEMENTS_LENGTH = 400000;
+const MAX_ACHIEVEMENTS_LENGTH = 900000;
 // Nagrania meczów na YouTube (numer meczu Genius → numer filmu): dopasowane w panelu, póki film jest na liście
 // kanału (YouTube podaje tylko 15 najnowszych), albo wklejone ręcznie. Strona meczu czyta je przez action=match-videos.
 const MATCH_VIDEOS_KEY = `${client.storagePrefix}:match-videos`;
 const YOUTUBE_ID = /^[A-Za-z0-9_-]{11}$/;
 const digits = (value) => String(value ?? '').replace(/\D/g, '').slice(0, 15);
+
+// Wszystkie osiągnięcia: stary wspólny wpis i wpisy edycji (wpis edycji ma pierwszeństwo).
+async function readAchievements(store) {
+  const [legacy, editions] = await Promise.all([store.get(ACHIEVEMENTS_LEGACY_KEY), store.get(ACHIEVEMENT_EDITIONS_KEY)]);
+  const perEdition = await Promise.all((editions ?? []).map((editionId) => store.get(achievementsKey(editionId))));
+  return Object.assign({}, legacy ?? {}, ...perEdition.map((entry) => entry ?? {}));
+}
 
 // Osiągnięcie z przeglądarki administratora: tylko znane pola. Medal ma miejsce i drużynę albo zawodnika (wpis
 // ręczny), nagroda — zawodnika.
@@ -294,6 +305,12 @@ export async function handleAdmin({ method, action, query = {}, body = {}, cooki
     return { status: 200, body: { records: records ?? null } };
   }
 
+  // Osiągnięcia (strony zawodnika i drużyny, panel) — poza treścią wczytywaną przy każdej wizycie, bo rosną z każdą
+  // edycją. Odpowiedź leży chwilę w pamięci serwera Vercela: po zapisie strona zobaczy zmiany najpóźniej po 5 minutach.
+  if (action === 'achievements') {
+    return { status: 200, body: { achievements: store ? await readAchievements(store) : {} }, cacheControl: 'public, max-age=0, s-maxage=300' };
+  }
+
   // Nagrania meczów — zmieniają się rzadko, więc odpowiedź leży chwilę w pamięci serwera Vercela.
   if (action === 'match-videos') {
     const videos = store ? await store.get(MATCH_VIDEOS_KEY) : undefined;
@@ -331,13 +348,12 @@ export async function handleAdmin({ method, action, query = {}, body = {}, cooki
 
   if (action === 'content') {
     if (!store) return { status: 200, body: { news: [], teamNames: [] } };
-    const [news, teamNames, registrationForm, zones, playoffs, achievements] = await Promise.all([
+    const [news, teamNames, registrationForm, zones, playoffs] = await Promise.all([
       store.get(NEWS_KEY),
       store.get(TEAM_NAMES_KEY),
       store.get(FORM_META_KEY),
       store.get(ZONES_KEY),
       store.get(PLAYOFFS_KEY),
-      store.get(ACHIEVEMENTS_KEY),
     ]);
     return {
       status: 200,
@@ -347,7 +363,6 @@ export async function handleAdmin({ method, action, query = {}, body = {}, cooki
         registrationForm: registrationForm ?? null,
         zones: zones ?? {},
         playoffs: playoffs ?? {},
-        achievements: achievements ?? {},
       },
     };
   }
@@ -545,14 +560,24 @@ export async function handleAdmin({ method, action, query = {}, body = {}, cooki
   // Osiągnięcia jednych rozgrywek (cała lista z formularza); pusta lista usuwa wpis.
   if (action === 'achievements-save') {
     const cid = String(body.cid ?? '');
+    const editionId = String(body.editionId ?? '');
     if (!/^\d+$/.test(cid)) return fail(400, 'Nieprawidłowe rozgrywki.');
+    if (!/^[\d-]{4,10}$/.test(editionId)) return fail(400, 'Nieprawidłowa edycja.');
     const items = (Array.isArray(body.items) ? body.items : []).slice(0, 40).map(achievement).filter(Boolean);
-    const achievements = (await store.get(ACHIEVEMENTS_KEY)) ?? {};
-    if (items.length > 0) achievements[cid] = items;
-    else delete achievements[cid];
-    if (JSON.stringify(achievements).length > MAX_ACHIEVEMENTS_LENGTH) return fail(400, 'Za dużo danych osiągnięć.');
-    await store.set(ACHIEVEMENTS_KEY, achievements);
-    return { status: 200, body: { achievements } };
+    const edition = (await store.get(achievementsKey(editionId))) ?? {};
+    if (items.length > 0) edition[cid] = items;
+    else delete edition[cid];
+    if (JSON.stringify(edition).length > MAX_ACHIEVEMENTS_LENGTH) return fail(400, 'Za dużo danych osiągnięć w tej edycji.');
+    await store.set(achievementsKey(editionId), edition);
+    const editions = (await store.get(ACHIEVEMENT_EDITIONS_KEY)) ?? [];
+    if (!editions.includes(editionId)) await store.set(ACHIEVEMENT_EDITIONS_KEY, [...editions, editionId]);
+    // Rozgrywki ze starego wspólnego wpisu są już we wpisie edycji.
+    const legacy = await store.get(ACHIEVEMENTS_LEGACY_KEY);
+    if (legacy && cid in legacy) {
+      delete legacy[cid];
+      await store.set(ACHIEVEMENTS_LEGACY_KEY, Object.keys(legacy).length > 0 ? legacy : null);
+    }
+    return { status: 200, body: { achievements: await readAchievements(store) } };
   }
 
   if (action === 'records-save') {

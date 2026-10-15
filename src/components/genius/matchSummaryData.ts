@@ -101,6 +101,11 @@ export function readSummary(root: HTMLElement): SummaryData | undefined {
   return { teams, leaders, compare, date: clean(header.querySelector('.match-time span')?.textContent) || undefined };
 }
 
+// Adres, pod którym migawka (wersja demonstracyjna) trzyma dane policzone z zapisu akcji meczu poprzedniej edycji
+// (samej strony zapisu akcji w migawce dla niej nie ma — SnapshotCrawler).
+export const pbpStatsPage = (matchId: string | undefined, cid: string | null) =>
+  cid ? `/competition/${cid}/match/${matchId}/pbp-stats` : `/match/${matchId}/pbp-stats`;
+
 export interface PlayByPlayStats {
   // Punkty w kolejnych kwartach (i dogrywkach): [gospodarz, gość].
   periods: [number, number][];

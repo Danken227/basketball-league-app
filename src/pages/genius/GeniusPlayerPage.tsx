@@ -1,24 +1,24 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import AchievementsStrip from '../../components/common/AchievementsStrip';
-import { playerAchievements } from '../../data/achievements';
-import { useSiteContent } from '../../data/siteContent';
+import { playerAchievements, useAchievements } from '../../data/achievements';
 import { FilterRow, FilterSelect } from '../../components/common/Filters';
 import PhotoDialog from '../../components/common/PhotoDialog';
 import GeniusEmbed, { type StatsMode } from '../../components/genius/GeniusEmbed';
 import GeniusIndexLoader from '../../components/genius/GeniusIndexLoader';
 import { useForegroundReady } from '../../components/genius/geniusPriority';
 import { currentGeniusEdition, findCompetition, geniusEditionById, geniusEditions, geniusSnapshot } from '../../components/genius/geniusConfig';
-import { awaitingHistory, competitionsWith, pendingCompetitions, personTeams, playedIn, savePersonTeams, savePlayed, type PersonTeam } from '../../components/genius/geniusIndex';
+import { awaitingHistory, competitionsWith, indexedCompetitions, pendingCompetitions, personTeams, playedIn, savePersonTeams, savePlayed, type PersonTeam } from '../../components/genius/geniusIndex';
 import { leagues, type League } from '../../data/league';
 import { useGeniusIndex } from '../../hooks/useGeniusIndex';
 import StatsModeToggle from '../../components/genius/StatsModeToggle';
+import PlayerRecords from '../../components/genius/PlayerRecords';
 
 // Strona zawodnika z danych Genius. Genius pokazuje statystyki zawodnika zawsze w kontekście jednych
 // rozgrywek, a w DALK zawodnik może grać w kilku drużynach na różnych poziomach (np. w 1. i 2. Lidze).
 // Dlatego dla wybranej edycji pytamy o każdą ligę osobno i pokazujemy te, w których zawodnik wystąpił.
 
-type Section = 'statistics' | 'gamelog';
+type Section = 'statistics' | 'gamelog' | 'records';
 
 interface BlockInfo {
   empty: boolean;
@@ -40,6 +40,7 @@ const editionOptions = geniusEditions.map((e) => ({
 const sections: { id: Section; label: string }[] = [
   { id: 'statistics', label: 'Statystyki' },
   { id: 'gamelog', label: 'Mecze' },
+  { id: 'records', label: 'Rekordy' },
 ];
 
 // Odczytuje z treści Genius: nazwisko, czy są jakiekolwiek występy i (w statystykach) drużynę z kolumny "Team".
@@ -68,6 +69,13 @@ function readBlock(root: HTMLElement, section: Section): BlockInfo {
 // Genius podaje zdjęcie w kilku rozmiarach, rozróżnionych końcówką nazwy pliku: T1 (75 px), S1 (200 px, miniatura
 // na stronie zawodnika), M1 (400 px), L1 (600 px). Do powiększenia bierzemy największe.
 const largePhoto = (src: string) => src.replace(/[TSM]1(\.\w+)$/, 'L1$1');
+
+// Rozgrywki, w których zawodnik grał (wszystkie edycje): potwierdzone występy albo jeszcze niesprawdzone, a zawodnik
+// jest na liście zawodników — do rekordów całej kariery.
+const careerCompetitions = (personId: string) => {
+  const listed = new Set(competitionsWith('players', personId));
+  return indexedCompetitions.filter(({ cid }) => playedIn(personId, cid) ?? listed.has(cid)).map(({ cid }) => cid);
+};
 
 function PlayerBlocks({ personId, editionId, section }: { personId: string; editionId: string; section: Section }) {
   const edition = geniusEditionById.get(editionId)!;
@@ -144,11 +152,28 @@ function PlayerBlocks({ personId, editionId, section }: { personId: string; edit
         </p>
       )}
 
-      <div className="mt-6 flex flex-col gap-6">
+      {/* Rekordy liczymy z zakładki „Mecze” — bloki lig wczytują ją w tle (nazwisko, zdjęcie, występy w nagłówku). */}
+      <div className={`mt-6 flex flex-col gap-6 ${section === 'records' ? 'hidden' : ''}`}>
         {blocks.map(({ league, cid }) => (
-          <LeagueBlock key={cid} league={league} cid={cid} personId={personId} section={section} info={info[cid]} onInfo={(i) => report(cid, i)} />
+          <LeagueBlock
+            key={cid}
+            league={league}
+            cid={cid}
+            personId={personId}
+            section={section === 'records' ? 'gamelog' : section}
+            info={info[cid]}
+            onInfo={(i) => report(cid, i)}
+          />
         ))}
       </div>
+      {section === 'records' && loaded === blocks.length && played.length > 0 && (
+        <PlayerRecords
+          personId={personId}
+          seasonName={edition.name}
+          seasonCids={played.map(({ cid }) => cid)}
+          careerCids={[...new Set([...played.map(({ cid }) => cid), ...careerCompetitions(personId)])]}
+        />
+      )}
     </div>
   );
 }
@@ -260,13 +285,13 @@ function PlayedChecker({ personId }: { personId: string }) {
 
 function GeniusPlayerPage() {
   const { id } = useParams();
-  const { achievements } = useSiteContent();
+  const achievements = useAchievements();
   const [params, setParams] = useSearchParams();
   useGeniusIndex();
   const fromCompetition = findCompetition(Number(params.get('rozgrywki')));
   const requested = params.get('edycja');
   const editionId = requested && geniusEditionById.has(requested) ? requested : (fromCompetition?.editionId ?? currentGeniusEdition.id);
-  const section: Section = params.get('sekcja') === 'gamelog' ? 'gamelog' : 'statistics';
+  const section: Section = sections.find((s) => s.id === params.get('sekcja'))?.id ?? 'statistics';
 
   // Edycje, w których zawodnik zagrał choć jeden mecz (wybrana zostaje na liście zawsze).
   const playedEditions = geniusEditions.filter((e) => Object.values(e.competitions).some((cid) => playedIn(id!, cid)));

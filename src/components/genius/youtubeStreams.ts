@@ -35,20 +35,38 @@ const words = (text: string) =>
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .split(/[^a-z0-9]+/)
+    // Numer drużyny cyfrą ("Grube Dziki 2" na YouTube) = rzymską ("Grube Dziki II" w Genius).
+    .map((word) => ({ '2': 'ii', '3': 'iii', '4': 'iv' })[word] ?? word)
     .filter((word) => word.length > 1);
+
+// Słowa wspólne dla wielu drużyn ("Basket Team", "UKS", "Wrocław") nie świadczą o tej samej drużynie — bez nich
+// "Cosmodisc Team – 2 Hills Basket" pasowało do "FTP Basketball Team – Unterer Logistics Wrocław Basket Team".
+const GENERIC_WORDS = new Set(['team', 'basket', 'basketball', 'koszykowka', 'club', 'klub', 'sport', 'ks', 'kk', 'kks', 'uks', 'mks', 'wks', 'sks', 'wroclaw']);
+// Oznaczenie kolejnej drużyny klubu ("Grube Dziki II") — musi się zgadzać, bo inaczej pierwsza i druga drużyna
+// to dla dopasowania ta sama.
+const TEAM_MARKS = new Set(['ii', 'iii', 'iv', 'og']);
 
 // Część wspólna słów względem krótszej z nazw: 1 = jedna nazwa zawiera się w drugiej ("4us Pio Studio" ↔ "4us Basket Pio Studio").
 function similarity(a: string, b: string) {
-  const x = words(a);
-  const y = new Set(words(b));
+  const marks = (list: string[]) => list.filter((word) => TEAM_MARKS.has(word)).sort().join();
+  const [allX, allY] = [words(a), words(b)];
+  if (marks(allX) !== marks(allY)) return 0;
+  const distinctive = (list: string[]) => {
+    const kept = list.filter((word) => !GENERIC_WORDS.has(word) && !TEAM_MARKS.has(word));
+    return kept.length > 0 ? kept : list;
+  };
+  const x = [...new Set(distinctive(allX))];
+  const y = new Set(distinctive(allY));
   if (x.length === 0 || y.size === 0) return 0;
   return x.filter((word) => y.has(word)).length / Math.min(x.length, y.size);
 }
 
 // Transmisje liga tworzy na YouTube z wyprzedzeniem — nawet 10 dni przed spotkaniem (np. 15.10 na mecze
-// 24–25.10), dlatego dopuszczamy dwa tygodnie. Tytuł nadal musi jednoznacznie zawierać obie drużyny, a data
-// wybiera najlepszą transmisję, gdy takich materiałów jest więcej.
-const MAX_DAYS_APART = 14;
+// 24–25.10), dlatego dopuszczamy dwa tygodnie przed meczem. Po meczu film transmisji już istnieje, więc film
+// utworzony ponad 2 dni po meczu to transmisja innego spotkania (np. rewanżu tych samych drużyn). Tytuł nadal
+// musi zawierać obie drużyny, a data wybiera najlepszą transmisję, gdy takich materiałów jest więcej.
+const MAX_DAYS_BEFORE = 14;
+const MAX_DAYS_AFTER = 2;
 
 export const youtubeWatchUrl = (videoId: string) => `https://www.youtube.com/watch?v=${videoId}`;
 
@@ -63,13 +81,21 @@ export function youtubeVideoId(text: string): string | undefined {
 // Transmisja meczu: tytuł z obiema drużynami (w dowolnej kolejności), opublikowana najbliżej daty meczu.
 export function findStreamVideo(videos: YoutubeVideo[], home: string, away: string, date: Date): YoutubeVideo | undefined {
   const candidates = videos.flatMap((video) => {
-    const [first, second] = video.title.split(/\s+[-–—]\s+|\s+vs\.?\s+/i);
-    if (!first || !second) return [];
-    const straight = Math.min(similarity(first, home), similarity(second, away));
-    const swapped = Math.min(similarity(first, away), similarity(second, home));
-    if (Math.max(straight, swapped) < 0.5) return [];
-    const daysApart = video.published ? Math.abs(new Date(video.published).getTime() - date.getTime()) / 86400000 : 0;
-    return daysApart <= MAX_DAYS_APART ? [{ video, daysApart }] : [];
+    // Nazwa drużyny też bywa z myślnikiem ("Blues Jelcz - Laskowice - Wrofinanse.pl…"), więc sprawdzamy każde
+    // miejsce podziału tytułu na dwie drużyny.
+    const parts = video.title.split(/\s+[-–—]\s+|\s+vs\.?\s+/i);
+    const score = Math.max(
+      0,
+      ...parts.slice(1).map((_, i) => {
+        const first = parts.slice(0, i + 1).join(' - ');
+        const second = parts.slice(i + 1).join(' - ');
+        return Math.max(Math.min(similarity(first, home), similarity(second, away)), Math.min(similarity(first, away), similarity(second, home)));
+      }),
+    );
+    if (score < 0.5) return [];
+    // Dni od meczu do utworzenia filmu (ujemne — przed meczem).
+    const offset = video.published ? (new Date(video.published).getTime() - date.getTime()) / 86400000 : 0;
+    return offset >= -MAX_DAYS_BEFORE && offset <= MAX_DAYS_AFTER ? [{ video, daysApart: Math.abs(offset) }] : [];
   });
   return candidates.sort((a, b) => a.daysApart - b.daysApart)[0]?.video;
 }

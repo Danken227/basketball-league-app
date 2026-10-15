@@ -6,6 +6,7 @@ import { geniusCacheKey, type GeniusEmbedOptions } from '../components/genius/ge
 import { geniusJuniorCompetitions, geniusResultsWidgets, isGeniusDomain, snapshotEditions } from '../components/genius/geniusConfig';
 import { isPlayoffPhase } from '../components/genius/geniusGroups';
 import { SNAPSHOT_DIR, snapshotFile, snapshotKey, widgetSnapshotKey, type SnapshotManifest } from '../components/genius/geniusSnapshot';
+import { pbpStatsPage, readPlayByPlay } from '../components/genius/matchSummaryData';
 
 // Zbieranie migawki danych Genius do wersji demonstracyjnej (tylko serwer deweloperski, adres /__snapshot na dev.dalk.pl).
 // Przechodzi przez strony Genius dwóch ostatnich edycji, po dwie naraz (z przerwami, żeby nie obciążać Genius),
@@ -20,6 +21,9 @@ interface EmbedItem {
   options: GeniusEmbedOptions & { nativeStyle?: boolean };
   cid?: number;
   derive?: Derive;
+  // Zamiast treści strony zapisujemy pod tym adresem tylko dane policzone z niej (JSON) — zapis akcji meczów
+  // poprzedniej edycji: wyniki kwart i rekordy do zakładki Summary bez ok. 600 KB strony na mecz.
+  statsPage?: string;
 }
 
 interface WidgetItem {
@@ -39,11 +43,15 @@ const ATTEMPTS = 3;
 const CONCURRENCY = 2;
 const LEADERS_PER_CATEGORY = 5;
 // Wszystkie zakładki meczów bieżącej edycji; z poprzedniej tylko podsumowanie i box score (play by play waży
-// ok. 600 KB na mecz, a cała migawka musi się zmieścić w limicie wdrożenia Vercela).
+// ok. 600 KB na mecz, a cała migawka musi się zmieścić w limicie wdrożenia Vercela) oraz dane policzone z play by
+// play (statsPage).
 const MATCH_SECTIONS = ['summary', 'boxscore', 'playbyplay', 'shotchart', 'analysis'];
 const OLDER_MATCH_SECTIONS = ['summary', 'boxscore'];
 
-const keyOf = (item: Item) => (item.type === 'widget' ? widgetSnapshotKey(item.widgetId) : snapshotKey(geniusCacheKey(item.options)));
+const keyOf = (item: Item) =>
+  item.type === 'widget'
+    ? widgetSnapshotKey(item.widgetId)
+    : snapshotKey(geniusCacheKey(item.statsPage ? { page: item.statsPage } : item.options));
 const embed = (options: EmbedItem['options'], cid?: number, derive?: Derive): EmbedItem => ({ type: 'embed', options, cid, derive });
 
 const seniorCids = snapshotEditions.flatMap((edition) => Object.values(edition.competitions));
@@ -99,11 +107,13 @@ function deriveItems(derive: Derive, cid: number, html: string): Item[] {
       ['home', 'roster', 'schedule', 'statistics'].map((section) => embed({ page: `/competition/${cid}/team/${id}/${section}`, showTitle: true })),
     );
   }
-  // Statystyki każdego zawodnika ligi seniorów (w każdej lidze, w której jest na liście — także dwie drużyny).
+  // Statystyki i mecze (z nich zakładka „Rekordy”) każdego zawodnika ligi seniorów (w każdej lidze, w której jest na
+  // liście — także dwie drużyny).
   if (derive === 'players') {
-    return ids('a[href]', /^\/zawodnicy\/(\d+)/).map((id) =>
+    return ids('a[href]', /^\/zawodnicy\/(\d+)/).flatMap((id) => [
       embed({ page: `/competition/${cid}/person/${id}/statistics`, showTitle: true, showSubMenus: false }),
-    );
+      embed({ page: `/competition/${cid}/person/${id}/gamelog`, showTitle: true, showSubMenus: false }),
+    ]);
   }
   if (derive === 'leaders') {
     const blocks = ['sPointsAverage', 'sReboundsTotalAverage', 'sAssistsAverage'].map((id) => root.querySelector(`#BLOCK_LEADER_BASKETBALL_${id}`));
@@ -115,8 +125,14 @@ function deriveItems(derive: Derive, cid: number, html: string): Item[] {
   }
   // Wszystkie rozegrane mecze rozgrywek (seniorów i juniorów).
   const played = [...new Set([...root.querySelectorAll('.match-wrap.STATUS_COMPLETE[id^="extfix_"]')].map((wrap) => wrap.id.replace('extfix_', '')))];
-  const sections = currentCids.includes(cid) ? MATCH_SECTIONS : OLDER_MATCH_SECTIONS;
-  return played.flatMap((id) => sections.map((section) => embed({ page: `/competition/${cid}/match/${id}/${section}`, nativeStyle: true })));
+  const current = currentCids.includes(cid);
+  const sections = current ? MATCH_SECTIONS : OLDER_MATCH_SECTIONS;
+  return played.flatMap((id) => [
+    ...sections.map((section) => embed({ page: `/competition/${cid}/match/${id}/${section}`, nativeStyle: true })),
+    ...(current
+      ? []
+      : [{ ...embed({ page: `/competition/${cid}/match/${id}/playbyplay`, nativeStyle: true }), statsPage: pbpStatsPage(id, String(cid)) }]),
+  ]);
 }
 
 async function save(key: string, content: string) {
@@ -210,7 +226,11 @@ function CrawlSlot({ item, onDone }: { item: Item; onDone: (content?: string) =>
       settleTimer.current = window.setTimeout(() => finish(), INVALID_MS);
       return;
     }
-    settleTimer.current = window.setTimeout(() => finish(contentOf(root)), SETTLE_MS);
+    settleTimer.current = window.setTimeout(() => {
+      if (!item.statsPage) return finish(contentOf(root));
+      // Zapis akcji: tylko policzone dane ("null", gdy zapis jest niepełny — wtedy też go nie pobieramy ponownie).
+      finish(JSON.stringify(readPlayByPlay(root) ?? null));
+    }, SETTLE_MS);
   };
   return <GeniusEmbed {...item.options} onContent={onContent} />;
 }
