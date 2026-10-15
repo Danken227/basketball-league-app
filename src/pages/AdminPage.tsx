@@ -3,7 +3,18 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { FilterSelect } from '../components/common/Filters';
 import PageHeader from '../components/common/PageHeader';
 import { icons } from '../components/common/icons';
-import { competitionId, geniusEditionById, geniusEditions, geniusLeagueOptions, geniusSnapshot, isGeniusDomain } from '../components/genius/geniusConfig';
+import {
+  competitionId,
+  currentGeniusEdition,
+  findCompetition,
+  geniusEditionById,
+  geniusEditions,
+  geniusLeagueName,
+  geniusLeagueOptions,
+  geniusSnapshot,
+  isGeniusDomain,
+} from '../components/genius/geniusConfig';
+import { checkUnfinishedMatches, type UnfinishedMatch } from '../components/genius/geniusUnfinished';
 import { fetchGeniusPage } from '../components/genius/geniusFetch';
 import { isGroupName, isPlayoffPhase, readGroups } from '../components/genius/geniusGroups';
 import { collectHistory, historyCoverage, type EditionCoverage } from '../components/genius/geniusHistory';
@@ -1901,8 +1912,124 @@ function GeniusSeasonsAdmin() {
   );
 }
 
+// Niezamknięte mecze bieżącej edycji (geniusUnfinished.ts). Sprawdzamy je od razu po zalogowaniu i co 5 minut, żeby
+// zakładka mogła mieć czerwoną kropkę, gdy jakiś mecz czeka na zamknięcie.
+const UNFINISHED_CHECK_MS = 5 * 60 * 1000;
+
+interface UnfinishedCheck {
+  matches?: UnfinishedMatch[];
+  failed: number;
+  checkedAt?: Date;
+  checking: boolean;
+  error?: string;
+}
+
+function useUnfinishedMatches(enabled: boolean) {
+  const [state, setState] = useState<UnfinishedCheck>({ failed: 0, checking: enabled });
+  const run = () =>
+    checkUnfinishedMatches()
+      .then(({ matches, failed }) => setState({ matches, failed, checkedAt: new Date(), checking: false }))
+      .catch((e) => setState((prev) => ({ ...prev, checking: false, error: errorText(e) })));
+  const check = () => {
+    setState((prev) => ({ ...prev, checking: true, error: undefined }));
+    run();
+  };
+  useEffect(() => {
+    if (!enabled) return;
+    run();
+    const timer = window.setInterval(run, UNFINISHED_CHECK_MS);
+    return () => window.clearInterval(timer);
+  }, [enabled]);
+  return { ...state, check };
+}
+
+const matchDateFormat = new Intl.DateTimeFormat('pl-PL', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+
+function UnfinishedMatchRow({ match }: { match: UnfinishedMatch }) {
+  const found = findCompetition(match.competitionId);
+  const score = match.homeScore || match.awayScore ? `${match.homeScore ?? 0} : ${match.awayScore ?? 0}` : undefined;
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-slate-100 py-3 text-sm last:border-0">
+      <div className="min-w-0">
+        <p className="font-semibold text-slate-900">
+          {match.home} – {match.away}
+          {score && <span className="ml-2 tabular-nums text-slate-600">{score}</span>}
+        </p>
+        <p className="text-xs text-slate-500">
+          {found ? geniusLeagueName(found.leagueId) : `Rozgrywki ${match.competitionId}`} · {matchDateFormat.format(match.date)}
+          {match.venue && ` · ${match.venue}`}
+        </p>
+        <p className={`text-xs ${match.kind === 'open' ? 'text-red-600' : 'text-amber-700'}`}>{match.reason}</p>
+      </div>
+      <Link to={`/mecze/${match.id}?rozgrywki=${match.competitionId}`} target="_blank" className={linkButtonClass}>
+        Otwórz mecz →
+      </Link>
+    </li>
+  );
+}
+
+function UnfinishedMatchesAdmin({ state }: { state: ReturnType<typeof useUnfinishedMatches> }) {
+  const canCheck = isGeniusDomain() && !geniusSnapshot;
+  const open = state.matches?.filter((match) => match.kind === 'open') ?? [];
+  const notStarted = state.matches?.filter((match) => match.kind === 'notStarted') ?? [];
+  return (
+    <Card title="Niezamknięte mecze">
+      <p className="mb-4 text-sm text-slate-600">
+        Przy stoliku nie zawsze zamyka się protokół meczu. Taki mecz wisi w Genius jako trwający i <strong>nie trafia do tabeli</strong> (na pasku
+        meczów pokazujemy go już jako zakończony). Zamknąć go może tylko osoba z dostępem do Genius / FIBA LiveStats — po zamknięciu mecz sam pojawi
+        się w tabeli. Sprawdzamy mecze bieżącej edycji ({currentGeniusEdition.name}): mecz uznajemy za niezamknięty, gdy trwa w Genius ponad 2,5
+        godziny albo gdy w tej samej hali zaczął się już następny mecz.
+      </p>
+      {!canCheck ? (
+        <p className="text-sm text-slate-500">Sprawdzanie działa tylko na stronie ligi (Genius wydaje dane tylko jej domenie).</p>
+      ) : state.matches === undefined ? (
+        !state.error && <p className="text-sm text-slate-500">Sprawdzanie terminarzy…</p>
+      ) : (
+        <>
+          <h3 className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-500">Do zamknięcia w Genius</h3>
+          {open.length === 0 ? (
+            <p className="mb-4 text-sm text-emerald-700">Brak — wszystkie rozegrane mecze są zamknięte.</p>
+          ) : (
+            <ul className="mb-4">
+              {open.map((match) => (
+                <UnfinishedMatchRow key={match.id} match={match} />
+              ))}
+            </ul>
+          )}
+          {notStarted.length > 0 && (
+            <>
+              <h3 className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-500">Termin minął, a mecz nie zaczął się w Genius</h3>
+              <p className="mb-1 text-xs text-slate-500">Protokołu nie wysłano albo mecz przełożono (wtedy wystarczy zmienić termin w Genius).</p>
+              <ul className="mb-4">
+                {notStarted.map((match) => (
+                  <UnfinishedMatchRow key={match.id} match={match} />
+                ))}
+              </ul>
+            </>
+          )}
+        </>
+      )}
+      {canCheck && (
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="button" className={buttonClass} disabled={state.checking} onClick={state.check}>
+            {state.checking ? 'Sprawdzanie…' : 'Sprawdź ponownie'}
+          </button>
+          {state.checkedAt && (
+            <span className="text-xs text-slate-500">Sprawdzono o {state.checkedAt.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })}.</span>
+          )}
+        </div>
+      )}
+      {state.failed > 0 && (
+        <p className="mt-3 text-sm text-amber-700">Genius nie oddał {state.failed} terminarzy — lista może być niepełna, sprawdź ponownie za chwilę.</p>
+      )}
+      <Message error={state.error} />
+    </Card>
+  );
+}
+
 const tabs = [
   { id: 'aktualnosci', label: 'Aktualności' },
+  { id: 'mecze', label: 'Niezamknięte mecze' },
   { id: 'druzyny', label: 'Nazwy drużyn w edycjach' },
   { id: 'rekordy', label: 'Rekordy' },
   { id: 'strefy', label: 'Awanse/spadki' },
@@ -1917,6 +2044,8 @@ function AdminPage() {
   const admin = useAdmin();
   const [params, setParams] = useSearchParams();
   const tab: TabId = tabs.find((item) => item.id === params.get('zakladka'))?.id ?? 'aktualnosci';
+  const unfinished = useUnfinishedMatches(Boolean(admin) && isGeniusDomain() && !geniusSnapshot);
+  const openMatches = unfinished.matches?.filter((match) => match.kind === 'open').length ?? 0;
 
   const logout = async () => {
     await adminRequest('logout', {}).catch(() => undefined);
@@ -1955,11 +2084,21 @@ function AdminPage() {
                 }`}
               >
                 {item.label}
+                {item.id === 'mecze' && openMatches > 0 && (
+                  <span
+                    className="ml-1.5 inline-grid h-4 min-w-4 place-items-center rounded-full bg-red-600 px-1 align-[1px] text-[10px] font-bold leading-none text-white"
+                    aria-label={`${openMatches} do zamknięcia`}
+                  >
+                    {openMatches}
+                  </span>
+                )}
               </button>
             ))}
           </div>
           {tab === 'aktualnosci' ? (
             <NewsAdmin />
+          ) : tab === 'mecze' ? (
+            <UnfinishedMatchesAdmin state={unfinished} />
           ) : tab === 'druzyny' ? (
             <TeamNamesAdmin />
           ) : tab === 'rekordy' ? (
