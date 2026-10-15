@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import PhotoDialog from '../common/PhotoDialog';
 import type { CompareRow, Leader, LeaderCategory, PlayByPlayStats, SummaryData } from './matchSummaryData';
 
 // Zakładka „Summary” meczu w układzie jak na plk.pl: liderzy meczu (TOP 5 z wyborem kategorii) po lewej, a po
@@ -40,10 +41,14 @@ const minutes = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.
 // Wartość bez zbędnego ".0" (eval Genius podaje jako 30.0).
 const statText = (value: string) => value.replace(/\.0$/, '');
 
+// Genius podaje zdjęcie w kilku rozmiarach, rozróżnionych końcówką nazwy pliku: T1 (75 px — ta jest w tabelce
+// liderów i na miniaturze była rozmyta), S1 (200 px), M1 (400 px), L1 (600 px — do powiększenia).
+const photoSize = (src: string, size: 'S1' | 'M1' | 'L1') => src.replace(/[TSML]1(\.\w+)$/, `${size}$1`);
+
 function Photo({ leader, big }: { leader: Leader; big: boolean }) {
   const size = big ? 'h-24 w-20' : 'h-14 w-12';
   return leader.photo ? (
-    <img src={leader.photo} alt="" className={`${size} shrink-0 rounded-lg bg-white object-cover object-top`} loading="lazy" />
+    <PhotoDialog thumbnail={photoSize(leader.photo, big ? 'M1' : 'S1')} full={photoSize(leader.photo, 'L1')} alt={leader.name} className={`${size} !rounded-lg`} />
   ) : (
     <span className={`${size} grid shrink-0 place-items-center rounded-lg bg-white/10 font-black text-white/70 ${big ? 'text-2xl' : 'text-sm'}`} aria-hidden="true">
       {initials(leader.name)}
