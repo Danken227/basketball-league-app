@@ -1666,3 +1666,10 @@
 .genius-match--summary .hs-container {
   padding-bottom: 0 !important;
 }
+
+/* Loga w nagłówku meczu mają własny biały kafelek z marginesem — bez białego pierścienia z trybu ciemnego
+   (index.css), który powiększał je względem trybu jasnego. !important: reguła z index.css ma w selektorze #shotchart. */
+.dark .genius-native .match-page .match-header .team-box img {
+  box-shadow: none !important;
+  border-radius: 0.75rem !important;
+}

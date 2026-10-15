@@ -125,8 +125,11 @@ function Card({ title, children }: { title: string; children: ReactNode }) {
 
 function TeamLogo({ data, side }: { data: SummaryData; side: 0 | 1 }) {
   const team = data.teams[side];
+  // Białe podłoże kafelka także w trybie ciemnym (keep-dark przywraca w nim białą paletę) — loga są projektowane na jasne tło.
   return team.logo ? (
-    <img src={team.logo} alt={team.name} title={team.name} className="mx-auto h-7 w-7 rounded bg-white object-contain" />
+    <span className="keep-dark mx-auto grid h-9 w-9 place-items-center rounded-md bg-white p-0.5" title={team.name}>
+      <img src={team.logo} alt={team.name} className="max-h-full max-w-full object-contain" />
+    </span>
   ) : (
     <span className="text-xs font-bold text-slate-700">{initials(team.name)}</span>
   );
