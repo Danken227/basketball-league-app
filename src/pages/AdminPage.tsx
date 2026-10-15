@@ -2126,7 +2126,8 @@ function AchievementsAdmin() {
   const [error, setError] = useState<string>();
   const [saved, setSaved] = useState<string>();
   const [busy, setBusy] = useState(false);
-  const canLoad = isGeniusDomain() && !geniusSnapshot;
+  // Na domenie ligi z Genius, w wersji demonstracyjnej z migawki.
+  const canLoad = isGeniusDomain() || geniusSnapshot;
 
   // Drużyny i zawodnicy wybranych rozgrywek z Genius (kilkanaście zapytań, ok. 15 s).
   useEffect(() => {
