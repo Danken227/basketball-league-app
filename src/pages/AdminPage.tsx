@@ -1916,9 +1916,14 @@ function GeniusSeasonsAdmin() {
   );
 }
 
-// Niezamknięte mecze bieżącej edycji (geniusUnfinished.ts). Sprawdzamy je od razu po zalogowaniu i co 5 minut, żeby
-// zakładka mogła mieć czerwoną kropkę, gdy jakiś mecz czeka na zamknięcie.
-const UNFINISHED_CHECK_MS = 5 * 60 * 1000;
+// Niezamknięte mecze bieżącej edycji (geniusUnfinished.ts) i przy okazji nagrania meczów (matchVideos.ts). Sprawdza
+// przeglądarka administratora, tylko gdy strona panelu jest otwarta: przy wejściu do panelu (chyba że poprzednie
+// sprawdzenie było niedawno) i potem co godzinę. Jedno sprawdzenie to 8 terminarzy z Genius (ok. 3 MB), więc
+// częste wchodzenie do panelu nie pobiera ich za każdym razem. Wynik zapamiętuje przeglądarka — zakładki mają z czego
+// pokazać czerwoną kropkę i listy także wtedy, gdy sprawdzenie przy wejściu jest pominięte.
+const UNFINISHED_CHECK_MS = 60 * 60 * 1000;
+const UNFINISHED_RECHECK_AFTER_MS = 15 * 60 * 1000;
+const UNFINISHED_STORAGE_KEY = `${client.storagePrefix}-admin-match-check`;
 
 interface UnfinishedCheck {
   matches?: UnfinishedMatch[];
@@ -1931,15 +1936,43 @@ interface UnfinishedCheck {
   error?: string;
 }
 
+type StoredCheck = Pick<UnfinishedCheck, 'matches' | 'played' | 'videos' | 'failed' | 'checkedAt'>;
+
+function loadStoredCheck(): StoredCheck | undefined {
+  try {
+    const stored = JSON.parse(localStorage.getItem(UNFINISHED_STORAGE_KEY) ?? 'null') as StoredCheck | null;
+    if (!stored?.checkedAt) return undefined;
+    // Daty wracają z JSON jako tekst.
+    const dated = <T extends { date: Date }>(items?: T[]) => items?.map((item) => ({ ...item, date: new Date(item.date) }));
+    return { ...stored, checkedAt: new Date(stored.checkedAt), matches: dated(stored.matches), played: dated(stored.played) };
+  } catch {
+    return undefined;
+  }
+}
+
+function saveStoredCheck({ matches, played, videos, failed, checkedAt }: UnfinishedCheck) {
+  try {
+    localStorage.setItem(UNFINISHED_STORAGE_KEY, JSON.stringify({ matches, played, videos, failed, checkedAt }));
+  } catch {
+    // Brak miejsca albo zablokowany storage — przy następnym wejściu sprawdzimy od nowa.
+  }
+}
+
 function useUnfinishedMatches(enabled: boolean) {
-  const [state, setState] = useState<UnfinishedCheck>({ failed: 0, checking: enabled });
+  const [state, setState] = useState<UnfinishedCheck>(() => ({ failed: 0, ...loadStoredCheck(), checking: false }));
+  const update = (change: (prev: UnfinishedCheck) => UnfinishedCheck) =>
+    setState((prev) => {
+      const next = change(prev);
+      if (next.checkedAt) saveStoredCheck(next);
+      return next;
+    });
   const run = () =>
     checkUnfinishedMatches()
       .then(({ matches, played, upcoming, failed }) => {
-        setState((prev) => ({ ...prev, matches, played, failed, checkedAt: new Date(), checking: false }));
+        update((prev) => ({ ...prev, matches, played, failed, checkedAt: new Date(), checking: false }));
         // Przy okazji nagrania meczów: nowe dopasowania z listy kanału YouTube trafiają do bazy (matchVideos.ts).
         return syncMatchVideos([...played, ...upcoming])
-          .then(({ videos }) => setState((prev) => ({ ...prev, videos })))
+          .then(({ videos }) => update((prev) => ({ ...prev, videos })))
           .catch(() => undefined);
       })
       .catch((e) => setState((prev) => ({ ...prev, checking: false, error: errorText(e) })));
@@ -1949,11 +1982,13 @@ function useUnfinishedMatches(enabled: boolean) {
   };
   useEffect(() => {
     if (!enabled) return;
-    run();
+    const last = loadStoredCheck()?.checkedAt?.getTime() ?? 0;
+    if (Date.now() - last > UNFINISHED_RECHECK_AFTER_MS) run();
     const timer = window.setInterval(run, UNFINISHED_CHECK_MS);
     return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run: zmienia się co render, licznik ma działać od wejścia do panelu
   }, [enabled]);
-  const setVideos = (videos: MatchVideos) => setState((prev) => ({ ...prev, videos }));
+  const setVideos = (videos: MatchVideos) => update((prev) => ({ ...prev, videos }));
   return { ...state, check, setVideos };
 }
 
@@ -2110,7 +2145,7 @@ function PlayerSelect({ teams, value, fallback, onChange, label }: { teams: Rost
 
 // Transmisje (zakładka „Transmisje”): nagrania rozegranych meczów bieżącej edycji. Panel dopasowuje je sam
 // (matchVideos.ts); tu można wkleić link, gdy tytuł filmu nie pasował, albo poprawić błędne dopasowanie.
-const VIDEOS_PER_PAGE = 30;
+const VIDEOS_PER_PAGE = 20;
 
 function MatchVideoRow({ match, videoId, onSave }: { match: PlayedMatch; videoId?: string; onSave: (videoId: string | null) => Promise<void> }) {
   const [draft, setDraft] = useState('');
@@ -2181,17 +2216,19 @@ function MatchVideoRow({ match, videoId, onSave }: { match: PlayedMatch; videoId
 }
 
 function MatchVideosAdmin({ state }: { state: ReturnType<typeof useUnfinishedMatches> }) {
-  const [shown, setShown] = useState(VIDEOS_PER_PAGE);
+  const [page, setPage] = useState(1);
   const canCheck = isGeniusDomain() && !geniusSnapshot;
   const played = state.played ?? [];
   const videos = state.videos ?? {};
   const withVideo = played.filter((match) => videos[match.id]).length;
+  const pageCount = Math.max(1, Math.ceil(played.length / VIDEOS_PER_PAGE));
+  const currentPage = Math.min(page, pageCount);
   const save = async (matchId: string, videoId: string | null) => state.setVideos(await saveMatchVideos({ [matchId]: videoId }));
   return (
     <Card title="Transmisje">
       <p className="mb-4 text-sm text-slate-600">
-        Na stronie meczu (zakładka Summary) jest link do nagrania na YouTube. Panel dopasowuje nagrania sam: po zalogowaniu (w dowolnej zakładce) i co 5
-        minut szuka na kanale ligi filmu z nazwami obu drużyn w tytule — także zaplanowanych transmisji na mecze najbliższych dwóch tygodni — i zapisuje go
+        Na stronie meczu (zakładka Summary) jest link do nagrania na YouTube. Panel dopasowuje nagrania sam: przy wejściu do panelu (w dowolnej zakładce,
+        najwyżej raz na 15 minut) i co godzinę przy otwartym panelu szuka na kanale ligi filmu z nazwami obu drużyn w tytule — także zaplanowanych transmisji na mecze najbliższych dwóch tygodni — i zapisuje go
         przy meczu. YouTube pokazuje tylko 15 najnowszych filmów, a kolejne transmisje wypychają starsze, dlatego zaglądaj do panelu raz w tygodniu. Gdy tytuł
         filmu nie pasował albo dopasowanie jest złe, wklej link ręcznie.
       </p>
@@ -2206,15 +2243,11 @@ function MatchVideosAdmin({ state }: { state: ReturnType<typeof useUnfinishedMat
             {state.videos === undefined && ' Sprawdzanie nagrań…'}
           </p>
           <ul>
-            {played.slice(0, shown).map((match) => (
+            {played.slice((currentPage - 1) * VIDEOS_PER_PAGE, currentPage * VIDEOS_PER_PAGE).map((match) => (
               <MatchVideoRow key={match.id} match={match} videoId={videos[match.id]} onSave={(videoId) => save(match.id, videoId)} />
             ))}
           </ul>
-          {played.length > shown && (
-            <button type="button" className={`${linkButtonClass} mt-3`} onClick={() => setShown((value) => value + VIDEOS_PER_PAGE)}>
-              Pokaż starsze mecze
-            </button>
-          )}
+          <Pager page={currentPage} pageCount={pageCount} onChange={setPage} />
         </>
       )}
     </Card>
