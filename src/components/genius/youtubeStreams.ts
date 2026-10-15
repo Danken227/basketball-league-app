@@ -35,6 +35,8 @@ const words = (text: string) =>
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .split(/[^a-z0-9]+/)
+    // Numer drużyny cyfrą ("Grube Dziki 2" na YouTube) = rzymską ("Grube Dziki II" w Genius).
+    .map((word) => ({ '2': 'ii', '3': 'iii', '4': 'iv' })[word] ?? word)
     .filter((word) => word.length > 1);
 
 // Słowa wspólne dla wielu drużyn ("Basket Team", "UKS", "Wrocław") nie świadczą o tej samej drużynie — bez nich
