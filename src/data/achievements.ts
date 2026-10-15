@@ -14,8 +14,6 @@ export interface Achievement {
   // Nagroda indywidualna i medal dopisany ręcznie: zawodnik.
   playerId?: string;
   playerName?: string;
-  // Wynik przy nagrodzie, np. "21,4 pkt na mecz".
-  value?: string;
   // Medal drużyny: zawodnicy, którzy zagrali w niej w tych rozgrywkach (medal pokazuje się też na ich stronach).
   players?: string[];
 }
@@ -23,12 +21,12 @@ export interface Achievement {
 // Numer rozgrywek → osiągnięcia.
 export type AchievementsByCompetition = Record<string, Achievement[]>;
 
-export const individualAwards: { type: Exclude<AchievementType, 'medal'>; label: string; stat?: 'ppg' | 'rpg' | 'apg'; unit?: string }[] = [
+export const individualAwards: { type: Exclude<AchievementType, 'medal'>; label: string; stat?: 'ppg' | 'rpg' | 'apg' }[] = [
   { type: 'mvp', label: 'MVP sezonu' },
   { type: 'finalsMvp', label: 'MVP finału' },
-  { type: 'topScorer', label: 'Najlepszy strzelec', stat: 'ppg', unit: 'pkt na mecz' },
-  { type: 'topRebounder', label: 'Najlepiej zbierający', stat: 'rpg', unit: 'zb. na mecz' },
-  { type: 'topAssists', label: 'Najlepiej asystujący', stat: 'apg', unit: 'as. na mecz' },
+  { type: 'topScorer', label: 'Najlepszy strzelec', stat: 'ppg' },
+  { type: 'topRebounder', label: 'Najlepiej zbierający', stat: 'rpg' },
+  { type: 'topAssists', label: 'Najlepiej asystujący', stat: 'apg' },
 ];
 
 export const medalNames: Record<MedalPlace, string> = { 1: 'Złoty medal', 2: 'Srebrny medal', 3: 'Brązowy medal' };

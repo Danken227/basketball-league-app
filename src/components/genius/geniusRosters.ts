@@ -84,6 +84,19 @@ export async function loadCompetitionRosters(cid: number, onProgress?: (done: nu
   return result.sort((a, b) => a.name.localeCompare(b.name, 'pl'));
 }
 
+// Kadra drużyny w rozgrywkach (/team/<numer>/roster) — wszyscy zgłoszeni, także ci bez występów.
+export async function loadTeamRoster(cid: number, teamId: string): Promise<{ id: string; name: string }[]> {
+  const root = await loadPage(`/competition/${cid}/team/${teamId}/roster`, cid);
+  if (!root) throw new Error('Genius nie oddał kadry drużyny.');
+  const players = new Map<string, string>();
+  root.querySelectorAll('a[href*="/person/"]').forEach((link) => {
+    const id = idFrom(link.getAttribute('href'), 'person');
+    const name = link.textContent?.replace(/\s+/g, ' ').trim();
+    if (id && name && !players.has(id)) players.set(id, name);
+  });
+  return [...players].map(([id, name]) => ({ id, name }));
+}
+
 // Lider w statystyce wśród zawodników z co najmniej połową meczów najczęściej grającego (żeby nie wygrał ktoś
 // z jednym meczem).
 export function suggestLeader(teams: RosterTeam[], stat: 'ppg' | 'rpg' | 'apg'): { player: RosterPlayer; team: RosterTeam } | undefined {

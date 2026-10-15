@@ -15,7 +15,7 @@ import {
   isGeniusDomain,
 } from '../components/genius/geniusConfig';
 import { checkUnfinishedMatches, type UnfinishedMatch } from '../components/genius/geniusUnfinished';
-import { loadCompetitionRosters, suggestLeader, type RosterPlayer, type RosterTeam } from '../components/genius/geniusRosters';
+import { loadCompetitionRosters, loadTeamRoster, suggestLeader, type RosterPlayer, type RosterTeam } from '../components/genius/geniusRosters';
 import { individualAwards, medalIcons, medalNames, type Achievement, type MedalPlace } from '../data/achievements';
 import { fetchGeniusPage } from '../components/genius/geniusFetch';
 import { isGroupName, isPlayoffPhase, readGroups } from '../components/genius/geniusGroups';
@@ -2039,7 +2039,6 @@ interface AwardDraft {
   playerName: string;
   teamId?: string;
   teamName?: string;
-  value: string;
 }
 
 interface AchievementsDraft {
@@ -2058,7 +2057,7 @@ function draftFrom(items: Achievement[] = []): AchievementsDraft {
     awards: Object.fromEntries(
       items
         .filter((item) => item.type !== 'medal' && item.playerId)
-        .map((item) => [item.type, { playerId: item.playerId!, playerName: item.playerName ?? '', teamId: item.teamId, teamName: item.teamName, value: item.value ?? '' }]),
+        .map((item) => [item.type, { playerId: item.playerId!, playerName: item.playerName ?? '', teamId: item.teamId, teamName: item.teamName }]),
     ),
     manual: items.filter((item) => item.type === 'medal' && item.playerId),
   };
@@ -2080,22 +2079,24 @@ function PlayerSelect({ teams, value, fallback, onChange, label }: { teams: Rost
     >
       <option value="">— brak —</option>
       {value && !known && <option value={value}>{fallback || value}</option>}
-      {teams.map((team) => (
-        <optgroup key={team.id} label={team.name}>
-          {[...team.players]
-            .sort((a, b) => a.name.localeCompare(b.name, 'pl'))
-            .map((player) => (
-              <option key={player.id} value={player.id}>
-                {player.name}
-              </option>
-            ))}
-        </optgroup>
-      ))}
+      {teams
+        .filter((team) => team.players.length > 0)
+        .map((team) => (
+          <optgroup key={team.id} label={team.name}>
+            {[...team.players]
+              .sort((a, b) => a.name.localeCompare(b.name, 'pl'))
+              .map((player) => (
+                <option key={player.id} value={player.id}>
+                  {player.name}
+                </option>
+              ))}
+          </optgroup>
+        ))}
     </select>
   );
 }
 
-const statValue = (value: number, unit: string) => `${value.toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} ${unit}`;
+const storedTeamNameOf = (stored: Achievement[] | undefined, teamId: string) => stored?.find((item) => item.teamId === teamId)?.teamName;
 
 function AchievementsAdmin() {
   const { achievements } = useSiteContent();
@@ -2119,6 +2120,8 @@ function AchievementsAdmin() {
   const [rosters, setRosters] = useState<{ cid: string; teams?: (RosterTeam & { failed?: boolean })[]; error?: string; progress?: string }>();
   const teams = rosters?.cid === cid ? (rosters.teams ?? []) : [];
   const [manualPlayer, setManualPlayer] = useState<{ player: RosterPlayer; team: RosterTeam }>();
+  // Kadry drużyn z medalami ("<rozgrywki>:<drużyna>" → zgłoszeni zawodnicy) — medal ręczny dostają ci bez występów.
+  const [teamRosters, setTeamRosters] = useState<Record<string, { id: string; name: string }[] | 'failed'>>({});
   const [manualPlace, setManualPlace] = useState<MedalPlace>(1);
   const [error, setError] = useState<string>();
   const [saved, setSaved] = useState<string>();
@@ -2139,8 +2142,38 @@ function AchievementsAdmin() {
     };
   }, [cid, canLoad]);
 
+  const medalTeamsKey = medalPlaces.map((place) => draft.medals[place]).join(',');
+  useEffect(() => {
+    if (!cid || !canLoad) return;
+    medalTeamsKey
+      .split(',')
+      .filter(Boolean)
+      .forEach((teamId) => {
+        const key = `${cid}:${teamId}`;
+        loadTeamRoster(Number(cid), teamId)
+          .then((roster) => setTeamRosters((prev) => (prev[key] ? prev : { ...prev, [key]: roster })))
+          .catch(() => setTeamRosters((prev) => (prev[key] ? prev : { ...prev, [key]: 'failed' })));
+      });
+  }, [cid, canLoad, medalTeamsKey]);
+
   const teamById = (id: string) => teams.find((team) => team.id === id);
-  const storedTeamName = (id: string) => stored?.find((item) => item.teamId === id)?.teamName;
+  // Zawodnicy z kadry drużyny z wybranym medalem, którzy w niej nie zagrali (ci z występami mają medal z drużyną)
+  // i nie mają jeszcze tego medalu dopisanego ręcznie.
+  const manualTeamId = draft.medals[manualPlace];
+  const manualRoster = manualTeamId && cid ? teamRosters[`${cid}:${manualTeamId}`] : undefined;
+  const manualTeam = teamById(manualTeamId);
+  const benchTeam: RosterTeam | undefined =
+    manualTeamId && Array.isArray(manualRoster)
+      ? {
+          id: manualTeamId,
+          name: manualTeam?.name ?? storedTeamNameOf(stored, manualTeamId) ?? manualTeamId,
+          players: manualRoster
+            .filter((player) => !manualTeam?.players.some((played) => played.id === player.id))
+            .filter((player) => !draft.manual.some((item) => item.playerId === player.id && item.place === manualPlace))
+            .map((player) => ({ ...player, games: 0, ppg: 0, rpg: 0, apg: 0 })),
+        }
+      : undefined;
+  const storedTeamName = (id: string) => storedTeamNameOf(stored, id);
 
   const setAward = (type: AwardType, award?: AwardDraft) =>
     setDraft((prev) => {
@@ -2159,7 +2192,6 @@ function AchievementsAdmin() {
       playerName: leader.player.name,
       teamId: leader.team.id,
       teamName: leader.team.name,
-      value: statValue(leader.player[award.stat!], award.unit!),
     });
   };
 
@@ -2175,7 +2207,7 @@ function AchievementsAdmin() {
     }),
     ...individualAwards.flatMap(({ type }): Achievement[] => {
       const award = draft.awards[type];
-      return award?.playerId ? [{ type, ...award, value: award.value.trim() || undefined }] : [];
+      return award?.playerId ? [{ type, ...award }] : [];
     }),
     ...draft.manual,
   ];
@@ -2207,7 +2239,7 @@ function AchievementsAdmin() {
       <p className="mb-4 text-sm text-slate-600">
         Wybierz rozgrywki i wpisz medale drużyn oraz nagrody indywidualne. Medal drużyny pojawi się na stronie drużyny i u wszystkich jej zawodników, którzy zagrali w
         tych rozgrywkach (lista z Genius). Najlepszego strzelca, zbierającego i asystującego możesz podpowiedzieć ze statystyk (najwyższa średnia wśród zawodników z co
-        najmniej połową meczów) i poprawić. Medal dla pojedynczego zawodnika (np. gracza spoza listy) dodasz na dole.
+        najmniej połową meczów) i poprawić. Na dole dodasz medal zawodnikowi z kadry medalisty, który nie zagrał żadnego meczu.
       </p>
       <div className="mb-5 flex flex-wrap items-end gap-3">
         <FilterSelect
@@ -2259,7 +2291,7 @@ function AchievementsAdmin() {
           // MVP finału — tylko zawodnicy mistrza (złoty medal); bez wybranego mistrza wszyscy.
           const champion = type === 'finalsMvp' && draft.medals[1] ? teams.filter((team) => team.id === draft.medals[1]) : [];
           return (
-            <div key={type} className={`grid items-center gap-2 ${stat ? 'sm:grid-cols-[12rem_1fr_12rem_auto]' : 'sm:grid-cols-[12rem_1fr]'}`}>
+            <div key={type} className={`grid items-center gap-2 ${stat ? 'sm:grid-cols-[12rem_1fr_auto]' : 'sm:grid-cols-[12rem_1fr]'}`}>
               <span className="text-sm font-semibold text-slate-900">{label}</span>
               <PlayerSelect
                 teams={champion.length > 0 ? champion : teams}
@@ -2269,25 +2301,14 @@ function AchievementsAdmin() {
                 onChange={(picked) =>
                   setAward(
                     type,
-                    picked && { playerId: picked.player.id, playerName: picked.player.name, teamId: picked.team.id, teamName: picked.team.name, value: award?.value ?? '' },
+                    picked && { playerId: picked.player.id, playerName: picked.player.name, teamId: picked.team.id, teamName: picked.team.name },
                   )
                 }
               />
-              {/* Wynik (średnia) tylko przy liderach statystyk — wpisuje go „Podpowiedz”, można poprawić. */}
               {stat && (
-                <>
-                  <input
-                    className={inputClass}
-                    placeholder="Średnia"
-                    aria-label={`${label} — średnia`}
-                    value={award?.value ?? ''}
-                    disabled={!award}
-                    onChange={(e) => award && setAward(type, { ...award, value: e.target.value })}
-                  />
-                  <button type="button" className={smallButtonClass} disabled={teams.length === 0} onClick={() => suggest(type)}>
-                    Podpowiedz
-                  </button>
-                </>
+                <button type="button" className={smallButtonClass} disabled={teams.length === 0} onClick={() => suggest(type)}>
+                  Podpowiedz
+                </button>
               )}
             </div>
           );
@@ -2314,15 +2335,36 @@ function AchievementsAdmin() {
           ))}
         </ul>
       )}
-      <div className="mb-5 grid items-end gap-2 sm:grid-cols-[1fr_12rem_auto]">
-        <PlayerSelect teams={teams} value={manualPlayer?.player.id ?? ''} label="Zawodnik" onChange={setManualPlayer} />
-        <select className={inputClass} value={manualPlace} aria-label="Medal" onChange={(e) => setManualPlace(Number(e.target.value) as MedalPlace)}>
+      <div className="mb-5 grid items-start gap-2 sm:grid-cols-[12rem_1fr_auto]">
+        <select
+          className={inputClass}
+          value={manualPlace}
+          aria-label="Medal"
+          onChange={(e) => {
+            setManualPlace(Number(e.target.value) as MedalPlace);
+            setManualPlayer(undefined);
+          }}
+        >
           {medalPlaces.map((place) => (
             <option key={place} value={place}>
               {medalNames[place]}
             </option>
           ))}
         </select>
+        <div className="flex flex-col gap-1">
+          <PlayerSelect teams={benchTeam ? [benchTeam] : []} value={manualPlayer?.player.id ?? ''} label="Zawodnik" onChange={setManualPlayer} />
+          <span className="text-xs text-slate-500">
+            {!manualTeamId
+              ? 'Najpierw wybierz drużynę z tym medalem.'
+              : manualRoster === 'failed'
+                ? 'Genius nie oddał kadry drużyny — spróbuj ponownie później.'
+                : !benchTeam
+                  ? 'Wczytywanie kadry drużyny…'
+                  : benchTeam.players.length === 0
+                    ? 'Wszyscy z kadry zagrali — mają medal z drużyną.'
+                    : `Zawodnicy z kadry bez występów: ${benchTeam.players.length}.`}
+          </span>
+        </div>
         <button
           type="button"
           className={smallButtonClass}

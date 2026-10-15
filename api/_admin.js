@@ -46,7 +46,6 @@ function achievement(input) {
     ...(place && type === 'medal' ? { place } : {}),
     ...(teamId ? { teamId, teamName: text(input?.teamName, 120) } : {}),
     ...(playerId ? { playerId, playerName: text(input?.playerName, 100) } : {}),
-    ...(text(input?.value, 40) ? { value: text(input.value, 40) } : {}),
     ...(type === 'medal' && !playerId && players.length > 0 ? { players } : {}),
   };
 }
