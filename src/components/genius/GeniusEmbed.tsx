@@ -294,11 +294,19 @@ function GeniusEmbed({
         else setRetry({ key: cacheKey, token: Date.now() });
       });
 
-    // Odpowiedź, która nie przychodzi w ogóle (zawieszony serwer): komunikat po 20 s.
-    const timeout = window.setTimeout(showError, 20000);
+    // Długie czekanie to zwykle wolna odpowiedź Genius (np. pełna baza zawodników przy pierwszym zapytaniu potrafi
+    // przyjść po ponad 20 s), a nie awaria — po 20 s mówimy więc, że dane wciąż się wczytują. Komunikat o błędzie
+    // dopiero, gdy Genius odpowie błędem (wyżej) albo po 90 s bez odpowiedzi (zawieszony serwer).
+    const showSlow = () => {
+      if (hasValidContent() || target.querySelector('.genius-cached')) return;
+      target.innerHTML = `<p class="genius-status">Genius Sports odpowiada wolniej niż zwykle — dane wciąż się wczytują…</p>`;
+    };
+    const slowTimeout = window.setTimeout(showSlow, 20000);
+    const timeout = window.setTimeout(showError, 90000);
 
     return () => {
       controller.abort();
+      window.clearTimeout(slowTimeout);
       window.clearTimeout(timeout);
       placeholder.innerHTML = '';
       if (nativeStyle) removeGeniusStylesheets();
