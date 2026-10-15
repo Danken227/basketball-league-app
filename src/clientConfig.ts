@@ -59,6 +59,8 @@ export interface ClientConfig {
   };
   links: {
     youtube: string;
+    // Profil na Facebooku (ikona w nagłówku obok YouTube); bez niego ikony nie ma.
+    facebook?: string;
     // Formularz zgłoszenia drużyny (przycisk w nagłówku); bez niego przycisku nie ma.
     registrationForm?: string;
   };
