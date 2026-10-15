@@ -14,7 +14,9 @@ import {
   geniusSnapshot,
   isGeniusDomain,
 } from '../components/genius/geniusConfig';
-import { checkUnfinishedMatches, type UnfinishedMatch } from '../components/genius/geniusUnfinished';
+import { checkUnfinishedMatches, type PlayedMatch, type UnfinishedMatch } from '../components/genius/geniusUnfinished';
+import { saveMatchVideos, syncMatchVideos, type MatchVideos } from '../components/genius/matchVideos';
+import { youtubeVideoId, youtubeWatchUrl } from '../components/genius/youtubeStreams';
 import { loadCompetitionRosters, loadTeamRoster, suggestLeader, type RosterPlayer, type RosterTeam } from '../components/genius/geniusRosters';
 import { individualAwards, medalIcons, medalNames, type Achievement, type MedalPlace } from '../data/achievements';
 import { fetchGeniusPage } from '../components/genius/geniusFetch';
@@ -1920,6 +1922,9 @@ const UNFINISHED_CHECK_MS = 5 * 60 * 1000;
 
 interface UnfinishedCheck {
   matches?: UnfinishedMatch[];
+  // Rozegrane mecze edycji (od najnowszego) i zapisane nagrania z YouTube (zakładka „Transmisje”).
+  played?: PlayedMatch[];
+  videos?: MatchVideos;
   failed: number;
   checkedAt?: Date;
   checking: boolean;
@@ -1930,7 +1935,13 @@ function useUnfinishedMatches(enabled: boolean) {
   const [state, setState] = useState<UnfinishedCheck>({ failed: 0, checking: enabled });
   const run = () =>
     checkUnfinishedMatches()
-      .then(({ matches, failed }) => setState({ matches, failed, checkedAt: new Date(), checking: false }))
+      .then(({ matches, played, upcoming, failed }) => {
+        setState((prev) => ({ ...prev, matches, played, failed, checkedAt: new Date(), checking: false }));
+        // Przy okazji nagrania meczów: nowe dopasowania z listy kanału YouTube trafiają do bazy (matchVideos.ts).
+        return syncMatchVideos([...played, ...upcoming])
+          .then(({ videos }) => setState((prev) => ({ ...prev, videos })))
+          .catch(() => undefined);
+      })
       .catch((e) => setState((prev) => ({ ...prev, checking: false, error: errorText(e) })));
   const check = () => {
     setState((prev) => ({ ...prev, checking: true, error: undefined }));
@@ -1942,7 +1953,8 @@ function useUnfinishedMatches(enabled: boolean) {
     const timer = window.setInterval(run, UNFINISHED_CHECK_MS);
     return () => window.clearInterval(timer);
   }, [enabled]);
-  return { ...state, check };
+  const setVideos = (videos: MatchVideos) => setState((prev) => ({ ...prev, videos }));
+  return { ...state, check, setVideos };
 }
 
 const matchDateFormat = new Intl.DateTimeFormat('pl-PL', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
@@ -2093,6 +2105,119 @@ function PlayerSelect({ teams, value, fallback, onChange, label }: { teams: Rost
           </optgroup>
         ))}
     </select>
+  );
+}
+
+// Transmisje (zakładka „Transmisje”): nagrania rozegranych meczów bieżącej edycji. Panel dopasowuje je sam
+// (matchVideos.ts); tu można wkleić link, gdy tytuł filmu nie pasował, albo poprawić błędne dopasowanie.
+const VIDEOS_PER_PAGE = 30;
+
+function MatchVideoRow({ match, videoId, onSave }: { match: PlayedMatch; videoId?: string; onSave: (videoId: string | null) => Promise<void> }) {
+  const [draft, setDraft] = useState('');
+  const [error, setError] = useState<string>();
+  const [busy, setBusy] = useState(false);
+  const found = findCompetition(match.competitionId);
+  const save = async (value: string | null) => {
+    setError(undefined);
+    const id = value === null ? null : youtubeVideoId(value);
+    if (id === undefined) {
+      setError('To nie wygląda na link do filmu YouTube.');
+      return;
+    }
+    setBusy(true);
+    try {
+      await onSave(id);
+      setDraft('');
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <li className="grid gap-2 border-b border-slate-100 py-3 text-sm last:border-0 md:grid-cols-[1fr_22rem] md:items-center">
+      <div className="min-w-0">
+        <p className="font-semibold text-slate-900">
+          {match.home} – {match.away}
+          {(match.homeScore || match.awayScore) && (
+            <span className="ml-2 tabular-nums text-slate-600">
+              {match.homeScore ?? 0} : {match.awayScore ?? 0}
+            </span>
+          )}
+        </p>
+        <p className="text-xs text-slate-500">
+          {found ? geniusLeagueName(found.leagueId) : `Rozgrywki ${match.competitionId}`} · {matchDateFormat.format(match.date)} ·{' '}
+          {videoId ? (
+            <a href={youtubeWatchUrl(videoId)} target="_blank" rel="noreferrer" className="font-medium text-red-600 hover:underline">
+              nagranie na YouTube ↗
+            </a>
+          ) : (
+            <span className="text-amber-700">bez nagrania</span>
+          )}
+        </p>
+      </div>
+      <div className="flex flex-col gap-1">
+        <div className="flex gap-2">
+          <input
+            className={inputClass}
+            placeholder={videoId ? 'Inny link do nagrania' : 'Wklej link do nagrania'}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            aria-label={`Link do nagrania: ${match.home} – ${match.away}`}
+          />
+          <button type="button" className={smallButtonClass} disabled={busy || !draft.trim()} onClick={() => save(draft)}>
+            Zapisz
+          </button>
+          {videoId && (
+            <button type="button" className={dangerButtonClass} disabled={busy} onClick={() => save(null)}>
+              Usuń
+            </button>
+          )}
+        </div>
+        {error && <span className="text-xs font-medium text-red-600">{error}</span>}
+      </div>
+    </li>
+  );
+}
+
+function MatchVideosAdmin({ state }: { state: ReturnType<typeof useUnfinishedMatches> }) {
+  const [shown, setShown] = useState(VIDEOS_PER_PAGE);
+  const canCheck = isGeniusDomain() && !geniusSnapshot;
+  const played = state.played ?? [];
+  const videos = state.videos ?? {};
+  const withVideo = played.filter((match) => videos[match.id]).length;
+  const save = async (matchId: string, videoId: string | null) => state.setVideos(await saveMatchVideos({ [matchId]: videoId }));
+  return (
+    <Card title="Transmisje">
+      <p className="mb-4 text-sm text-slate-600">
+        Na stronie meczu (zakładka Summary) jest link do nagrania na YouTube. Panel dopasowuje nagrania sam: po zalogowaniu (w dowolnej zakładce) i co 5
+        minut szuka na kanale ligi filmu z nazwami obu drużyn w tytule — także zaplanowanych transmisji na mecze najbliższych dwóch tygodni — i zapisuje go
+        przy meczu. YouTube pokazuje tylko 15 najnowszych filmów, a kolejne transmisje wypychają starsze, dlatego zaglądaj do panelu raz w tygodniu. Gdy tytuł
+        filmu nie pasował albo dopasowanie jest złe, wklej link ręcznie.
+      </p>
+      {!canCheck ? (
+        <p className="text-sm text-slate-500">Dopasowywanie działa tylko na stronie ligi (terminarze z Genius).</p>
+      ) : state.played === undefined ? (
+        <p className="text-sm text-slate-500">Wczytywanie meczów bieżącej edycji…</p>
+      ) : (
+        <>
+          <p className="mb-2 text-xs text-slate-500">
+            Rozegrane mecze edycji {currentGeniusEdition.name}: {played.length}, z nagraniem: {withVideo}.
+            {state.videos === undefined && ' Sprawdzanie nagrań…'}
+          </p>
+          <ul>
+            {played.slice(0, shown).map((match) => (
+              <MatchVideoRow key={match.id} match={match} videoId={videos[match.id]} onSave={(videoId) => save(match.id, videoId)} />
+            ))}
+          </ul>
+          {played.length > shown && (
+            <button type="button" className={`${linkButtonClass} mt-3`} onClick={() => setShown((value) => value + VIDEOS_PER_PAGE)}>
+              Pokaż starsze mecze
+            </button>
+          )}
+        </>
+      )}
+    </Card>
   );
 }
 
@@ -2397,6 +2522,7 @@ function AchievementsAdmin() {
 const tabs = [
   { id: 'aktualnosci', label: 'Aktualności' },
   { id: 'mecze', label: 'Niezamknięte mecze' },
+  { id: 'transmisje', label: 'Transmisje' },
   { id: 'druzyny', label: 'Nazwy drużyn w edycjach' },
   { id: 'rekordy', label: 'Rekordy' },
   { id: 'strefy', label: 'Awanse/spadki' },
@@ -2467,6 +2593,8 @@ function AdminPage() {
             <NewsAdmin />
           ) : tab === 'mecze' ? (
             <UnfinishedMatchesAdmin state={unfinished} />
+          ) : tab === 'transmisje' ? (
+            <MatchVideosAdmin state={unfinished} />
           ) : tab === 'druzyny' ? (
             <TeamNamesAdmin />
           ) : tab === 'rekordy' ? (

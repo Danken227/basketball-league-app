@@ -94,15 +94,50 @@ export function findUnfinished(matches: ScheduledMatch[], now = Date.now()): Unf
   return found.sort((a, b) => a.date.getTime() - b.date.getTime());
 }
 
+const UPCOMING_VIDEOS_MS = 14 * 24 * 60 * 60 * 1000;
+
+// Rozegrany (zakończony albo wiszący jako trwający) mecz bieżącej edycji — do dopasowania nagrań z YouTube.
+export interface PlayedMatch {
+  id: string;
+  competitionId: number;
+  date: Date;
+  home: string;
+  away: string;
+  homeScore?: string;
+  awayScore?: string;
+}
+
 // Sprawdzenie wszystkich rozgrywek bieżącej edycji. Terminarz, którego Genius nie oddał, zgłaszamy w `failed`
-// (lista może być wtedy niepełna).
-export async function checkUnfinishedMatches(): Promise<{ matches: UnfinishedMatch[]; failed: number }> {
-  if (geniusSnapshot || !isGeniusDomain()) return { matches: [], failed: 0 };
+// (lista może być wtedy niepełna). Przy okazji rozegrane mecze, od najnowszego.
+export async function checkUnfinishedMatches(): Promise<{ matches: UnfinishedMatch[]; played: PlayedMatch[]; upcoming: PlayedMatch[]; failed: number }> {
+  if (geniusSnapshot || !isGeniusDomain()) return { matches: [], played: [], upcoming: [], failed: 0 };
   const ids = editionCompetitionIds(currentGeniusEdition.id);
   const schedules = await Promise.all(ids.map((cid) => fetchGeniusPage(`/competition/${cid}/schedule`).then((root) => root && readSchedule(root, cid))));
+  const all = schedules.flatMap((schedule) => schedule ?? []);
+  const now = Date.now();
+  const brief = ({ id, competitionId, date, home, away, homeScore, awayScore }: ScheduledMatch & { date: Date }): PlayedMatch => ({
+    id,
+    competitionId,
+    date,
+    home,
+    away,
+    homeScore,
+    awayScore,
+  });
   return {
     // Hale mają różne rozgrywki (np. junior i senior po sobie), więc oceniamy wszystkie mecze edycji razem.
-    matches: findUnfinished(schedules.flatMap((schedule) => schedule ?? [])),
+    matches: findUnfinished(all),
+    played: all
+      .filter((match): match is ScheduledMatch & { date: Date } => match.status !== 'scheduled' && Boolean(match.date) && match.date!.getTime() <= now)
+      .map(brief)
+      .sort((a, b) => b.date.getTime() - a.date.getTime()),
+    // Mecze najbliższych dwóch tygodni: transmisje na nie liga tworzy z wyprzedzeniem (matchVideos.ts).
+    upcoming: all
+      .filter(
+        (match): match is ScheduledMatch & { date: Date } =>
+          match.status === 'scheduled' && Boolean(match.date) && match.date!.getTime() > now && match.date!.getTime() - now < UPCOMING_VIDEOS_MS,
+      )
+      .map(brief),
     failed: schedules.filter((schedule) => !schedule).length,
   };
 }

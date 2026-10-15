@@ -45,14 +45,23 @@ function similarity(a: string, b: string) {
   return x.filter((word) => y.has(word)).length / Math.min(x.length, y.size);
 }
 
-// Transmisję można zaplanować na YouTube kilka dni przed spotkaniem (np. w środę
-// na sobotni mecz), dlatego nie ograniczamy dopasowania do zaledwie trzech dni.
-// Tytuł nadal musi jednoznacznie zawierać obie drużyny, a data wybiera najlepszą
-// transmisję, gdy takich materiałów jest więcej.
-const MAX_DAYS_APART = 7;
+// Transmisje liga tworzy na YouTube z wyprzedzeniem — nawet 10 dni przed spotkaniem (np. 15.10 na mecze
+// 24–25.10), dlatego dopuszczamy dwa tygodnie. Tytuł nadal musi jednoznacznie zawierać obie drużyny, a data
+// wybiera najlepszą transmisję, gdy takich materiałów jest więcej.
+const MAX_DAYS_APART = 14;
+
+export const youtubeWatchUrl = (videoId: string) => `https://www.youtube.com/watch?v=${videoId}`;
+
+// Numer filmu z linku YouTube (watch?v=…, youtu.be/…, /live/…, /shorts/…, /embed/…) albo sam numer.
+export function youtubeVideoId(text: string): string | undefined {
+  const value = text.trim();
+  if (/^[A-Za-z0-9_-]{11}$/.test(value)) return value;
+  const m = value.match(/(?:[?&]v=|youtu\.be\/|\/(?:live|shorts|embed)\/)([A-Za-z0-9_-]{11})/);
+  return m?.[1];
+}
 
 // Transmisja meczu: tytuł z obiema drużynami (w dowolnej kolejności), opublikowana najbliżej daty meczu.
-export function findStream(videos: YoutubeVideo[], home: string, away: string, date: Date): string | undefined {
+export function findStreamVideo(videos: YoutubeVideo[], home: string, away: string, date: Date): YoutubeVideo | undefined {
   const candidates = videos.flatMap((video) => {
     const [first, second] = video.title.split(/\s+[-–—]\s+|\s+vs\.?\s+/i);
     if (!first || !second) return [];
@@ -62,6 +71,10 @@ export function findStream(videos: YoutubeVideo[], home: string, away: string, d
     const daysApart = video.published ? Math.abs(new Date(video.published).getTime() - date.getTime()) / 86400000 : 0;
     return daysApart <= MAX_DAYS_APART ? [{ video, daysApart }] : [];
   });
-  const best = candidates.sort((a, b) => a.daysApart - b.daysApart)[0];
-  return best && `https://www.youtube.com/watch?v=${best.video.id}`;
+  return candidates.sort((a, b) => a.daysApart - b.daysApart)[0]?.video;
+}
+
+export function findStream(videos: YoutubeVideo[], home: string, away: string, date: Date): string | undefined {
+  const video = findStreamVideo(videos, home, away, date);
+  return video && youtubeWatchUrl(video.id);
 }

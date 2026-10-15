@@ -29,6 +29,10 @@ const PLAYOFF_SIZES = [2, 4, 8, 16, 32];
 const ACHIEVEMENTS_KEY = `${client.storagePrefix}:achievements`;
 const ACHIEVEMENT_TYPES = ['medal', 'mvp', 'finalsMvp', 'topScorer', 'topRebounder', 'topAssists'];
 const MAX_ACHIEVEMENTS_LENGTH = 400000;
+// Nagrania meczów na YouTube (numer meczu Genius → numer filmu): dopasowane w panelu, póki film jest na liście
+// kanału (YouTube podaje tylko 15 najnowszych), albo wklejone ręcznie. Strona meczu czyta je przez action=match-videos.
+const MATCH_VIDEOS_KEY = `${client.storagePrefix}:match-videos`;
+const YOUTUBE_ID = /^[A-Za-z0-9_-]{11}$/;
 const digits = (value) => String(value ?? '').replace(/\D/g, '').slice(0, 15);
 
 // Osiągnięcie z przeglądarki administratora: tylko znane pola. Medal ma miejsce i drużynę albo zawodnika (wpis
@@ -290,6 +294,12 @@ export async function handleAdmin({ method, action, query = {}, body = {}, cooki
     return { status: 200, body: { records: records ?? null } };
   }
 
+  // Nagrania meczów — zmieniają się rzadko, więc odpowiedź leży chwilę w pamięci serwera Vercela.
+  if (action === 'match-videos') {
+    const videos = store ? await store.get(MATCH_VIDEOS_KEY) : undefined;
+    return { status: 200, body: { videos: videos ?? {} }, cacheControl: 'public, max-age=0, s-maxage=120' };
+  }
+
   // Listy zamkniętych edycji — nie zmieniają się, więc odpowiedź może chwilę poleżeć w pamięci serwera (CDN Vercela,
   // s-maxage): po zapisie w panelu strona zobaczy nowe listy najpóźniej po 5 minutach. Przeglądarka pyta za każdym
   // razem (max-age=0, bez stale-while-revalidate, które przeglądarki też stosują i pokazywały stare listy).
@@ -515,6 +525,21 @@ export async function handleAdmin({ method, action, query = {}, body = {}, cooki
     delete playoffs[String(body.cid ?? '')];
     await store.set(PLAYOFFS_KEY, playoffs);
     return { status: 200, body: { ok: true } };
+  }
+
+  // Nagrania meczów: dopisanie (numer filmu) albo usunięcie (null) — reszta zostaje.
+  if (action === 'match-videos-save') {
+    const videos = (await store.get(MATCH_VIDEOS_KEY)) ?? {};
+    let changed = 0;
+    for (const [matchId, videoId] of Object.entries(body.videos ?? {}).slice(0, 500)) {
+      if (!/^\d{1,15}$/.test(matchId)) continue;
+      if (videoId === null) delete videos[matchId];
+      else if (typeof videoId === 'string' && YOUTUBE_ID.test(videoId)) videos[matchId] = videoId;
+      else continue;
+      changed++;
+    }
+    await store.set(MATCH_VIDEOS_KEY, videos);
+    return { status: 200, body: { videos, changed } };
   }
 
   // Osiągnięcia jednych rozgrywek (cała lista z formularza); pusta lista usuwa wpis.
