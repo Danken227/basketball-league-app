@@ -5,7 +5,6 @@ import { useSyncExternalStore } from 'react';
 import { news as dalkNews, type NewsItem } from './news';
 import { teamName } from '../components/genius/geniusIndex';
 import type { PlayoffBracket, StandingsZone } from './playoff';
-import type { AchievementsByCompetition } from './achievements';
 
 export interface AddedNewsItem extends NewsItem {
   // Treść wpisana przez administratora (z niej serwer zbudował html).
@@ -41,11 +40,9 @@ interface SiteContent {
   // Numer rozgrywek → strefy tabeli i drabinka play-off (zakładki „Awanse/spadki” i „Play-off” w panelu).
   zones: Record<string, StandingsZone>;
   playoffs: Record<string, PlayoffBracket>;
-  // Osiągnięcia zawodników i drużyn (zakładka „Osiągnięcia”).
-  achievements: AchievementsByCompetition;
 }
 
-let content: SiteContent = { loaded: false, news: [], teamNames: [], zones: {}, playoffs: {}, achievements: {} };
+let content: SiteContent = { loaded: false, news: [], teamNames: [], zones: {}, playoffs: {} };
 const listeners = new Set<() => void>();
 let request: Promise<void> | undefined;
 
@@ -75,7 +72,6 @@ export function reloadSiteContent() {
     registrationForm?: RegistrationForm | null;
     zones?: Record<string, StandingsZone>;
     playoffs?: Record<string, PlayoffBracket>;
-    achievements?: AchievementsByCompetition;
   }>('content')
     .then((data) =>
       setContent({
@@ -85,7 +81,6 @@ export function reloadSiteContent() {
         registrationForm: data.registrationForm ?? undefined,
         zones: data.zones ?? {},
         playoffs: data.playoffs ?? {},
-        achievements: data.achievements ?? {},
       }),
     )
     .catch(() => setContent({ ...content, loaded: true }));

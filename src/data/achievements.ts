@@ -1,6 +1,9 @@
 // Osiągnięcia zawodników i drużyn (zakładka „Osiągnięcia” w panelu administratora): medale drużyn, nagrody
 // indywidualne (MVP, MVP finału, najlepszy strzelec, zbierający i asystujący) i medale dopisane zawodnikowi ręcznie.
-// Zapisane po numerze rozgrywek (edycja × liga); strona zawodnika i drużyny wybiera z nich swoje.
+// Zapisane po numerze rozgrywek (edycja × liga); strona zawodnika i drużyny wybiera z nich swoje. Wczytywane osobno
+// (/api/admin?action=achievements), tylko tam, gdzie są potrzebne — nie przy każdej wizycie.
+import { useSyncExternalStore } from 'react';
+import { adminRequest } from './siteContent';
 
 export type AchievementType = 'medal' | 'mvp' | 'finalsMvp' | 'topScorer' | 'topRebounder' | 'topAssists';
 export type MedalPlace = 1 | 2 | 3;
@@ -56,3 +59,23 @@ export function teamAchievements(all: AchievementsByCompetition, teamId: string)
     items.filter((item) => item.type === 'medal' && !item.playerId && item.teamId === teamId).map((item) => ({ ...item, competitionId: Number(cid) })),
   );
 }
+
+let loaded: AchievementsByCompetition = {};
+let request: Promise<void> | undefined;
+const listeners = new Set<() => void>();
+
+// Po zapisie w panelu: odpowiedź serwera ma już wszystkie osiągnięcia.
+export function setAchievements(next: AchievementsByCompetition) {
+  loaded = next;
+  listeners.forEach((listener) => listener());
+}
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  request ??= adminRequest<{ achievements?: AchievementsByCompetition }>('achievements')
+    .then((data) => setAchievements(data.achievements ?? {}))
+    .catch(() => undefined);
+  return () => listeners.delete(listener);
+}
+
+export const useAchievements = () => useSyncExternalStore(subscribe, () => loaded);

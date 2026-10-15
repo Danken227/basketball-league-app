@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import AchievementsStrip from '../../components/common/AchievementsStrip';
-import { playerAchievements } from '../../data/achievements';
-import { useSiteContent } from '../../data/siteContent';
+import { playerAchievements, useAchievements } from '../../data/achievements';
 import { FilterRow, FilterSelect } from '../../components/common/Filters';
 import PhotoDialog from '../../components/common/PhotoDialog';
 import GeniusEmbed, { type StatsMode } from '../../components/genius/GeniusEmbed';
@@ -286,7 +285,7 @@ function PlayedChecker({ personId }: { personId: string }) {
 
 function GeniusPlayerPage() {
   const { id } = useParams();
-  const { achievements } = useSiteContent();
+  const achievements = useAchievements();
   const [params, setParams] = useSearchParams();
   useGeniusIndex();
   const fromCompetition = findCompetition(Number(params.get('rozgrywki')));

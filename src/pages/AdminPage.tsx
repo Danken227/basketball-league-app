@@ -18,7 +18,16 @@ import { checkUnfinishedMatches, type PlayedMatch, type UnfinishedMatch } from '
 import { saveMatchVideos, syncMatchVideos, type MatchVideos } from '../components/genius/matchVideos';
 import { youtubeVideoId, youtubeWatchUrl } from '../components/genius/youtubeStreams';
 import { loadCompetitionRosters, loadTeamRoster, suggestLeader, type RosterPlayer, type RosterTeam } from '../components/genius/geniusRosters';
-import { individualAwards, medalIcons, medalNames, type Achievement, type MedalPlace } from '../data/achievements';
+import {
+  individualAwards,
+  medalIcons,
+  medalNames,
+  setAchievements,
+  useAchievements,
+  type Achievement,
+  type AchievementsByCompetition,
+  type MedalPlace,
+} from '../data/achievements';
 import { fetchGeniusPage } from '../components/genius/geniusFetch';
 import { isGroupName, isPlayoffPhase, readGroups } from '../components/genius/geniusGroups';
 import { collectHistory, historyCoverage, type EditionCoverage } from '../components/genius/geniusHistory';
@@ -2259,7 +2268,7 @@ function MatchVideosAdmin({ state }: { state: ReturnType<typeof useUnfinishedMat
 const storedTeamNameOf = (stored: Achievement[] | undefined, teamId: string) => stored?.find((item) => item.teamId === teamId)?.teamName;
 
 function AchievementsAdmin() {
-  const { achievements } = useSiteContent();
+  const achievements = useAchievements();
   // Domyślnie ostatnia zakończona edycja (osiągnięcia przyznaje się po sezonie).
   const [editionId, setEditionId] = useState((geniusEditions[1] ?? geniusEditions[0]).id);
   const leagues = editionLeagues(editionId);
@@ -2378,8 +2387,8 @@ function AchievementsAdmin() {
     setBusy(true);
     setError(undefined);
     try {
-      await adminRequest('achievements-save', { cid, items: items() });
-      await reloadSiteContent();
+      const result = await adminRequest<{ achievements: AchievementsByCompetition }>('achievements-save', { cid, editionId, items: items() });
+      setAchievements(result.achievements);
       setSaved(`Zapisano osiągnięcia: ${league.label}, edycja ${editionName(editionId)}.`);
     } catch (e) {
       setError(errorText(e));
