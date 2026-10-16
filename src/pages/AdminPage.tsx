@@ -2104,9 +2104,9 @@ interface AwardDraft {
 interface AchievementsDraft {
   // Miejsce → numer drużyny ("" — brak).
   medals: Record<MedalPlace, string>;
-  // Nagroda → zawodnicy (kilku przy „ex aequo”).
+  // Nagroda → zawodnicy (kilku przy zaznaczonym „kilku zawodników”).
   awards: Partial<Record<AwardType, AwardDraft[]>>;
-  // Nagrody z zaznaczonym „ex aequo” (można dodać kolejnych zawodników).
+  // Nagrody z zaznaczonym „kilku zawodników” (można dodać kolejnych zawodników).
   multi: Partial<Record<AwardType, boolean>>;
   manual: Achievement[];
 }
@@ -2360,7 +2360,9 @@ function AchievementsAdmin() {
       else list.splice(index, 1);
       return { ...prev, awards: { ...prev.awards, [type]: list.filter(Boolean) } };
     });
-  // „Ex aequo”: włączone pozwala dodać kolejnych zawodników; wyłączone zostawia tylko pierwszego.
+  // „Kilku zawodników”: włączone pozwala dodać kolejnych; wyłączone zostawia tylko pierwszego.
+  // Nagroda, przy której odznaczenie „kilku zawodników” czeka na potwierdzenie usunięcia dodatkowych.
+  const [confirmSingle, setConfirmSingle] = useState<AwardType>();
   const setMulti = (type: AwardType, on: boolean) =>
     setDraft((prev) => ({
       ...prev,
@@ -2374,7 +2376,7 @@ function AchievementsAdmin() {
   const seasonFor = season?.cid === cid ? season : undefined;
   const counting = Boolean(seasonFor && !seasonFor.result && !seasonFor.error);
 
-  // Podpowiedź: lider (przy remisie wszyscy z tą samą średnią — wtedy z zaznaczonym „ex aequo”).
+  // Podpowiedź: lider (przy remisie wszyscy z tą samą średnią — wtedy z zaznaczonym „kilku zawodników”).
   const applyLeader = (type: AwardType, leaders: SeasonLeaders) => {
     const stat = individualAwards.find((item) => item.type === type)!.stat;
     const found = stat ? (leaders.leaders[stat] ?? []) : [];
@@ -2513,16 +2515,48 @@ function AchievementsAdmin() {
           const multi = Boolean(draft.multi[type]);
           // MVP finału — tylko zawodnicy mistrza (złoty medal); bez wybranego mistrza wszyscy.
           const champion = type === 'finalsMvp' && draft.medals[1] ? teams.filter((team) => team.id === draft.medals[1]) : [];
-          // Pierwszy wiersz zawsze (także pusty); kolejne — zawodnicy dodani przy „ex aequo”.
+          // Pierwszy wiersz zawsze (także pusty); kolejne — zawodnicy dodani przy „kilku zawodników”.
+          const extra = list.slice(1).filter((award) => award.playerId).length;
           const rows = list.length > 0 ? list : [undefined];
           return (
             <div key={type} className="grid items-start gap-2 sm:grid-cols-[12rem_1fr]">
               <div className="flex flex-col gap-1 sm:pt-2">
                 <span className="text-sm font-semibold text-slate-900">{label}</span>
                 <label className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-600">
-                  <input type="checkbox" className="h-3.5 w-3.5 accent-orange-600" checked={multi} onChange={(e) => setMulti(type, e.target.checked)} />
-                  ex aequo (kilku zawodników)
+                  <input
+                    type="checkbox"
+                    className="h-3.5 w-3.5 accent-orange-600"
+                    checked={multi}
+                    onChange={(e) => {
+                      // Odznaczenie usuwa dodatkowych zawodników — gdy są wybrani, najpierw pytamy (pole zostaje zaznaczone).
+                      if (!e.target.checked && extra > 0) setConfirmSingle(type);
+                      else setMulti(type, e.target.checked);
+                    }}
+                  />
+                  kilku zawodników
                 </label>
+                {confirmSingle === type && (
+                  <div className="mt-1 rounded-lg bg-amber-50 p-2 text-xs text-amber-900 ring-1 ring-amber-200" role="alert">
+                    <p>
+                      {extra === 1 ? 'Dodatkowy zawodnik zostanie usunięty' : `Dodatkowi zawodnicy (${extra}) zostaną usunięci`} — zostanie tylko pierwszy.
+                    </p>
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        type="button"
+                        className={dangerButtonClass}
+                        onClick={() => {
+                          setMulti(type, false);
+                          setConfirmSingle(undefined);
+                        }}
+                      >
+                        Usuń dodatkowych
+                      </button>
+                      <button type="button" className={linkButtonClass} onClick={() => setConfirmSingle(undefined)}>
+                        Anuluj
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="flex flex-col gap-2">
                 {rows.map((award, index) => (
