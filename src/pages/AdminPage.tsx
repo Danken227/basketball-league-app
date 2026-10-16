@@ -2036,9 +2036,10 @@ function UnfinishedMatchesAdmin({ state }: { state: ReturnType<typeof useUnfinis
     <Card title="Niezamknięte mecze">
       <p className="mb-4 text-sm text-slate-600">
         Przy stoliku nie zawsze zamyka się protokół meczu. Taki mecz wisi w Genius jako trwający i <strong>nie trafia do tabeli</strong> (na pasku
-        meczów pokazujemy go już jako zakończony). Zamknąć go może tylko osoba z dostępem do Genius / FIBA LiveStats — po zamknięciu mecz sam pojawi
-        się w tabeli. Sprawdzamy mecze bieżącej edycji ({currentGeniusEdition.name}): mecz uznajemy za niezamknięty, gdy trwa w Genius ponad 2,5
-        godziny albo gdy w tej samej hali zaczął się już następny mecz.
+        meczów pokazujemy go już jako zakończony). Zamknąć go można tylko na komputerze, na którym prowadzono statystyki tego meczu, a do tabeli
+        trafi dopiero po zaimportowaniu go do bazy. Dlatego warto sprawdzać tę listę w trakcie weekendu meczowego — mecz niezamknięty na miejscu
+        da się zamknąć dopiero przy kolejnych meczach, zwykle tydzień później. Sprawdzamy mecze bieżącej edycji ({currentGeniusEdition.name}): mecz
+        uznajemy za niezamknięty, gdy trwa w Genius ponad 2,5 godziny albo gdy w tej samej hali zaczął się już następny mecz.
       </p>
       {!canCheck ? (
         <p className="text-sm text-slate-500">Sprawdzanie działa tylko na stronie ligi (Genius wydaje dane tylko jej domenie).</p>
@@ -2046,7 +2047,7 @@ function UnfinishedMatchesAdmin({ state }: { state: ReturnType<typeof useUnfinis
         !state.error && <p className="text-sm text-slate-500">Sprawdzanie terminarzy…</p>
       ) : (
         <>
-          <h3 className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-500">Do zamknięcia w Genius</h3>
+          <h3 className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-500">Do zamknięcia (na komputerze ze statystykami meczu)</h3>
           {open.length === 0 ? (
             <p className="mb-4 text-sm text-emerald-700">Brak — wszystkie rozegrane mecze są zamknięte.</p>
           ) : (
@@ -2059,7 +2060,7 @@ function UnfinishedMatchesAdmin({ state }: { state: ReturnType<typeof useUnfinis
           {notStarted.length > 0 && (
             <>
               <h3 className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-500">Termin minął, a mecz nie zaczął się w Genius</h3>
-              <p className="mb-1 text-xs text-slate-500">Protokołu nie wysłano albo mecz przełożono (wtedy wystarczy zmienić termin w Genius).</p>
+              <p className="mb-1 text-xs text-slate-500">Statystyk nie przesłano albo mecz przełożono (wtedy wystarczy zmienić termin w Genius).</p>
               <ul className="mb-4">
                 {notStarted.map((match) => (
                   <UnfinishedMatchRow key={match.id} match={match} />

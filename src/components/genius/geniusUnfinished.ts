@@ -1,7 +1,8 @@
 // Mecze bieżącej edycji, których protokołu nie zamknięto w Genius (zakładka „Niezamknięte mecze” w panelu
 // administratora). Przy stoliku nie zawsze zamyka się protokół — taki mecz wisi w Genius jako trwający i nie
 // trafia do tabeli. Pasek meczów pokazuje go już jako zakończony (GeniusMatchBar), więc bez tej listy nikt by
-// tego nie zauważył. Zamknąć go może tylko osoba z dostępem do Genius (FIBA LiveStats).
+// tego nie zauważył. Zamknąć go można tylko na komputerze, na którym prowadzono statystyki meczu, a do tabeli trafia
+// po zaimportowaniu go do bazy — niezamknięty w weekend meczowy czeka zwykle do kolejnych meczów.
 
 import { currentGeniusEdition, editionCompetitionIds, geniusSnapshot, isGeniusDomain } from './geniusConfig';
 import { fetchGeniusPage } from './geniusFetch';
