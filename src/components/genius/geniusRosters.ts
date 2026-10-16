@@ -1,5 +1,5 @@
 // Drużyny rozgrywek i zawodnicy, którzy w nich zagrali, ze średnimi (zakładka „Osiągnięcia” w panelu
-// administratora): medal drużyny trafia do jej zawodników, a liderów (punkty, zbiórki, asysty) podpowiadamy.
+// administratora): medal drużyny trafia do jej zawodników (liderów sezonu zasadniczego liczy geniusSeasonLeaders.ts).
 // Statystyki drużyny w Genius (/team/<numer>/statistics) wymieniają tylko zawodników z występami w tej drużynie.
 // W wersji demonstracyjnej te same strony bierzemy z migawki (linki są w niej już przepisane na nasze adresy).
 import { geniusCacheKey } from './geniusCache';
@@ -113,14 +113,4 @@ export async function loadTeamRoster(cid: number, teamId: string): Promise<{ id:
     if (id && name && !players.has(id)) players.set(id, name);
   });
   return [...players].map(([id, name]) => ({ id, name }));
-}
-
-// Lider w statystyce wśród zawodników z co najmniej połową meczów najczęściej grającego (żeby nie wygrał ktoś
-// z jednym meczem).
-export function suggestLeader(teams: RosterTeam[], stat: 'ppg' | 'rpg' | 'apg'): { player: RosterPlayer; team: RosterTeam } | undefined {
-  const all = teams.flatMap((team) => team.players.map((player) => ({ player, team })));
-  const maxGames = Math.max(0, ...all.map(({ player }) => player.games));
-  return all
-    .filter(({ player }) => player.games >= Math.ceil(maxGames / 2))
-    .sort((a, b) => b.player[stat] - a.player[stat])[0];
 }

@@ -17,7 +17,8 @@ import {
 import { checkUnfinishedMatches, type PlayedMatch, type UnfinishedMatch } from '../components/genius/geniusUnfinished';
 import { saveMatchVideos, syncMatchVideos, type MatchVideos } from '../components/genius/matchVideos';
 import { youtubeVideoId, youtubeWatchUrl } from '../components/genius/youtubeStreams';
-import { loadCompetitionRosters, loadTeamRoster, suggestLeader, type RosterPlayer, type RosterTeam } from '../components/genius/geniusRosters';
+import { loadCompetitionRosters, loadTeamRoster, type RosterPlayer, type RosterTeam } from '../components/genius/geniusRosters';
+import { regularSeasonLeaders, type SeasonLeaders } from '../components/genius/geniusSeasonLeaders';
 import {
   individualAwards,
   medalIcons,
@@ -2354,16 +2355,32 @@ function AchievementsAdmin() {
       return { ...prev, awards };
     });
 
-  const suggest = (type: AwardType) => {
-    const award = individualAwards.find((item) => item.type === type)!;
-    const leader = award.stat && suggestLeader(teams, award.stat);
+  // Podpowiedzi liderów z sezonu zasadniczego (geniusSeasonLeaders.ts): box score wszystkich meczów bez play-off —
+  // liczone raz na rozgrywki, po pierwszym kliknięciu „Podpowiedz” (1–3 minuty).
+  const [season, setSeason] = useState<{ cid: string; result?: SeasonLeaders; progress?: RecordsProgress; error?: string }>();
+  const seasonFor = season?.cid === cid ? season : undefined;
+  const counting = Boolean(seasonFor && !seasonFor.result && !seasonFor.error);
+
+  const applyLeader = (type: AwardType, leaders: SeasonLeaders) => {
+    const stat = individualAwards.find((item) => item.type === type)!.stat;
+    const leader = stat && leaders.leaders[stat];
     if (!leader) return;
-    setAward(type, {
-      playerId: leader.player.id,
-      playerName: leader.player.name,
-      teamId: leader.team.id,
-      teamName: leader.team.name,
-    });
+    // Drużyna ze składów wczytanych z Genius (z numerem do strony drużyny); bez niej nazwa z box score.
+    const team = teams.find((t) => t.players.some((player) => player.id === leader.playerId));
+    setAward(type, { playerId: leader.playerId, playerName: leader.player, teamId: team?.id, teamName: team?.name ?? leader.team });
+  };
+
+  const suggest = async (type: AwardType) => {
+    if (!cid) return;
+    if (seasonFor?.result) return applyLeader(type, seasonFor.result);
+    setSeason({ cid });
+    try {
+      const result = await regularSeasonLeaders(Number(cid), (progress) => setSeason({ cid, progress }));
+      setSeason({ cid, result });
+      applyLeader(type, result);
+    } catch (e) {
+      setSeason({ cid, error: errorText(e) });
+    }
   };
 
   const items = (): Achievement[] => [
@@ -2409,8 +2426,9 @@ function AchievementsAdmin() {
     <Card title="Osiągnięcia">
       <p className="mb-4 text-sm text-slate-600">
         Wybierz rozgrywki i wpisz medale drużyn oraz nagrody indywidualne. Medal drużyny pojawi się na stronie drużyny i u wszystkich jej zawodników, którzy zagrali w
-        tych rozgrywkach (lista z Genius). Najlepszego strzelca, zbierającego i asystującego możesz podpowiedzieć ze statystyk (najwyższa średnia wśród zawodników z co
-        najmniej połową meczów) i poprawić. Na dole dodasz medal zawodnikowi z kadry medalisty, który nie zagrał żadnego meczu.
+        tych rozgrywkach (lista z Genius). Najlepszego strzelca, zbierającego i asystującego możesz podpowiedzieć ze statystyk sezonu zasadniczego, bez meczów play-off
+        (najwyższa średnia wśród zawodników z co najmniej połową meczów), i poprawić. Na dole dodasz medal zawodnikowi z kadry medalisty, który nie zagrał żadnego
+        meczu.
       </p>
       <div className="mb-5 flex flex-wrap items-end gap-3">
         <FilterSelect
@@ -2456,6 +2474,19 @@ function AchievementsAdmin() {
       </div>
 
       <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Nagrody indywidualne</h3>
+      {seasonFor && (
+        <p className={`mb-2 text-xs ${seasonFor.error ? 'text-red-600' : 'text-slate-500'}`}>
+          {seasonFor.error
+            ? seasonFor.error
+            : seasonFor.result
+              ? `Podpowiedzi z ${seasonFor.result.matches} meczów sezonu zasadniczego${
+                  seasonFor.result.playoffMatches > 0 ? ` (bez ${seasonFor.result.playoffMatches} meczów play-off)` : ''
+                }${seasonFor.result.failed > 0 ? `; Genius nie oddał ${seasonFor.result.failed} box score` : ''}.`
+              : `Liczenie średnich z sezonu zasadniczego${
+                  seasonFor.progress ? `: ${seasonFor.progress.loaded} z ${seasonFor.progress.matchIds.length} meczów` : ''
+                }…`}
+        </p>
+      )}
       <div className="mb-5 flex flex-col gap-3">
         {individualAwards.map(({ type, label, stat }) => {
           const award = draft.awards[type];
@@ -2477,7 +2508,7 @@ function AchievementsAdmin() {
                 }
               />
               {stat && (
-                <button type="button" className={smallButtonClass} disabled={teams.length === 0} onClick={() => suggest(type)}>
+                <button type="button" className={smallButtonClass} disabled={teams.length === 0 || counting} onClick={() => suggest(type)}>
                   Podpowiedz
                 </button>
               )}

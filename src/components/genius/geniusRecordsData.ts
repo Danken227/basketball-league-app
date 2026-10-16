@@ -14,6 +14,8 @@ export interface PlayerLine {
   pts: number;
   reb: number;
   ast: number;
+  // Zawodnik wszedł na boisko (minuty > 0) — wiersz bywa też dla zawodnika ze składu, który nie zagrał.
+  played?: boolean;
 }
 
 export interface MatchLines {
@@ -64,7 +66,7 @@ export function readBoxScore(root: HTMLElement): MatchLines | undefined {
   if (tables.length < 2 || teams.length < 2) return undefined;
   const lines = tables.slice(0, 2).flatMap((table, side) => {
     const headers = [...(table.tHead?.rows[0]?.cells ?? [])];
-    const [pts, reb, ast] = ['PTS', 'REB', 'AST'].map((label) => columnIndex(headers, label));
+    const [pts, reb, ast, mins] = ['PTS', 'REB', 'AST', 'MINS'].map((label) => columnIndex(headers, label));
     if (pts < 0 || reb < 0 || ast < 0) return [];
     return [...table.tBodies].flatMap((body) =>
       [...body.rows].flatMap((row) => {
@@ -73,7 +75,21 @@ export function readBoxScore(root: HTMLElement): MatchLines | undefined {
         const playerId = link?.getAttribute('href')?.match(/(?:\/person\/|^\/zawodnicy\/)(\d+)/)?.[1];
         if (!link || !playerId) return [];
         const value = (index: number) => Number(row.cells[index]?.textContent?.trim()) || 0;
-        return [{ playerId, player: link.textContent?.replace(/\s+/g, ' ').trim() ?? '', team: teams[side], opponent: teams[1 - side], pts: value(pts), reb: value(reb), ast: value(ast) }];
+        // Minuty "32:55"; bez kolumny minut uznajemy, że zagrał.
+        const minutes = mins < 0 ? undefined : (row.cells[mins]?.textContent?.trim() ?? '');
+        const played = minutes === undefined || /[1-9]/.test(minutes);
+        return [
+          {
+            playerId,
+            player: link.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+            team: teams[side],
+            opponent: teams[1 - side],
+            pts: value(pts),
+            reb: value(reb),
+            ast: value(ast),
+            played,
+          },
+        ];
       }),
     );
   });
@@ -101,12 +117,9 @@ export async function playedMatchIds(cid: number): Promise<string[] | undefined>
   return schedule?.querySelector('.hs-embed') ? readPlayedMatches(schedule) : undefined;
 }
 
-// Box score rozegranych meczów (po PARALLEL naraz); onProgress dostaje stan liczenia. Zwraca odczytane mecze
+// Box score wskazanych meczów (po PARALLEL naraz); onProgress dostaje stan liczenia. Zwraca odczytane mecze
 // i liczbę niedostępnych.
-async function loadRecordMatches(cid: number, onProgress?: (progress: RecordsProgress) => void) {
-  const matchIds = await playedMatchIds(cid);
-  // Bez terminarza nie wiadomo, które mecze liczyć — lepiej nic nie zapisać niż zapisać puste rekordy.
-  if (!matchIds) throw new Error('Genius nie zwrócił terminarza — spróbuj przeliczyć za chwilę.');
+export async function loadBoxScores(cid: number, matchIds: string[], onProgress?: (progress: RecordsProgress) => void) {
   const matches: Record<string, MatchLines> = {};
   let failed = 0;
   const report = () => onProgress?.({ matchIds, loaded: Object.keys(matches).length, failed });
@@ -122,7 +135,15 @@ async function loadRecordMatches(cid: number, onProgress?: (progress: RecordsPro
     }
   };
   await Promise.all(Array.from({ length: PARALLEL }, worker));
-  return { matchIds, matches, failed };
+  return { matches, failed };
+}
+
+// Box score wszystkich rozegranych meczów rozgrywek.
+async function loadRecordMatches(cid: number, onProgress?: (progress: RecordsProgress) => void) {
+  const matchIds = await playedMatchIds(cid);
+  // Bez terminarza nie wiadomo, które mecze liczyć — lepiej nic nie zapisać niż zapisać puste rekordy.
+  if (!matchIds) throw new Error('Genius nie zwrócił terminarza — spróbuj przeliczyć za chwilę.');
+  return { matchIds, ...(await loadBoxScores(cid, matchIds, onProgress)) };
 }
 
 // Przeliczenie w panelu administratora i zapis w bazie.
