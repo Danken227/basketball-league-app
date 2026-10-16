@@ -2104,7 +2104,10 @@ interface AwardDraft {
 interface AchievementsDraft {
   // Miejsce → numer drużyny ("" — brak).
   medals: Record<MedalPlace, string>;
-  awards: Partial<Record<AwardType, AwardDraft>>;
+  // Nagroda → zawodnicy (kilku przy „ex aequo”).
+  awards: Partial<Record<AwardType, AwardDraft[]>>;
+  // Nagrody z zaznaczonym „ex aequo” (można dodać kolejnych zawodników).
+  multi: Partial<Record<AwardType, boolean>>;
   manual: Achievement[];
 }
 
@@ -2112,13 +2115,15 @@ const medalPlaces: MedalPlace[] = [1, 2, 3];
 
 function draftFrom(items: Achievement[] = []): AchievementsDraft {
   const teamMedal = (place: MedalPlace) => items.find((item) => item.type === 'medal' && !item.playerId && item.place === place)?.teamId ?? '';
+  const awards: AchievementsDraft['awards'] = {};
+  for (const item of items) {
+    if (item.type === 'medal' || !item.playerId) continue;
+    (awards[item.type] ??= []).push({ playerId: item.playerId, playerName: item.playerName ?? '', teamId: item.teamId, teamName: item.teamName });
+  }
   return {
     medals: { 1: teamMedal(1), 2: teamMedal(2), 3: teamMedal(3) },
-    awards: Object.fromEntries(
-      items
-        .filter((item) => item.type !== 'medal' && item.playerId)
-        .map((item) => [item.type, { playerId: item.playerId!, playerName: item.playerName ?? '', teamId: item.teamId, teamName: item.teamName }]),
-    ),
+    awards,
+    multi: Object.fromEntries(Object.entries(awards).map(([type, list]) => [type, list.length > 1])),
     manual: items.filter((item) => item.type === 'medal' && item.playerId),
   };
 }
@@ -2347,13 +2352,21 @@ function AchievementsAdmin() {
       : undefined;
   const storedTeamName = (id: string) => storedTeamNameOf(stored, id);
 
-  const setAward = (type: AwardType, award?: AwardDraft) =>
+  // Zawodnik nagrody na pozycji index (bez zawodnika — usunięcie tej pozycji).
+  const setAward = (type: AwardType, index: number, award?: AwardDraft) =>
     setDraft((prev) => {
-      const awards = { ...prev.awards };
-      if (award) awards[type] = award;
-      else delete awards[type];
-      return { ...prev, awards };
+      const list = [...(prev.awards[type] ?? [])];
+      if (award) list[index] = award;
+      else list.splice(index, 1);
+      return { ...prev, awards: { ...prev.awards, [type]: list.filter(Boolean) } };
     });
+  // „Ex aequo”: włączone pozwala dodać kolejnych zawodników; wyłączone zostawia tylko pierwszego.
+  const setMulti = (type: AwardType, on: boolean) =>
+    setDraft((prev) => ({
+      ...prev,
+      multi: { ...prev.multi, [type]: on },
+      awards: on ? prev.awards : { ...prev.awards, [type]: (prev.awards[type] ?? []).slice(0, 1) },
+    }));
 
   // Podpowiedzi liderów z sezonu zasadniczego (geniusSeasonLeaders.ts): box score wszystkich meczów bez play-off —
   // liczone raz na rozgrywki, po pierwszym kliknięciu „Podpowiedz” (1–3 minuty).
@@ -2361,13 +2374,21 @@ function AchievementsAdmin() {
   const seasonFor = season?.cid === cid ? season : undefined;
   const counting = Boolean(seasonFor && !seasonFor.result && !seasonFor.error);
 
+  // Podpowiedź: lider (przy remisie wszyscy z tą samą średnią — wtedy z zaznaczonym „ex aequo”).
   const applyLeader = (type: AwardType, leaders: SeasonLeaders) => {
     const stat = individualAwards.find((item) => item.type === type)!.stat;
-    const leader = stat && leaders.leaders[stat];
-    if (!leader) return;
+    const found = stat ? (leaders.leaders[stat] ?? []) : [];
+    if (found.length === 0) return;
     // Drużyna ze składów wczytanych z Genius (z numerem do strony drużyny); bez niej nazwa z box score.
-    const team = teams.find((t) => t.players.some((player) => player.id === leader.playerId));
-    setAward(type, { playerId: leader.playerId, playerName: leader.player, teamId: team?.id, teamName: team?.name ?? leader.team });
+    const list = found.map((leader) => {
+      const team = teams.find((t) => t.players.some((player) => player.id === leader.playerId));
+      return { playerId: leader.playerId, playerName: leader.player, teamId: team?.id, teamName: team?.name ?? leader.team };
+    });
+    setDraft((prev) => ({
+      ...prev,
+      awards: { ...prev.awards, [type]: list },
+      multi: { ...prev.multi, [type]: list.length > 1 || Boolean(prev.multi[type]) },
+    }));
   };
 
   const suggest = async (type: AwardType) => {
@@ -2393,10 +2414,9 @@ function AchievementsAdmin() {
       const players = team && !('failed' in team && team.failed) ? team.players.map((player) => player.id) : (previous?.players ?? []);
       return [{ type: 'medal', place, teamId, teamName: team?.name ?? previous?.teamName ?? '', players }];
     }),
-    ...individualAwards.flatMap(({ type }): Achievement[] => {
-      const award = draft.awards[type];
-      return award?.playerId ? [{ type, ...award }] : [];
-    }),
+    ...individualAwards.flatMap(({ type }): Achievement[] =>
+      (draft.awards[type] ?? []).filter((award) => award.playerId).map((award) => ({ type, ...award })),
+    ),
     ...draft.manual,
   ];
 
@@ -2489,29 +2509,55 @@ function AchievementsAdmin() {
       )}
       <div className="mb-5 flex flex-col gap-3">
         {individualAwards.map(({ type, label, stat }) => {
-          const award = draft.awards[type];
+          const list = draft.awards[type] ?? [];
+          const multi = Boolean(draft.multi[type]);
           // MVP finału — tylko zawodnicy mistrza (złoty medal); bez wybranego mistrza wszyscy.
           const champion = type === 'finalsMvp' && draft.medals[1] ? teams.filter((team) => team.id === draft.medals[1]) : [];
+          // Pierwszy wiersz zawsze (także pusty); kolejne — zawodnicy dodani przy „ex aequo”.
+          const rows = list.length > 0 ? list : [undefined];
           return (
-            <div key={type} className={`grid items-center gap-2 ${stat ? 'sm:grid-cols-[12rem_1fr_auto]' : 'sm:grid-cols-[12rem_1fr]'}`}>
-              <span className="text-sm font-semibold text-slate-900">{label}</span>
-              <PlayerSelect
-                teams={champion.length > 0 ? champion : teams}
-                value={award?.playerId ?? ''}
-                fallback={award?.playerName}
-                label={label}
-                onChange={(picked) =>
-                  setAward(
-                    type,
-                    picked && { playerId: picked.player.id, playerName: picked.player.name, teamId: picked.team.id, teamName: picked.team.name },
-                  )
-                }
-              />
-              {stat && (
-                <button type="button" className={smallButtonClass} disabled={teams.length === 0 || counting} onClick={() => suggest(type)}>
-                  Podpowiedz
-                </button>
-              )}
+            <div key={type} className="grid items-start gap-2 sm:grid-cols-[12rem_1fr]">
+              <div className="flex flex-col gap-1 sm:pt-2">
+                <span className="text-sm font-semibold text-slate-900">{label}</span>
+                <label className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-600">
+                  <input type="checkbox" className="h-3.5 w-3.5 accent-orange-600" checked={multi} onChange={(e) => setMulti(type, e.target.checked)} />
+                  ex aequo (kilku zawodników)
+                </label>
+              </div>
+              <div className="flex flex-col gap-2">
+                {rows.map((award, index) => (
+                  <div key={index} className={`grid items-center gap-2 ${index === 0 && stat ? 'grid-cols-[1fr_auto]' : index > 0 ? 'grid-cols-[1fr_auto]' : ''}`}>
+                    <PlayerSelect
+                      teams={champion.length > 0 ? champion : teams}
+                      value={award?.playerId ?? ''}
+                      fallback={award?.playerName}
+                      label={index === 0 ? label : `${label} — zawodnik ${index + 1}`}
+                      onChange={(picked) =>
+                        setAward(
+                          type,
+                          index,
+                          picked && { playerId: picked.player.id, playerName: picked.player.name, teamId: picked.team.id, teamName: picked.team.name },
+                        )
+                      }
+                    />
+                    {index === 0 && stat && (
+                      <button type="button" className={smallButtonClass} disabled={teams.length === 0 || counting} onClick={() => suggest(type)}>
+                        Podpowiedz
+                      </button>
+                    )}
+                    {index > 0 && (
+                      <button type="button" className={dangerButtonClass} onClick={() => setAward(type, index)} aria-label={`Usuń zawodnika ${index + 1}`}>
+                        Usuń
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {multi && list.length > 0 && (
+                  <button type="button" className={`${linkButtonClass} self-start`} onClick={() => setAward(type, list.length, { playerId: '', playerName: '' })}>
+                    + Dodaj zawodnika
+                  </button>
+                )}
+              </div>
             </div>
           );
         })}

@@ -18,7 +18,8 @@ export interface SeasonLeader {
 }
 
 export interface SeasonLeaders {
-  leaders: Partial<Record<LeaderStat, SeasonLeader>>;
+  // Lider w statystyce — kilku przy remisie (ta sama średnia po zaokrągleniu do 0,1, jak ją pokazujemy).
+  leaders: Partial<Record<LeaderStat, SeasonLeader[]>>;
   // Ile meczów sezonu zasadniczego policzono (bez play-off) i ilu box score Genius nie oddał.
   matches: number;
   playoffMatches: number;
@@ -64,9 +65,12 @@ export async function regularSeasonLeaders(cid: number, onProgress?: (progress: 
   const players = [...totals].map(([playerId, total]) => ({ playerId, ...total }));
   const minGames = Math.ceil(Math.max(0, ...players.map((p) => p.games)) / 2);
   const eligible = players.filter((p) => p.games >= minGames && p.games > 0);
-  const leader = (field: 'pts' | 'reb' | 'ast'): SeasonLeader | undefined => {
-    const best = [...eligible].sort((a, b) => b[field] / b.games - a[field] / a.games)[0];
-    return best && { playerId: best.playerId, player: best.player, team: best.team, games: best.games, value: best[field] / best.games };
+  const leader = (field: 'pts' | 'reb' | 'ast'): SeasonLeader[] => {
+    const rounded = (p: (typeof eligible)[number]) => Math.round((p[field] / p.games) * 10);
+    const top = Math.max(-1, ...eligible.map(rounded));
+    return eligible
+      .filter((p) => rounded(p) === top)
+      .map((p) => ({ playerId: p.playerId, player: p.player, team: p.team, games: p.games, value: p[field] / p.games }));
   };
   return {
     leaders: { ppg: leader('pts'), rpg: leader('reb'), apg: leader('ast') },
