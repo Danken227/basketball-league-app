@@ -8,7 +8,7 @@ import GeniusEmbed, { type StatsMode } from '../../components/genius/GeniusEmbed
 import GeniusIndexLoader from '../../components/genius/GeniusIndexLoader';
 import { useForegroundReady } from '../../components/genius/geniusPriority';
 import { currentGeniusEdition, findCompetition, geniusEditionById, geniusEditions, geniusSnapshot } from '../../components/genius/geniusConfig';
-import { awaitingHistory, competitionsWith, indexedCompetitions, pendingCompetitions, personTeams, playedIn, savePersonTeams, savePlayed, type PersonTeam } from '../../components/genius/geniusIndex';
+import { awaitingHistory, competitionsWith, indexedCompetitions, loadHistory, pendingCompetitions, personTeams, playedIn, savePersonTeams, savePlayed, type PersonTeam } from '../../components/genius/geniusIndex';
 import { leagues, type League } from '../../data/league';
 import { useGeniusIndex } from '../../hooks/useGeniusIndex';
 import StatsModeToggle from '../../components/genius/StatsModeToggle';
@@ -288,6 +288,11 @@ function GeniusPlayerPage() {
   const achievements = useAchievements();
   const [params, setParams] = useSearchParams();
   useGeniusIndex();
+  // W wersji demonstracyjnej nie ma ładowarki indeksu (GeniusIndexLoader), a to ona wczytuje listy zamkniętych
+  // edycji (kto zagrał). Bez nich filtr edycji znałby tylko oglądaną edycję — wczytujemy je tu.
+  useEffect(() => {
+    if (geniusSnapshot) loadHistory();
+  }, []);
   const fromCompetition = findCompetition(Number(params.get('rozgrywki')));
   const requested = params.get('edycja');
   const editionId = requested && geniusEditionById.has(requested) ? requested : (fromCompetition?.editionId ?? currentGeniusEdition.id);
